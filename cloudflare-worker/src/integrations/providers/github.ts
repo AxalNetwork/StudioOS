@@ -596,7 +596,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
           counts.partial = true;
           return {
             summary: `${PARTLY_SYNCED}. Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases so far.`,
-            counts, repositories: repos,
+            counts, repositories: repos, project_id: projectId,
           };
         }
         // The three list reads, as the connector page names them (D753).
@@ -665,7 +665,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
   await writeProgress(env, row.uid, { state: 'done', pct: 100, reading: 'Done' });
   return {
     summary: `Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases from ${repos.length} repositories.`,
-    counts, repositories: repos,
+    counts, repositories: repos, project_id: projectId,
   };
 }
 

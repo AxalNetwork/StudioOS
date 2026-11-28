@@ -150,6 +150,33 @@ export function deckKey(deck) {
 }
 
 /**
+ * D8772 (#8772): where each stale or gone refresh row (D896, `POST /api/decks/:id/refresh`) lands.
+ * A row's `field` is `block:j` (or `block:j:series:k`), the j-th block of its slide; it is
+ * trusted only when that block still carries the row's `source_key` (the refresh read is of the
+ * saved version, the check may be of a draft), else the slide's block that does carries it. A row
+ * no block on its slide carries stays a slide-level row, as before. One row per block: `gone`
+ * outranks `stale` when two rows land on the same tile.
+ */
+export function staleTargets(refresh, slides) {
+  const cards = new Map();
+  const blocks = new Map();
+  const carries = (b, key) => Boolean(b) && (b.binding?.source_key === key || (Array.isArray(b.series) && b.series.some((sr) => sr?.binding?.source_key === key)));
+  for (const r of Array.isArray(refresh?.rows) ? refresh.rows : []) {
+    if (!(r?.state === 'stale' || r?.state === 'gone') || !Number.isInteger(r.slide)) continue;
+    const list = blocksOf(Array.isArray(slides) ? slides[r.slide] : null);
+    const at = /^block:(\d+)(?::|$)/.exec(String(r.field ?? ''));
+    const key = String(r.source_key ?? '');
+    const byField = at ? list[Number(at[1])] : null;
+    const hit = key && carries(byField, key) ? byField : key ? list.find((b) => carries(b, key)) : null;
+    if (hit && hit.id != null) {
+      const k = `${r.slide}:${hit.id}`;
+      if (blocks.get(k) !== 'gone') blocks.set(k, r.state);
+    } else if (cards.get(r.slide) !== 'gone') cards.set(r.slide, r.state);
+  }
+  return { cards, blocks };
+}
+
+/**
  * Run every check on one version. `measurements` maps `"<card>:<block>"` to
  * `preflightMeasure.js`'s `{ clipped, font_px, natural_w, natural_h }` for
  * the rendered print page; without it, clipping is "Not measured".
@@ -169,10 +196,7 @@ export function runPreflight(deck, { kit = null, refresh = null, measurements = 
     ...(extra ? extra : {}),
   });
   const measured = measurements && typeof measurements === 'object' ? measurements : null;
-  const stale = new Map();
-  for (const r of Array.isArray(refresh?.rows) ? refresh.rows : []) {
-    if ((r?.state === 'stale' || r?.state === 'gone') && Number.isInteger(r.slide)) stale.set(r.slide, r.state);
-  }
+  const { cards: stale, blocks: staleBlocks } = staleTargets(refresh, slides);
   const bgCount = new Map();
   for (const s of slides) {
     const c = s?.background?.color;
@@ -237,6 +261,9 @@ export function runPreflight(deck, { kit = null, refresh = null, measurements = 
         if (age === null) add('sources', SEVERITY.warning, i, b.id, `${where}: the source's date is not recorded.`, 'Nobody can tell how current the figure is.', 'Refresh the figure from its source.');
         else if (age > STALE_DAYS) add('sources', SEVERITY.warning, i, b.id, `${where}: the source is ${age} days old.`, `Its figure is as of ${b.binding.as_of}.`, 'Refresh it, or keep it as of that date with a note.');
       }
+      // D8772 (#8772): a changed figure is named on its own tile (the refresh row's `field: block:j`), so two stale tiles are two rows.
+      const moved = staleBlocks.get(`${i}:${b.id}`);
+      if (moved) add('sources', SEVERITY.warning, i, b.id, `${where}: ${moved === 'gone' ? 'its figure is no longer in its store' : 'its figure has changed in its store'}.`, 'The tile shows an older figure than the record.', 'Refresh the figure from its source.');
       if (b.kind === 'chart') {
         const series = Array.isArray(b.series) ? b.series : [];
         if (!series.length) add('sources', SEVERITY.warning, i, b.id, `${where}: the chart has no series.`, 'It would export as an empty chart.', 'Add a series from your records.');

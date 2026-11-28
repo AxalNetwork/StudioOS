@@ -17,6 +17,7 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { dayLabel } from './pitchStudioModel.js';
+import { SOURCE_DATE_NOT_RECORDED, undatedSource } from './presentExportModel.js';
 
 export const SHARE_TITLE = 'Share this deck';
 export const SHARE_CTA = 'Create link';
@@ -301,7 +302,12 @@ export function chipOf(field) {
   }
 }
 
-/** The figures a shared version shows, card by card, each with its chip. */
+/**
+ * The figures a shared version shows, card by card, each with its chip. D8772
+ * Q3 A: a figure whose source has no recorded day says so in its chip
+ * ("Measured · date not recorded"), as Present's source line does; a dated
+ * source or a figure with no source adds nothing.
+ */
 export function figureChips(slides) {
   const out = [];
   (Array.isArray(slides) ? slides : []).forEach((s, i) => {
@@ -313,7 +319,7 @@ export function figureChips(slides) {
           card: String(i + 1).padStart(2, '0'),
           label: String(cell?.label ?? '').trim() || String(f.label || '').trim() || 'Figure',
           value: value || NOT_RECORDED,
-          chip: chipOf(f) || NOT_RECORDED,
+          chip: `${chipOf(f) || NOT_RECORDED}${undatedSource(cell?.binding || f.binding) ? ` · ${SOURCE_DATE_NOT_RECORDED}` : ''}`,
         });
       }
     }

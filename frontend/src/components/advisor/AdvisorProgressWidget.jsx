@@ -39,7 +39,7 @@ import {
   Briefcase, Compass, Clock,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { predictTarget, pageLabel } from '../../lib/advisor/router';
+import { predictTarget, pageLabel, openableTarget } from '../../lib/advisor/router';
 import { PhoneBuckets } from './eadwynPhone';
 import { fullDayText, storedDate } from '../../pages/founder/studioPhoneModel.js';
 import { openCheckout, planKeyOfTier } from '../checkout/checkoutEntry';
@@ -206,7 +206,7 @@ function ItemCard({
   completedAt, dim,
 }) {
   const Icon = sectionIcon(item.section);
-  const target = item.page_target || (predictTarget(item.id || item.question_id)?.page_target ?? null);
+  const target = openableTarget(item.page_target || (predictTarget(item.id || item.question_id)?.page_target ?? null));
   const docAnchor = predictTarget(item.id || item.question_id)?.doc_anchor || null;
   const importance = item.importance || 'normal';
   const label = item.prompt || (predictTarget(item.id || item.question_id)?.label ?? item.question_id) || 'Question';
@@ -320,7 +320,7 @@ function ItemCard({
 function phoneCard(item, { pct, completedAt, onClick, locked, lockTier, upgrade } = {}) {
   const qid = item.id || item.question_id;
   const predicted = predictTarget(qid);
-  const target = item.page_target || (predicted?.page_target ?? null);
+  const target = openableTarget(item.page_target || (predicted?.page_target ?? null));
   const done = completedAt ? storedDate(completedAt) : null;
   return {
     key: `${qid}:${completedAt || ''}`,

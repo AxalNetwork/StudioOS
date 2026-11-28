@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { PhoneSheet } from '../../../ui/phone/PhoneSheet.jsx';
 import { THESIS_HREF } from '../../investor/InvestorThesisBand';
-import { COMMITMENT } from '../../investor/investorHomeModel';
+import { COMMITMENT, FROM_STUDIO } from '../../investor/investorHomeModel';
 import './investorHomeModules.css';
 
 const GLYPH = { call: Banknote, notice: FileText, trust: ShieldCheck, booklet: BookOpen, lpa: PenLine, inbox: Bell, link: Link2, update: MessageSquare, report: FileChartColumn, deals: Briefcase };
@@ -77,7 +77,7 @@ export function NeedsYouBody({ model, onRetry }) {
               <Glyph kind={row.kind} />
               <div className="ihs-ns"><b>{row.title}</b>{row.detail && <span>{row.detail}</span>}</div>
               <DateCell date={row.date} />
-              <span className="ihs-act">{row.pay ? <PayAction row={row} /> : <Link to={row.action.to} className="sm-btn sm-btn-s sm-btn-sm ihs-t44m" data-testid={`link-needs-${row.key}`}>{row.action.label}</Link>}</span>
+              <span className="ihs-act">{row.pay ? <PayAction row={row} /> : <Link to={row.action.to} state={FROM_STUDIO} className="sm-btn sm-btn-s sm-btn-sm ihs-t44m" data-testid={`link-needs-${row.key}`}>{row.action.label}</Link>}</span>
             </li>
           ))}
         </ol>
@@ -113,7 +113,8 @@ export function FundsBody({ funds, asAt, onRetry }) {
   const { rows, total, callsKnown, unlinked } = funds;
   return (
     <div className="ihs-funds" data-testid="investor-funds">
-      {unlinked && <p className="ihs-sub"><Link to="/spinout-lab/investor-workspace">Open the LP workspace to link the rest of your commitments.</Link></p>}
+      {/* D8731 (canvas SIV-2 D): one action per card, so the rest that is not linked is said here, not linked a second time. */}
+      {unlinked && <p className="ihs-sub ihs-tolink" data-testid="status-funds-more-to-link"><Link2 size={14} aria-hidden="true" />One more commitment under your email links when you open My commitment.</p>}
       {!callsKnown && <SourceUnreadable text="Your capital calls could not be read. Committed and TVPI still show." onRetry={onRetry} testId="status-funds-calls-unreadable" />}
       <div className="ihs-funds-table">
         <table className="ihs-tb">

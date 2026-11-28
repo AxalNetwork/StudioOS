@@ -37,8 +37,16 @@ const PROFILE_WORDS: Readonly<Record<string, string>> = {
   admin: 'Admin', founder: 'Founder', partner: 'Operating Partner',
   investor: 'Investor', advisor: 'Advisor', exploring: 'Member',
 };
+/**
+ * Where each person stands on the item. #9031: a booking names both sides.
+ * An advisor booking's `advisor` and `mentee` take the canvas's words for
+ * them (SAV02's People: "Advisor" and "Founder", D8732); a partner office
+ * hour's `partner` and `requester` (the booking's `founder_user_id`) have no
+ * board, so they take the same pattern: "Partner" and "Founder".
+ */
 const STAND_WORDS: Readonly<Record<string, string>> = {
   organizer: 'Organiser', attendee: 'Invited', invitee: 'Invited', founder: 'Founder', counterpart: 'With the founder',
+  advisor: 'Advisor', mentee: 'Founder', partner: 'Partner', requester: 'Founder',
 };
 /** An answer in CAL4's words. A missing answer is said, never assumed. */
 export const ANSWER_WORDS: Readonly<Record<string, string>> = {

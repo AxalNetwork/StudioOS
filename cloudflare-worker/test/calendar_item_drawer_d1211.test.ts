@@ -225,3 +225,35 @@ test('D1211 CAL8: a founder booking a check-in picks only who it is with; the fo
     assert.equal(other.status, 400, 'anyone else still names the founder');
   } finally { await f.close(); }
 });
+
+test('#9031: a booking says who is the advisor and the founder, and who is the partner and the founder who asked', async () => {
+  const f = fixture();
+  try {
+    // 9 gives advisor sessions as advisor 90; 7 sits on partner 70's side; 2 booked both.
+    f.db.exec(`INSERT INTO users (id,uid,email,name,role,partner_id) VALUES (7,'${uidOf(7)}','member-7@example.test','Fixture 7','partner',70);
+      UPDATE users SET advisor_id=90 WHERE id=9;
+      INSERT INTO advisors (id,uid,user_id,email,display_name) VALUES (90,'adv-90',9,'member-9@example.test','Fixture Advisor');
+      INSERT INTO advisor_office_hour_slots (id,uid,advisor_id,starts_at,ends_at) VALUES (61,'aslot-61',90,'${at(30)}','${at(31)}');
+      INSERT INTO advisor_bookings (id,uid,slot_id,advisor_id,founder_user_id,topic,status) VALUES (60,'abk-60',61,90,2,'Pricing','confirmed');
+      INSERT INTO partners (id,uid,name,email) VALUES (70,'ptn-70','Fixture Partner','member-7@example.test');
+      INSERT INTO partner_office_hour_slots (id,uid,partner_id,starts_at,ends_at) VALUES (81,'pslot-81',70,'${at(32)}','${at(33)}');
+      INSERT INTO partner_bookings (id,uid,slot_id,partner_id,founder_user_id,topic,status) VALUES (80,'pbk-80',81,70,2,'Hiring','pending');`);
+    const stands = (item: any) => item.people.map((p: any) => [p.name, p.stands]);
+
+    for (const reader of [9, 2]) {
+      const res = await f.request('/item/advisor_booking/60', reader);
+      assert.equal(res.status, 200, `advisor booking, reader ${reader}`);
+      const { item } = await res.json();
+      assert.deepEqual(stands(item), [['Fixture Advisor', 'Advisor'], ['Fixture 2', 'Founder']], 'SAV02\'s words, the same for either side');
+      assert.doesNotMatch(JSON.stringify(item), EMAIL, 'never an email');
+    }
+    for (const reader of [7, 2]) {
+      const res = await f.request('/item/partner_office_hour/80', reader);
+      assert.equal(res.status, 200, `partner office hour, reader ${reader}`);
+      const { item } = await res.json();
+      assert.deepEqual(stands(item), [['Fixture Partner', 'Partner'], ['Fixture 2', 'Founder']], 'the partner and the founder who asked');
+      assert.doesNotMatch(JSON.stringify(item), EMAIL, 'never an email');
+    }
+    assert.equal((await f.request('/item/advisor_booking/60', 6)).status, 404, 'still only the two sides read it');
+  } finally { await f.close(); }
+});

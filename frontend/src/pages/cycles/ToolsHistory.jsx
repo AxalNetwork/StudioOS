@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Cell } from './CycleModulePage';
-import { feedsOf, repositoriesText, syncLineView } from './codeSystem';
+import { accountOnlyText, bindingView, feedsOf, repositoriesText, syncLineView } from './codeSystem';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { cellView } from './cycleModel';
 
@@ -25,6 +25,13 @@ import { cellView } from './cycleModel';
  * The sync lines are every tool's, the latest 20, and the heading says so. On a
  * phone (`phone`, or the phone width) each tool is a card, never a table
  * scrolled sideways.
+ *
+ * D8774 (#8774): each Code system also says what it is to THIS venture
+ * (`binding`): its state word, the last successful read of the venture (date,
+ * source, repositories), Stale with its age, and what will feed after a sync.
+ * Its counts are headed "Feeds" only while every scope holds, else "Arrived
+ * earlier". With no GitHub on for the company, the viewer's own account
+ * connection is named as account-only (`tools.code.account`).
  */
 export default function ToolsHistory({ tools, phone: phoneProp }) {
   // A row's action is Connect a tool over this page: `under` is where closing it returns (#1597).
@@ -44,6 +51,7 @@ export default function ToolsHistory({ tools, phone: phoneProp }) {
         {tools.state === 'ok' && Number.isSafeInteger(tools.total) && <span className="text-[11px] text-axal-faint dark:text-gray-500" data-testid="tools-count">{tools.total === 1 ? '1 tool connected' : `${tools.total} tools connected`}{missing.length ? ` · ${missing.length} not connected` : ''}</span>}
       </div>
       <CodeSystem code={tools.code} linkState={under} />
+      {accountOnlyText(tools.code) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="tools-code-account">{accountOnlyText(tools.code)}</p>}
       {tools.state === 'not_recorded'
         ? <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="tools-not-recorded">{tools.reason || 'Not recorded'}</p>
         : (
@@ -114,6 +122,7 @@ function CodeSystem({ code, linkState }) {
       <h3 className={SUB}>Code system</h3>
       {systems.map((sys, i) => {
         const feeds = feedsOf(sys);
+        const bound = bindingView(sys);
         const open = sys.action && typeof sys.action.href === 'string' && sys.action.href.startsWith('/') ? sys.action : null;
         return (
           <div key={i} className="flex flex-col gap-1 rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-800" data-testid={`tools-code-${i}`}>
@@ -124,9 +133,17 @@ function CodeSystem({ code, linkState }) {
             {sys.source_label && <p className="m-0 text-[11px] text-axal-faint dark:text-gray-500" data-testid="tools-code-source">{sys.source_label}{sys.owner ? ` · ${sys.owner}` : ''}</p>}
             <p className={LINE} data-testid="tools-code-repositories">Repositories: {repositoriesText(sys)}</p>
             <p className={LINE}>Last sync: {sys.last_sync || 'Not yet'}{sys.failed_at ? ` · failed at ${sys.failed_at}` : ''}</p>
+            {bound && (
+              <div className="flex flex-col gap-0.5" data-testid="tools-code-binding" data-binding={bound.state}>
+                <p className={LINE}><b data-testid="tools-code-binding-word">{bound.word}</b>{bound.reason ? ` · ${bound.reason}` : ''}</p>
+                <p className={LINE} data-testid="tools-code-last-read">{bound.lastRead}</p>
+                {bound.stale && <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="tools-code-stale">{bound.stale}</p>}
+                {bound.after && <p className={LINE} data-testid="tools-code-after">{bound.after}</p>}
+              </div>
+            )}
             {sys.reason && <p className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="tools-code-reason">{sys.reason}</p>}
             <p className={LINE} data-testid="tools-code-feeds">
-              Feeds: {feeds.length === 0 ? 'Nothing has arrived in this project yet' : feeds.map((f, j) => (
+              {bound ? bound.feedsHeading : 'Feeds'}: {feeds.length === 0 ? 'Nothing has arrived in this project yet' : feeds.map((f, j) => (
                 <span key={f.label}>{j > 0 && ' · '}{f.href ? <Link to={f.href} className="hover:underline">{f.text}</Link> : f.text}</span>
               ))}
             </p>

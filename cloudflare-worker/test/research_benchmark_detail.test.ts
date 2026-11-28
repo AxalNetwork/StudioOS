@@ -41,6 +41,8 @@ function freshDb() {
   db.exec(tableFrom('303', 'research_benchmark_constituents'));
   // D6278: the fund-link columns PATCH clears on a hand edit.
   db.exec(stripForeignKeys(readFileSync(resolve(MIGRATIONS, '202611180253_6278_research_benchmark_fund.sql'), 'utf8')));
+  // D6277: the history PATCH writes and DELETE removes.
+  db.exec(stripForeignKeys(readFileSync(resolve(MIGRATIONS, '202611270437_6277_research_benchmark_history.sql'), 'utf8')));
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OWNER, 'investor');
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OTHER, 'investor');
   const b = db.prepare(

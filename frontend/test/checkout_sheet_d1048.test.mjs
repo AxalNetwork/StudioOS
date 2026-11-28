@@ -607,7 +607,9 @@ test('D1053 PAYX19a: back from sign-in, Pricing opens the sheet on the kept plan
       React.createElement(PricingBody, { user: { role: 'founder', subscription_tier: 'free' } }), React.createElement(Probe))));
     await settle();
     assert.ok(byId('checkout-sheet'), 'the sheet opens on its own');
-    assert.equal(at.search, '', 'the request leaves the address, so Back does not reopen it');
+    // #8717: the interval stays as the page's own billing (Back restores the cadence); only the request leaves.
+    assert.equal(new URLSearchParams(at.search).get('checkout'), null, 'the request leaves the address, so Back does not reopen it');
+    assert.equal(at.search, '?interval=yearly', 'the interval the sheet opened on stays in the address');
     assert.equal(props(byId('checkout-interval-yearly'))['aria-pressed'], true);
     assert.deepEqual(asked[0], { planKey: 'founder:growth', interval: 'yearly', promoCode: undefined });
     const close = walk(container).find((n) => n.tagName === 'BUTTON' && props(n)['aria-label'] === 'Close');

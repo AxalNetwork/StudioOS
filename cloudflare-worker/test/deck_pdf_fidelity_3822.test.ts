@@ -127,6 +127,8 @@ function fixture(slides: unknown[], theme: unknown = null) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)!));
   db.exec(MIGRATION);
+  // D8771 (#8771): the ledger records what each file carried.
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'), 'utf8'));
   try { db.exec('ALTER TABLE pitch_decks ADD COLUMN theme_json TEXT'); } catch { /* already there */ }
   db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.3822@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();

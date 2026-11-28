@@ -17,7 +17,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { HoursEntries, SeatScopeEditor, DeliveryNote } from './deliveryEdits';
 import { useMutations, useZoneRead, failureNote, stated } from './useZoneMutations';
-import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+import { EngagementFocusBar, PersonFocusBar, focusEngagementId, focusLabel, focusPeople, matchesFocus, useEngagementFocus, usePersonFocus } from './engagementFocus';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -223,10 +223,13 @@ export default function PartnerCapacityZone() {
   // `next_week` chose the PERIOD in the load above, so here they are the whole
   // roster that period returned, and `all` is the same list under a label the
   // artboard draws.
+  // D8733: `?person=` (the Studio feed's over-cap alert) narrows the roster to that one person before any chip.
+  const personFocus = usePersonFocus();
+  const focusedPeople = focusPeople(people, personFocus.key);
   const visible = (() => {
-    if (view === 'seats') return people.filter((p) => (p.live_seats || 0) > 0);
-    if (view === 'this_week' || view === 'next_week' || view === 'all') return people;
-    return people;
+    if (view === 'seats') return focusedPeople.filter((p) => (p.live_seats || 0) > 0);
+    if (view === 'this_week' || view === 'next_week' || view === 'all') return focusedPeople;
+    return focusedPeople;
   })();
 
   const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Seats held', 'Project h/wk', 'Seat h/wk', 'Internal h/wk', 'Total h/wk'], rows: visible, cells: (p) => [p.name, p.live_seats, p.project_hours_per_week, p.seat_hours_per_week, p.internal_hours_per_week, p.total_hours_per_week] } });
@@ -539,6 +542,7 @@ export default function PartnerCapacityZone() {
         <div className="space-y-6" aria-busy={read.refreshing || undefined}>
           {refreshNote}
           {grantedNote}
+          <PersonFocusBar focusKey={personFocus.key} people={people} onClear={personFocus.clear} />
           <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allSeats, ...engagements], focus.key)} shown={seats.length} total={allSeats.length} noun="seats · the roster below is the whole firm’s" onClear={focus.clear} />
           <ZoneHeading
             title="People and allocation"

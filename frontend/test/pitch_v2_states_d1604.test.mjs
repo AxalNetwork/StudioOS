@@ -119,7 +119,7 @@ test('the .odp export goes through api.deckExportOdp to POST /api/decks/:id/expo
     assert.match(v.textOf('pitch-export-where'), /In the \.odp file/);
     await v.click('pitch-export-run');
     const posts = v.requests.filter((q) => q.method === 'POST');
-    assert.deepEqual(posts.map((q) => [new URL(q.url, 'https://x.test').pathname, q.body]), [['/api/decks/10/export/odp', { notes: true, sources: true }]]);
+    assert.deepEqual(posts.map((q) => [new URL(q.url, 'https://x.test').pathname, q.body]), [['/api/decks/10/export/odp', { notes: false, sources: true }]], 'D8771: the investor copy by default');
     assert.deepEqual(v.saved, ['Synthetic-seed-deck-v4.odp']);
     assert.equal(v.textOf('pitch-export-done'), 'Exported Slides-suite file (.odp) of v4. The export is recorded.');
     assert.ok(v.requests.filter((q) => q.url.includes('/decks/10/exports')).length >= 2, 'the ledger is read again after the export');
