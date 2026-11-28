@@ -36,6 +36,7 @@ import { QueueList, DecisionPanel } from '../src/pages/hq/ReviewQueuePage.jsx';
 import { TasksPanelView, TicketsPanelView, PANEL_TABS } from '../src/components/advisor/EadwynPanels.jsx';
 import { TicketView } from '../src/pages/TicketsPage.jsx';
 import { ticketReviewsApi } from '../src/lib/api/ticketReviews.js';
+import { intentOf } from '../src/lib/advisor/composerIntent.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -234,7 +235,8 @@ test('a suggestion\'s state names what its grant paid, never the rule', () => {
   assert.equal(taskLine('  Share it\n\nwith the cohort  '), 'Share it with the cohort');
   assert.equal(taskLine(''), null);
   assert.equal(startPrompt({ title: 'Post your first update' }), 'Help me with Post your first update');
-  assert.match(read('frontend/src/components/advisor/PersonalAdvisor.jsx'), /const m = raw\.match\(\/\^\\s\*\(\?:explain\|what is\|what's\|tell me about\|help me with\|/,
+  // D9275: the composer's routing moved to lib/advisor/composerIntent.js.
+  assert.equal(intentOf(startPrompt({ title: 'Post your first update' }), { question: { id: 'q' } }), 'explain',
     '"Start" relies on the chat reading "help me with" as an explanation, not an answer');
 });
 

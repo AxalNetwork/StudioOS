@@ -54,6 +54,7 @@ import {
 import { api, getActiveCompanyId, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { orientationMessage, shouldOrient } from '../../lib/eadwynOrientation';
+import { COMMAND_NOT_READY, routeComposerSend } from '../../lib/advisor/composerIntent.js';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -679,27 +680,24 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     }
   }, [sendKey]);
 
-  // Detect "explain X" as user input — open tutor instead of answering.
+  // D9275 (#9275) — `routeComposerSend` decides what the line is: "explain X"
+  // opens the tutor; a tool prefix or verb, or any line with no question
+  // active, goes to the tool-binding endpoint; any other leading `/` is a
+  // command, which sends nothing, keeps its text in the box and leaves the
+  // question, the ring and `pendingEvidence` as they were; the rest answers.
   const handleSend = useCallback(() => {
-    const raw = input.trim();
-    if (!raw) return;
-    const m = raw.match(/^\s*(?:explain|what is|what's|tell me about|help me with|huh\??)\s+(.{2,})$/i);
-    if (m) {
-      openTutor(m[1]);
-      setInput('');
-      return;
-    }
-    // Route to the LLM tool-binding endpoint when the profile is
-    // complete (no active question) or when the user opens with a
-    // verb that strongly implies "do something" rather than "answer
-    // the current profile question".
-    const isToolish = /^\s*(?:\/(?:tool|find|open|book|schedule|draft|start)\b|find\b|show\b|search\b|book\b|schedule\b|draft\b|open\b|start\b|deep[- ]link\b)/i.test(raw);
-    if (!question || isToolish) {
-      submitToolAuto(raw);
-      return;
-    }
-    submit(raw);
-  }, [input, openTutor, submit, submitToolAuto, question]);
+    routeComposerSend(input, { question, pendingEvidence }, {
+      explain: (topic) => {
+        openTutor(topic);
+        setInput('');
+      },
+      tool: submitToolAuto,
+      command: () => setMessages((m) => (m[m.length - 1]?.content === COMMAND_NOT_READY
+        ? m
+        : [...m, { role: 'assistant', content: COMMAND_NOT_READY, composer_notice: true }])),
+      answer: submit,
+    });
+  }, [input, openTutor, submit, submitToolAuto, question, pendingEvidence]);
 
   const closeTutor = useCallback(() => {
     if (tutorAbortRef.current) tutorAbortRef.current.abort();
