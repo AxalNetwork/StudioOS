@@ -5,6 +5,11 @@
 -- message's idempotency_key, which a replay (POST /api/infra/dlq/:id/retry)
 -- uses as the stem of its own key.
 --
+-- The DELETE and the unique index on an existing table make this a manual
+-- recovery for the release-window rehearsal (D8532); its rehearsed fix keeps a
+-- rolled-back Worker's plain INSERT from failing on a mirrored message:
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611272117_9034_cf_dlq_mirror_once.fix.sql
+--
 -- 1. Remove the duplicates a retried delivery left before this, keeping the
 --    lowest id for each message_id (the first mirror of that message).
 DELETE FROM cf_dlq_mirror
