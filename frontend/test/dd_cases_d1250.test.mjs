@@ -280,7 +280,7 @@ test('one failed block never blanks the page: the overview and the list fail alo
   } finally { await a.v.unmount(); restore(); }
   const b = await desk({ over: { cases: async () => { throw Object.assign(new Error('down'), { status: 500 }); } } });
   try {
-    assert.match(textOf(one(b.v, 'dd-list-failed')), /We could not load the cases\.The rest of Approvals still works\. This is not an empty list\.Try again/);
+    assert.match(textOf(one(b.v, 'dd-list-failed')), /We could not load the cases\.The rest of Due diligence still works\. This is not an empty list\.Try again/);
     assert.equal(byId(b.v, 'dd-empty').length, 0, 'a failed list said there were no cases');
     assert.match(textOf(one(b.v, 'dd-tile-open')), /14/);
   } finally { await b.v.unmount(); restore(); }

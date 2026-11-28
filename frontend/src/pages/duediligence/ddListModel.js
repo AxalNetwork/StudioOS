@@ -17,7 +17,9 @@ export const READING = 'Reading…';
 export const UNREADABLE = 'Unreadable';
 export const PAUSED = 'Diligence changes are paused for 24 hours after an account recovery. You can still read cases.';
 export const LIST_FAILED = 'We could not load the cases.';
-export const LIST_FAILED_SUB = 'The rest of Approvals still works. This is not an empty list.';
+export const LIST_FAILED_SUB = 'The rest of Due diligence still works. This is not an empty list.';
+export const LIST_LOCKED_SUB = 'Your plan does not include Due diligence. Nothing failed, and this is not an empty list.';
+export const PLANS_PATH = '/pricing?for=investor';
 export const ADVISOR_NOTE = 'Advisors review the sections they are invited to.';
 export const TEMPLATES_NOTE = 'HQ edits templates. You choose one when you open a case.';
 export const CHANGE_REFUSED = 'Only the case lead or an Admin can change this case.';
@@ -35,6 +37,24 @@ export const canChangeCase = (me, row) => Boolean(me) && (me.role === 'admin' ||
 export function refusalText(e, fallback = 'That could not be saved. Try again.') {
   if (e?.status === 423) return PAUSED;
   return e?.data?.error || e?.data?.detail || e?.message || fallback;
+}
+
+/**
+ * D9199 (#9199): what a failed list read means. A 402 is the plan gate on the
+ * `/api/dd` prefix (`investor_tier_required`, D1421): retrying cannot change
+ * it, so it is `locked` (See plans, no Try again). A 404 is the dev FastAPI,
+ * which keeps no cases. Anything else is a failure that a retry may cure.
+ */
+export function listFailure(e) {
+  if (e?.status === 402 || e?.data?.error === 'investor_tier_required' || e?.data?.error === 'tier_required') return 'locked';
+  if (e?.status === 404) return 'unavailable';
+  return 'failed';
+}
+
+/** The locked state's heading, naming the plan the Worker said unlocks it when it said one. */
+export function lockedTitle(e) {
+  const name = typeof e?.data?.plan?.name === 'string' && e.data.plan.name.trim() ? e.data.plan.name.trim() : null;
+  return name ? `Due diligence is on the ${name} plan.` : 'Due diligence is not on your plan.';
 }
 
 /* ------------------------------------------------------------------ *

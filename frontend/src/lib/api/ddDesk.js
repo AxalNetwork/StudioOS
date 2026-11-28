@@ -27,9 +27,10 @@ export const ddDeskApi = {
     const q = new URLSearchParams();
     for (const k of LIST_KEYS) if (filters[k] != null && filters[k] !== '') q.set(k, String(filters[k]));
     const qs = q.toString();
-    return request(`/dd/cases${qs ? `?${qs}` : ''}`);
+    // D9199: the Cases tab draws the plan gate's 402 itself, so the paywall modal is not opened over it.
+    return request(`/dd/cases${qs ? `?${qs}` : ''}`, { inlinePaywall: true });
   },
-  overview: () => request('/dd/overview'),
+  overview: () => request('/dd/overview', { inlinePaywall: true }),
   myReviews: () => request('/dd/my-reviews'),
   subjects: (type, q = '') => request(`/dd/subjects?type=${enc(type)}&q=${enc(q)}`),
   people: (q = '', page = 1) => request(`/dd/people?q=${enc(q)}&page=${enc(page)}`),
