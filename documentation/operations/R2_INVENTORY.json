@@ -130,6 +130,20 @@
       "policy_sources": []
     },
     {
+      "id": "files-accreditation-evidence",
+      "bucket": "studioos-files",
+      "prefix": "accreditation-evidence/",
+      "class": "record",
+      "purpose": "Investor accreditation verification letters (D6139 part 1; which letters are kept is owner answer A on #6139, 2026-11-27)",
+      "retention_period": "the 12-month accreditation period plus the investor-record retention period #5510 sets; that figure is not set (INVESTOR_RECORD_RETENTION_MONTHS is null in services/accreditationEvidence.ts)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/architecture/decisions/D6139-p1.md"
+      ]
+    },
+    {
       "id": "files-advisor-deliverables",
       "bucket": "studioos-files",
       "prefix": "advisor-deliverables/",
@@ -1116,7 +1130,7 @@
         "files-wellbeing-credentials",
         "files-wg-v1"
       ],
-      "evidence": "D6651: the one record-erasure path. Its callers pass stored keys whose rows were written only by these record writers: routes/research.ts (research/), routes/kyb_admin.ts (kyb/), routes/deck_reviewer.ts (deck-reviews/), routes/cycle_build.ts and services/records/build.ts (build-proof/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), services/agents/computeBridge.ts (agent-compute/), services/dataRoomTrash.ts and services/google/raise.ts (data-room/), services/interviewSessions.ts and durable-objects/meeting-bot-run.ts (validate-audio/), services/r2.ts deleteKycDocument (kyc/), services/workGraphReconcile.ts (wg/v1/). Rollbacks (reason unreferenced) pass the fresh key the same request just stored: routes/admin_governance.ts (governance/), routes/captable.ts, routes/cycle_use_of_funds.ts, services/google/raise.ts and services/mercury/raiseFeeds.ts (data-room/), routes/kyb_admin.ts (kyb/), routes/kyc.ts via deleteKycDocument (kyc/), routes/mark_requests.ts (mark-request-evidence/), routes/reporting_reports.ts (reports/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), routes/advisors_deliverables.ts (advisor-deliverables/), services/fundNoticeStore.ts (fund-notices/), services/growWriters.ts (grow-minutes/), services/mercury/investorFeeds.ts (mercury-statements/), services/records/build.ts (build-proof/). Each caller's earlier site was reviewed under D6650; a new caller of this path is a review of this entry."
+      "evidence": "D6651: the one record-erasure path. Its callers pass stored keys whose rows were written only by these record writers: routes/research.ts (research/), routes/kyb_admin.ts (kyb/), routes/deck_reviewer.ts (deck-reviews/), routes/cycle_build.ts and services/records/build.ts (build-proof/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), services/agents/computeBridge.ts (agent-compute/), services/dataRoomTrash.ts and services/google/raise.ts (data-room/), services/interviewSessions.ts and durable-objects/meeting-bot-run.ts (validate-audio/), services/r2.ts deleteKycDocument (kyc/), services/workGraphReconcile.ts (wg/v1/). Rollbacks (reason unreferenced) pass the fresh key the same request just stored: routes/admin_governance.ts (governance/), routes/captable.ts, routes/cycle_use_of_funds.ts, services/google/raise.ts and services/mercury/raiseFeeds.ts (data-room/), routes/kyb_admin.ts (kyb/), routes/kyc.ts via deleteKycDocument (kyc/), routes/mark_requests.ts (mark-request-evidence/), routes/trust_accreditation.ts (accreditation-evidence/, D6139), routes/reporting_reports.ts (reports/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), routes/advisors_deliverables.ts (advisor-deliverables/), services/fundNoticeStore.ts (fund-notices/), services/growWriters.ts (grow-minutes/), services/mercury/investorFeeds.ts (mercury-statements/), services/records/build.ts (build-proof/). Each caller's earlier site was reviewed under D6650; a new caller of this path is a review of this entry."
     },
     {
       "site": "cloudflare-worker/src/services/rehearsalAudio.ts | deleteRehearsalAudio | delete | row.audio_r2_key",

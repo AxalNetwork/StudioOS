@@ -61,6 +61,7 @@ export const SUPPRESSION_BUCKET = 'studioos-files';
  */
 export const RECORD_FILE_CLASSES: ReadonlyArray<readonly [prefix: string, id: string]> = [
   ['83b-receipts/', 'files-83b-receipts'],
+  ['accreditation-evidence/', 'files-accreditation-evidence'],
   ['advisor-deliverables/', 'files-advisor-deliverables'],
   ['agent-compute/', 'files-agent-compute'],
   ['build-proof/', 'files-build-proof'],

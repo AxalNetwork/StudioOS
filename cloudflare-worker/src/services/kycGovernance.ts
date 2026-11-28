@@ -184,11 +184,11 @@ export async function kycRenewals(env: Env, opts: { filter?: RenewalFilter; q?: 
 export const PERIOD_LABELS: Record<RenewalPeriodKey, string> = {
   kyc_v1: 'Identity (KYC)', kyb_v1: 'Entity (KYB)', accreditation_v1: 'Accreditation evidence',
 };
-/** Where each period is used today. Accreditation has no satisfier yet, so its period is kept and not yet applied. */
+/** Where each period is used today. D6139: accepting an accreditation letter (`routes/trust_accreditation.ts`) applies its period. */
 const PERIOD_APPLIED: Record<RenewalPeriodKey, { applied: boolean; reason?: string }> = {
   kyc_v1: { applied: true },
   kyb_v1: { applied: true },
-  accreditation_v1: { applied: false, reason: 'No route approves accreditation evidence yet, so this period is kept and not yet used.' },
+  accreditation_v1: { applied: true },
 };
 
 export async function kycPeriodsRead(env: Env) {
@@ -283,6 +283,12 @@ export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'd
   kyc_recheck_by_admin: { word: 'Asked to verify again', kind: 'decision' },
   kyc_case_assigned: { word: 'Assigned', kind: 'change' },
   kyc_note_added: { word: 'Added a note', kind: 'change' },
+  // D6139 part 1: accreditation letters (`routes/trust_accreditation.ts`).
+  accreditation_queue_access: { word: 'Opened the accreditation letters', kind: 'look' },
+  accreditation_document_access: { word: 'Viewed an accreditation letter', kind: 'look' },
+  accreditation_review_started: { word: 'Started reviewing a letter', kind: 'decision' },
+  accreditation_accepted: { word: 'Accepted a letter', kind: 'decision' },
+  accreditation_sent_back: { word: 'Sent a letter back', kind: 'decision' },
 };
 
 /**
@@ -303,7 +309,7 @@ export function auditDetail(action: string, details: unknown): string | null {
   const d = String(details || '');
   const count = /count=(\d+)/.exec(d)?.[1];
   switch (action) {
-    case 'kyc_queue_access': case 'kyc_renewals_access': case 'kyc_audit_access':
+    case 'kyc_queue_access': case 'kyc_renewals_access': case 'kyc_audit_access': case 'accreditation_queue_access':
       return count ? `${count} ${count === '1' ? 'row' : 'rows'}` : null;
     case 'kyc_field_shown': {
       const f = /showed (\w+) on/.exec(d)?.[1];
@@ -317,6 +323,10 @@ export function auditDetail(action: string, details: unknown): string | null {
     }
     case 'kyc_bypass_granted':
       return 'No submission on file';
+    case 'accreditation_accepted': {
+      const until = / until (\d{4}-\d{2}-\d{2})$/.exec(d)?.[1];
+      return until ? `Until ${until}` : null;
+    }
     case 'kyc_case_assigned':
       return /Admin unassigned the/.test(d) ? 'Unassigned' : null;
     case 'kyc_hq_decided': {

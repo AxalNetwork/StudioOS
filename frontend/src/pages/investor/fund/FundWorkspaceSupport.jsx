@@ -80,7 +80,7 @@ export const REPORT_PKG = [
 ];
 
 export const ONBOARDING = [
-  ['Accredited status', 'Rule 501 self-certification', 'Verification letter or income/net-worth evidence', '1–2 days'],
+  ['Accredited status', 'Rule 501 self-certification, then a verification letter', 'Verification letter from a CPA, attorney, broker-dealer or registered adviser', '1–2 days'],
   ['KYC / AML', 'Identity + source of funds', 'Government ID, entity documents', '2–3 days'],
   ['Subscription documents', 'Countersigned by the GP', 'Executed subscription agreement', '3–5 days'],
   ['Limited partnership agreement', 'Delaware LP', 'Executed LPA counterpart', '2–3 days'],
