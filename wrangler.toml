@@ -678,6 +678,7 @@ crons = [
   "0 4 * * *",     # market-intel composite + daily snapshot window
   "0 9 * * *",     # daily digest emails
   "0 9 * * 2",     # weekly digest emails (Monday — Cloudflare's 2)
+  "17 3 * * *",    # swarm admission retention (D5586-p5; owner answer C1)
 ]
 
 # ---------- Market-Intelligence free connectors ----------
@@ -1098,6 +1099,7 @@ crons = [
   "0 4 * * *",
   "0 9 * * *",
   "0 9 * * 2",
+  "17 3 * * *",
 ]
 
 # ===========================================================================
@@ -1367,5 +1369,7 @@ binding = "BROWSER"
 [env.preview.triggers]
 # Preview env keeps only the every-minute drain + market-intel cadences
 # so PR review deploys exercise the cron path. Daily 09:00 digests are
-# omitted to avoid sending real emails from preview workers.
-crons = ["* * * * *", "0 */6 * * *", "0 4 * * *"]
+# omitted to avoid sending real emails from preview workers. The swarm
+# admission retention (D5586-p5) runs here too: preview has its own
+# WorkspaceAdmission namespace, and the owner put the cron in all three tables.
+crons = ["* * * * *", "0 */6 * * *", "0 4 * * *", "17 3 * * *"]

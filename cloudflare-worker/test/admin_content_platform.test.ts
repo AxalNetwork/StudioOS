@@ -353,6 +353,8 @@ test('each DECLARED trigger is read against its own schedule, from rows the writ
   assert.equal(by['0 */6 * * *'].state, 'stale', 'a trigger that stopped firing reads as healthy');
   assert.equal(by['0 4 * * *'].state, 'never', 'a trigger with no row at all is not reported as such');
   assert.equal(by['0 4 * * *'].last_started_at, null);
+  // D5586-p5's swarm retention is declared and has no row here either.
+  assert.equal(by['17 3 * * *'].state, 'never');
   assert.equal(by['0 9 * * *'].state, 'ok', 'a minute run by the concurrent tick read as a failure');
   assert.equal(by['0 9 * * *'].status, 'deduped');
   assert.equal(by['0 9 * * 2'].state, 'failed', 'a minute that ran nowhere read as healthy');
@@ -363,7 +365,7 @@ test('each DECLARED trigger is read against its own schedule, from rows the writ
   assert.ok(!by['nightly-legacy'], 'an undeclared trigger name was listed as a job');
   assert.equal(jobs.failing, 2);
   assert.equal(jobs.stale, 1);
-  assert.equal(jobs.never, 1);
+  assert.equal(jobs.never, 2);
   assert.equal(jobs.grace_minutes, STALE_GRACE_MINUTES, 'the grace is not stated in the payload');
   assert.equal(jobs.stale_after_hours, undefined, 'the one-window-for-every-cadence figure came back');
 });
