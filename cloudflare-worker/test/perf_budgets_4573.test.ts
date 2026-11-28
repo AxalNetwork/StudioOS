@@ -20,20 +20,24 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { AUTH_SQL, FLOWS, categoryOf, harness, repeats } from './_perf_harness.ts';
 
-/** flow → [status, auth, telemetry, route]. Auth is 4 from H1 on (it was 7, and 13 on /api/funds, at the baseline). */
+/**
+ * flow → [status, auth, telemetry, route]. Auth is 4 from H1 on (it was 7, and 13 on /api/funds, at the baseline).
+ * Telemetry is 1 from D9202 on (it was 2): the harness pins the request metric's draw to "not sampled", so the
+ * one write left is the request's activity_logs row; a sampled request (one in ten) adds the system_metrics row.
+ */
 export const BUDGETS: Record<string, [number, number, number, number]> = {
   health: [200, 0, 0, 0],
-  'auth.me': [200, 4, 2, 3],
-  'projects.list': [200, 4, 2, 2],
-  'projects.read': [200, 4, 2, 3],
-  dashboard: [200, 4, 2, 0],
-  notifications: [200, 4, 2, 1],
-  search: [200, 4, 2, 0],
-  'decks.by_project': [200, 4, 2, 4],
-  'data_room.shared': [200, 4, 2, 1],
-  'research.overview': [200, 4, 2, 11], // H7 (D5318): 21 → 11, one read per directory
-  'funds.list': [200, 4, 2, 1], // H8 (D5318): 2 → 1, the list no longer claims LP rows
-  'projects.read.other_tenant': [403, 4, 2, 2],
+  'auth.me': [200, 4, 1, 3],
+  'projects.list': [200, 4, 1, 2],
+  'projects.read': [200, 4, 1, 3],
+  dashboard: [200, 4, 1, 0],
+  notifications: [200, 4, 1, 1],
+  search: [200, 4, 1, 0],
+  'decks.by_project': [200, 4, 1, 4],
+  'data_room.shared': [200, 4, 1, 1],
+  'research.overview': [200, 4, 1, 11], // H7 (D5318): 21 → 11, one read per directory
+  'funds.list': [200, 4, 1, 1], // H8 (D5318): 2 → 1, the list no longer claims LP rows
+  'projects.read.other_tenant': [403, 4, 1, 2],
 };
 
 let h: Awaited<ReturnType<typeof harness>>;

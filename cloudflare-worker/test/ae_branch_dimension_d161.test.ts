@@ -151,7 +151,9 @@ async function oneRequest(vars: Record<string, unknown> = {}) {
     ANALYTICS: { writeDataPoint: (p: DataPoint) => { points.push(p); } },
   };
   const app = new Hono<any>();
-  app.use('*', observabilityMiddleware());
+  // D9202: the D1 'request' row is sampled; a draw of 0 keeps it, so the
+  // "D1 still records the request" claim below stays assertable.
+  app.use('*', observabilityMiddleware({ random: () => 0 }));
   // The user is resolved by the rate-limit middleware in production and cached
   // on the context; `null` is the anonymous case and keeps this test off D1's
   // subscription hop, which is not what is under test here.
