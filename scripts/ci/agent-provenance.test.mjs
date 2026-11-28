@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, bindCandidate, bindMain, branchIssue, checkCommit, checkRange, classifyPr, gitResolvePr, main, parseTrailers, readPrMerges, renderShadow, shadowMain, shadowRows, shown,
+  CUTOVER, LEGACY_SESSION, MAX_COMMITS, TRAILERS, bindCandidate, bindMain, branchIssue, checkCommit, checkRange, classifyPr, gitResolvePr, main, mergedInCommits, parseTrailers, readPrMerges, renderShadow, shadowMain, shadowRows, shown,
 } from './agent-provenance.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -146,6 +146,40 @@ test('#8606: a pull request GitHub merged into the branch is exempt only when th
   assert.throws(() => readPrMerges('A'.repeat(40)), /not a commit sha/, 'one spelling only');
 });
 
+test('#9257: the commits a pull request merged into the branch brought are exempt; the branch\'s own are still checked', () => {
+  // Mutations checked: the exemption dropped from checkCommit → the other slot and task join the range and it fails;
+  // the first-parent subtraction dropped → the branch's own commit under the merge is exempt and its missing chain passes.
+  const BASE = 'b'.repeat(40);
+  const OTHER = CHAIN.replace('S08', 'S27').replace('#8068', '#9170');
+  const own = commit(`fix: own\n\n${CHAIN}`, { sha: '1'.repeat(40), parents: [BASE] });
+  const theirs = commit(`feat: theirs\n\n${OTHER}`, { sha: '2'.repeat(40), parents: [BASE] });
+  const merge = commit('Merge pull request #9225 from x/y', { sha: '3'.repeat(40), parents: [own.sha, theirs.sha] });
+  const branch = 'agent/claude/8068-identity-chain';
+  const listed = new Set([merge.sha]);
+  assert.deepEqual([...mergedInCommits([own, theirs, merge], listed)], [theirs.sha]);
+  const doc = checkRange({ commits: [own, theirs, merge], branch, prMerges: listed });
+  assert.equal(doc.verdict, 'pass', doc.problems.join('; '));
+  assert.deepEqual([doc.slot, doc.task], ['S08', '#8068']);
+  assert.deepEqual(doc.commits.map((c) => [c.sha[0], !!c.prMergedIn, !!c.prMerge]), [['1', false, false], ['2', true, false], ['3', false, true]]);
+  // Unlisted, nothing new is exempt: the range names two slots and two tasks, as before.
+  assert.deepEqual(checkRange({ commits: [own, theirs, merge], branch }).problems.slice(0, 2),
+    ['the range names 2 slots: S08, S27', 'the range names 2 tasks: #8068, #9170']);
+  // A commit reachable from both sides (the other branch was cut from it) is the branch's own: still checked.
+  const bareOwn = commit('fix: own, no trailers', { sha: '4'.repeat(40), parents: [BASE] });
+  const cutFrom = commit(`feat: theirs\n\n${OTHER}`, { sha: '5'.repeat(40), parents: [bareOwn.sha] });
+  const ownTip = commit(`fix: own tip\n\n${CHAIN}`, { sha: '6'.repeat(40), parents: [bareOwn.sha] });
+  const merge2 = commit('Merge pull request #9248 from x/z', { sha: '7'.repeat(40), parents: [ownTip.sha, cutFrom.sha] });
+  const both = checkRange({ commits: [bareOwn, cutFrom, ownTip, merge2], branch, prMerges: new Set([merge2.sha]) });
+  assert.equal(both.verdict, 'fail');
+  assert.deepEqual(both.commits.map((c) => [c.sha[0], c.exempt]), [['4', false], ['5', true], ['6', false], ['7', true]]);
+  assert.equal(both.commits[0].problems.length, 4, 'the branch\'s own commit under the merge keeps its four problems');
+  // A commit after the merge is the branch's own as well.
+  const after = commit('fix: after, no trailers', { sha: '8'.repeat(40), parents: [merge.sha] });
+  assert.equal(checkRange({ commits: [own, theirs, merge, after], branch, prMerges: listed }).verdict, 'fail');
+  // Only the range is walked: a parent outside it (main) adds nothing.
+  assert.deepEqual([...mergedInCommits([merge], listed)], []);
+});
+
 test('a range names one slot and one task, the branch\'s issue, and skips branches outside agent/**', () => {
   const ok = commit(`fix: a\n\n${CHAIN}`);
   assert.equal(checkRange({ commits: [ok], branch: 'agent/claude/8068-identity-chain' }).verdict, 'pass');
@@ -261,6 +295,26 @@ test('end to end (#8606): a commit the --pr-merges file lists is exempt and repo
   writeFileSync(list, 'not-a-sha\n');
   assert.equal(run(dir, ['--base', 'main', '--head', 'HEAD', '--pr-merges', list]).status, 2);
   assert.equal(run(dir, ['--base', 'main', '--head', 'HEAD', '--pr-merges', join(dir, 'absent.txt')]).status, 2);
+});
+
+test('end to end (#9257): a pull request merged into the branch with a merge commit brings its commits exempt', (t) => {
+  const { dir, git, put } = fixture(t);
+  put(`feat: one\n\n${CHAIN}`);
+  git('checkout', '--quiet', '-b', 'agent/claude/9170-other', 'main');
+  const theirs = put(`feat: other task\n\n${CHAIN.replace('S08', 'S27').replace('#8068', '#9170')}`);
+  git('checkout', '--quiet', 'agent/claude/8068-identity-chain');
+  git('merge', '--quiet', '--no-ff', '-m', 'Merge pull request #9225 from x/agent/claude/9170-other', 'agent/claude/9170-other');
+  const merge = git('rev-parse', 'HEAD');
+  const list = join(dir, 'pr-merges.txt');
+  const args = ['--base', 'main', '--head', 'HEAD', '--branch', 'agent/claude/8068-identity-chain'];
+  let r = run(dir, args);
+  assert.equal(r.status, 1, 'without the list the other task counts');
+  assert.ok(r.lines.some((l) => /^agent-provenance: FAIL the range names 2 slots: (S08, S27|S27, S08)$/.test(l)), r.lines.join('\n'));
+  writeFileSync(list, `${merge}\n`);
+  r = run(dir, [...args, '--pr-merges', list]);
+  assert.equal(r.status, 0, r.lines.join('\n'));
+  assert.ok(r.lines.includes(`agent-provenance: ${theirs.slice(0, 12)} brought by a pull request merged into this branch, exempt`), r.lines.join('\n'));
+  assert.ok(r.lines.includes(`agent-provenance: ${merge.slice(0, 12)} pull request merged into this branch, exempt`), r.lines.join('\n'));
 });
 
 test('end to end: a branch outside agent/** is skipped without reading git, and still writes the artifact', (t) => {
