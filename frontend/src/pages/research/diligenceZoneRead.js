@@ -9,6 +9,44 @@
  * read is never a 0 (`requests: null` with `requests_unreadable`).
  */
 
+import { ventureRef } from '../cycles/ventureQuery.js';
+
+/** The investor's rooms list (D311): where every room address of theirs starts. */
+export const ROOMS_PATH = '/research/diligence';
+
+/** One room's address (`/research/diligence/<grant uid>`), the query and the hash carried on. */
+export function roomTarget(grantUid, location) {
+  return { pathname: `${ROOMS_PATH}/${encodeURIComponent(grantUid)}`, search: location?.search || '', hash: location?.hash || '' };
+}
+
+/** What the list says when the address names a venture that no live grant of yours is for. */
+export const NO_VENTURE_ROOM = 'No room is open to you for this venture.';
+
+/**
+ * D6162 (#6162): the rooms the address's venture names. The venture is read by
+ * the shared rule (`ventureRef`, D5074): a number is matched against each
+ * room's `project_id`, a project UID against its `project_uid`.
+ *
+ *   unnamed  the address names no venture: the list as always
+ *   one      exactly one live grant is for it: the page opens that room
+ *   many     more than one: each is marked in the list
+ *   none     every room was compared and none is for it: say so plainly
+ *   unknown  a room does not carry the key the address used, so a miss is not
+ *            a claim that there is no room; nothing is said
+ */
+export function ventureRooms(data, search) {
+  const ref = ventureRef(search);
+  if (!ref) return { state: 'unnamed', rooms: [] };
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const key = ref.id != null ? 'project_id' : 'project_uid';
+  const want = ref.id != null ? String(ref.id) : ref.uid;
+  const has = (r) => r != null && r[key] != null && r[key] !== '';
+  const rooms = items.filter((r) => has(r) && String(r[key]) === want);
+  if (rooms.length === 1) return { state: 'one', rooms };
+  if (rooms.length > 1) return { state: 'many', rooms };
+  return { state: items.every(has) ? 'none' : 'unknown', rooms };
+}
+
 /** Days before expiry that a room is marked expiring soon (IRV-01: "expires within 14 days"). */
 export const EXPIRING_SOON_DAYS = 14;
 

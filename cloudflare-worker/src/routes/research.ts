@@ -5231,6 +5231,9 @@ research.get('/diligence', async (c) => {
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
+      // D6162: the venture's id beside its uid, so a data-room link that names
+      // it (`?project_id=N`) finds this room on the list.
+      project_id: Number(r.project_id),
       project_uid: r.project_uid,
       project_name: r.project_name,
       nda_signed: nda,
