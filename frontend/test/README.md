@@ -304,3 +304,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `effective_legal_facts_8831.test.mjs` | D8831: approved policy corrections, protected regulatory rows, email-only notice and existing receipt versions. |
 | `licence_statements_initial_invoice_9112.test.mjs` | D9112 L46 and L46B invoice rendering, status, PDF and partial failure. |
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
+| `research_observation_render_7718.test.mjs` | Country observations, coverage and inspector/CSV parity (D7718). |
