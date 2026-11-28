@@ -21,9 +21,18 @@
  * observations of this vehicle only: its own row and report rows labelled with
  * its label. An unlabelled report row (written before vehicles had labels) is
  * counted, never charted, because it may belong to another vehicle.
+ *
+ * D7748 (#7748): EVERY SOURCED STATEMENT. The fields read the statements
+ * `readFundStatements` (D7743) serves, in its order, once per request: each
+ * of the four keys keeps `status`, `value` and `provenance` and, when any
+ * source states it, gains `statements`, `past_statements`, `tied` and `old`;
+ * eight more keys (`STATEMENT_FIELDS`) carry their statements. `value` is
+ * filled only when one statement leads and has main's form. A failed
+ * statement read makes every field Unavailable; the row is still served.
  */
 import type { Env } from '../types';
 import { directoryColumns, presentFund, type DirectoryRow, type FundSourceRow } from './researchFundDirectory';
+import { isMoneyFact, readFundStatements, type FundStatement, type FundStatements } from './researchFundObservations';
 
 export const PROPOSED_FIELDS = ['manager_name', 'investment_stage', 'investment_geography', 'initial_cheque'] as const;
 export type ProposedField = typeof PROPOSED_FIELDS[number];
@@ -200,23 +209,215 @@ export async function vehicleHistory(env: Env, row: DirectoryRow, manager: Propo
   return history;
 }
 
-/**
- * What the profile read adds to a served row: its provenance, the four
- * proposed fields and the vehicle history. The facts table failing to answer
- * makes those parts Unavailable; the row's own facts are still served.
- */
-export async function fundProfile(env: Env, row: DirectoryRow, reviews: Map<string, FundSourceRow>) {
-  let facts: Map<ProposedField, FactRow> | null;
-  try {
-    facts = (await loadVehicleFacts(env, [row.uid])).get(row.uid) ?? new Map();
-  } catch {
-    facts = null;
+// ---------------------------------------------------------------------------
+// D7748: statements per field.
+// ---------------------------------------------------------------------------
+
+/** D7748: the fields served with their statements beside the four above. Fixed: nothing outside it is answered. */
+export const STATEMENT_FIELDS = [
+  'stated_fund_capital', 'manager_aum', 'revenue_threshold', 'traction_requirement',
+  'lead_preference', 'interests', 'description', 'date_last_raised',
+] as const;
+export type StatementField = typeof STATEMENT_FIELDS[number];
+
+/** Why each statement field reads Not recorded when no served source states it. */
+export const STATEMENT_REASONS: Readonly<Record<StatementField, string>> = {
+  stated_fund_capital: 'No source states the capital of this fund. The reported size is the list’s own figure.',
+  manager_aum: 'No source states the assets this manager has under management.',
+  revenue_threshold: 'No source states a revenue threshold for this vehicle.',
+  traction_requirement: 'No source states a traction requirement for this vehicle.',
+  lead_preference: 'No source states whether this vehicle leads rounds.',
+  interests: 'No source states the interests of this vehicle.',
+  description: 'No source whose terms allow republishing describes this vehicle.',
+  date_last_raised: 'No source states when this manager last raised.',
+};
+
+/** Why a field with only earlier statements reads Not recorded: a past statement is never the current one. */
+export const PAST_ONLY_REASON = 'Every statement a source made about this is marked as history; none is current.';
+
+/** D7748 (#7738 Q6 A, D7032-p3): a statement is Old once its own reported date is older than this. */
+export const OLD_AFTER_MONTHS = 24;
+
+/** The cheque currencies main's profile prints (migration 202611180053_7167's CHECK). */
+const PRINTABLE_CURRENCIES: ReadonlySet<string> = new Set(['EUR', 'USD', 'GBP']);
+const RANGE_QUALIFIERS: ReadonlySet<string> = new Set(['range', 'lower_bound', 'upper_bound']);
+
+/** The day `months` before `today`, as YYYY-MM-DD (UTC). */
+export function oldCutoff(today: Date, months = OLD_AFTER_MONTHS): string {
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - months, today.getUTCDate())).toISOString().slice(0, 10);
+}
+
+/** A reported date as the last day it can mean ("2023" is 2023-12-31), or null when it is not a date. */
+function lastDayOf(v: string | null): string | null {
+  const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/.exec(String(v ?? '').trim());
+  if (!m) return null;
+  if (m[3]) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m[2]) return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).toISOString().slice(0, 10);
+  return `${m[1]}-12-31`;
+}
+
+/** Old (true), not old (false) or undated (null), by the statement's own reported date. */
+export const isOld = (reportedOn: string | null, cutoff: string): boolean | null => {
+  const day = lastDayOf(reportedOn);
+  return day == null ? null : day < cutoff;
+};
+
+export interface ServedStatement {
+  wording: string | null;
+  qualifier?: string | null;
+  min_cents?: number;
+  max_cents?: number;
+  point_cents?: number;
+  currency?: string | null;
+  currency_basis?: string | null;
+  currency_verified?: boolean;
+  review_flags?: string[] | null;
+  terms: FundStatement['terms'];
+  period_start?: string | null;
+  period_end?: string | null;
+  old: boolean | null;
+  provenance: FundProvenance;
+}
+
+/** One statement as the API shows it: named keys only, amounts only where the wording gave them. */
+export function presentStatement(s: FundStatement, reviews: Map<string, FundSourceRow>, cutoff: string): ServedStatement {
+  const out: ServedStatement = {
+    wording: s.wording, terms: s.terms, old: isOld(s.reported_on, cutoff),
+    provenance: provenanceOf(s.source_name, s.source_url, s.reported_on, s.imported_on, reviews.get(s.source_name)),
+  };
+  if (isMoneyFact(s.fact)) {
+    out.qualifier = s.qualifier;
+    if (s.min_cents != null) out.min_cents = s.min_cents;
+    if (s.max_cents != null) out.max_cents = s.max_cents;
+    if (s.point_cents != null) out.point_cents = s.point_cents;
+    out.currency = s.currency;
+    out.currency_basis = s.currency_basis;
+    out.currency_verified = s.currency != null;
+    out.review_flags = s.review_flags;
   }
-  const proposed = presentProposed(facts, reviews);
+  if (s.period_start != null || s.period_end != null) {
+    out.period_start = s.period_start;
+    out.period_end = s.period_end;
+  }
+  return out;
+}
+
+const sameStatement = (a: FundStatement, b: FundStatement) =>
+  String(a.wording ?? '').trim().toLowerCase() === String(b.wording ?? '').trim().toLowerCase()
+  && a.qualifier === b.qualifier && a.min_cents === b.min_cents && a.max_cents === b.max_cents
+  && a.point_cents === b.point_cents && a.currency === b.currency;
+
+/** The first two current statements share a reported date (or neither has one) and differ: neither leads. */
+export const isTied = (current: FundStatement[]) =>
+  current.length >= 2 && current[0].reported_on === current[1].reported_on && !sameStatement(current[0], current[1]);
+
+type MainValue = string | { min_cents: number | null; max_cents: number | null; currency: string };
+
+/** The leading statement's value in main's form, or null: text, or a cheque range in a printable currency. */
+export function mainForm(field: ProposedField, s: FundStatement): MainValue | null {
+  if (field !== 'initial_cheque') return text(s.wording);
+  if (!s.currency || !PRINTABLE_CURRENCIES.has(s.currency) || !RANGE_QUALIFIERS.has(String(s.qualifier))) return null;
+  if (s.min_cents == null && s.max_cents == null) return null;
+  return { min_cents: s.min_cents, max_cents: s.max_cents, currency: s.currency };
+}
+
+/** The vehicle-fact rows among a fund's statements, as `loadVehicleFacts` returns them (D7167's form). */
+export function factsOf(st: FundStatements | undefined): Map<ProposedField, FactRow> {
+  const out = new Map<ProposedField, FactRow>();
+  for (const s of st?.current ?? []) {
+    if (s.origin !== 'vehicle_fact' || !(PROPOSED_FIELDS as readonly string[]).includes(s.fact)) continue;
+    const field = s.fact as ProposedField;
+    out.set(field, {
+      fund_uid: s.fund_uid, field, value_text: field === 'initial_cheque' ? null : s.wording,
+      min_cents: s.min_cents, max_cents: s.max_cents, currency: s.currency,
+      source_name: s.source_name, source_url: s.source_url, reported_on: s.reported_on, imported_on: s.imported_on ?? '',
+    });
+  }
+  return out;
+}
+
+export interface FieldStatements { current: FundStatement[]; past: FundStatement[] }
+
+/** A fund's statements for one field. */
+export const fieldStatements = (st: FundStatements | null | undefined, field: string): FieldStatements => ({
+  current: (st?.current ?? []).filter((s) => s.fact === field),
+  past: (st?.past ?? []).filter((s) => s.fact === field),
+});
+
+/** The parts every field with statements carries: current and past apart, `tied`, and the leading line's Old flag. */
+export function statementParts(fs: FieldStatements, reviews: Map<string, FundSourceRow>, cutoff: string) {
+  return {
+    statements: fs.current.map((s) => presentStatement(s, reviews, cutoff)),
+    past_statements: fs.past.map((s) => presentStatement(s, reviews, cutoff)),
+    tied: isTied(fs.current),
+    old: fs.current.length ? isOld(fs.current[0].reported_on, cutoff) : null,
+  };
+}
+
+/** The statement that leads a field: the first current one, unless the first two are tied. */
+export const leadOf = (fs: FieldStatements): FundStatement | null => (fs.current.length && !isTied(fs.current) ? fs.current[0] : null);
+
+/**
+ * One of the four proposed fields with its statements. With none at all it is
+ * main's answer exactly. `manager_name` keeps main's status, value and
+ * provenance (one string from research_fund_vehicle_facts); the others are
+ * recorded when a current statement exists, with `value` only when one leads
+ * in main's form.
+ */
+export function presentProposedField(
+  field: ProposedField, fs: FieldStatements, facts: Map<ProposedField, FactRow>, reviews: Map<string, FundSourceRow>, cutoff: string,
+): Record<string, unknown> {
+  const main = presentFact(field, facts.get(field), reviews);
+  if (!fs.current.length && !fs.past.length) return main;
+  const parts = statementParts(fs, reviews, cutoff);
+  if (field === 'manager_name') return { ...main, ...parts };
+  if (!fs.current.length) return { status: 'not_recorded', reason: PAST_ONLY_REASON, ...parts };
+  const lead = leadOf(fs);
+  return {
+    status: 'recorded',
+    value: lead ? mainForm(field, lead) : null,
+    provenance: lead ? provenanceOf(lead.source_name, lead.source_url, lead.reported_on, lead.imported_on, reviews.get(lead.source_name)) : null,
+    ...parts,
+  };
+}
+
+/** One of the eight statement fields: recorded with its statements, or Not recorded with its own reason. */
+export function presentStatementField(field: StatementField, fs: FieldStatements, reviews: Map<string, FundSourceRow>, cutoff: string) {
+  const status = fs.current.length
+    ? { status: 'recorded' as const }
+    : { status: 'not_recorded' as const, reason: fs.past.length ? PAST_ONLY_REASON : STATEMENT_REASONS[field] };
+  return { ...status, ...statementParts(fs, reviews, cutoff) };
+}
+
+/** Every field a fund's statements answer; `null` statements (a failed read) make each one Unavailable. */
+export function presentStatementFields(st: FundStatements | null, reviews: Map<string, FundSourceRow>, today: Date) {
+  const unavailable = { status: 'unavailable' as const, reason: UNAVAILABLE };
+  const cutoff = oldCutoff(today);
+  const facts = st ? factsOf(st) : new Map<ProposedField, FactRow>();
+  return {
+    ...Object.fromEntries(PROPOSED_FIELDS.map((k) => [k, st ? presentProposedField(k, fieldStatements(st, k), facts, reviews, cutoff) : unavailable])),
+    ...Object.fromEntries(STATEMENT_FIELDS.map((k) => [k, st ? presentStatementField(k, fieldStatements(st, k), reviews, cutoff) : unavailable])),
+  } as Record<ProposedField | StatementField, Record<string, unknown>>;
+}
+
+/**
+ * What the profile read adds to a served row: its provenance, the proposed
+ * fields with their statements (D7748) and the vehicle history. One statement
+ * read; it failing makes those parts Unavailable, and the row's own facts are
+ * still served. `today` is the Worker's date, which every Old flag is measured from.
+ */
+export async function fundProfile(env: Env, row: DirectoryRow, reviews: Map<string, FundSourceRow>, today: Date = new Date()) {
+  let statements: FundStatements | null;
+  try {
+    statements = (await readFundStatements(env, [row.uid])).get(row.uid) ?? { current: [], past: [] };
+  } catch {
+    statements = null;
+  }
+  const proposed = presentStatementFields(statements, reviews, today);
   return {
     provenance: rowProvenance(row, reviews),
     proposed,
-    history: await vehicleHistory(env, row, proposed.manager_name, reviews),
+    history: await vehicleHistory(env, row, proposed.manager_name as ProposedValue, reviews),
   };
 }
 

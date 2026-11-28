@@ -20,7 +20,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import research from '../src/routes/research.ts';
 import projects from '../src/routes/research_projects.ts';
 import comparisons, { ATTRIBUTES, fundCells } from '../src/routes/research_project_comparisons.ts';
-import { PROPOSED_FIELDS, PROPOSED_REASONS, provenanceOf } from '../src/services/researchFundProfile.ts';
+import { PROPOSED_FIELDS, PROPOSED_REASONS, STATEMENT_FIELDS, provenanceOf } from '../src/services/researchFundProfile.ts';
 
 const sql = (name: string) => readFileSync(new URL(`../sql/${name}`, import.meta.url), 'utf8');
 const M7167 = 'migrations/202611180053_7167_research_fund_vehicle_facts.sql';
@@ -53,6 +53,9 @@ function fixture() {
   // D7177: a comparison save records its request id.
   db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));
   db.exec(sql(M7167));
+  // D7748: the fields come from the statement store (D7743) and its uid moves (D7166).
+  db.exec(sql('migrations/202611180052_7166_research_fund_directory_vehicles.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_directory_uid_moves \(.*?\);/)![0]);
+  db.exec(sql('migrations/202611191932_7743_research_fund_observations.sql'));
   db.exec(`INSERT INTO users (id,email,name,role) VALUES (${OWNER},'owner@example.test','Owner','founder')`);
   db.exec(`INSERT INTO research_fund_sources (source_name,title,publisher,published_url,terms_status,evidence,verdict,verdict_reason,reviewed_on) VALUES
     ('${EUR}','Euro Tech VC Funds','@Example_VC','https://list.example/eu','not found','e','cite only','r','2026-10-07'),
@@ -134,7 +137,8 @@ test('the fund read: one provenance object with three dates kept apart', async (
 test('the proposed fields: recorded with their own source and date, else Not recorded with the reason', async () => {
   const f = fixture();
   const opp = (await call(f, 'GET', '/fund-directory/north-opp')).body.item.proposed;
-  assert.deepEqual(Object.keys(opp), [...PROPOSED_FIELDS]);
+  // D7748: the eight statement fields follow main's four.
+  assert.deepEqual(Object.keys(opp), [...PROPOSED_FIELDS, ...STATEMENT_FIELDS]);
   assert.deepEqual([opp.manager_name.status, opp.manager_name.value, opp.manager_name.provenance.reported_on], ['recorded', 'North Capital', '2023-09-25']);
   assert.deepEqual(opp.initial_cheque.value, { min_cents: 100000000, max_cents: 500000000, currency: 'EUR' });
   assert.deepEqual(opp.investment_geography, { status: 'not_recorded', reason: PROPOSED_REASONS.investment_geography });
