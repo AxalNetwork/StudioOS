@@ -64,7 +64,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/roundMath.ts": 1,
     "cloudflare-worker/src/services/secondaryProceeds.ts": 1,
     "cloudflare-worker/src/services/ventureScoring/collectors.ts": 2,
-    "cloudflare-worker/src/integrations/providers/stripe.ts": 1,
   } },
   { kind: 'eur', reason: "Research directory sizes are recorded in euros only (the EUR_SOURCE rule); the read refuses any other size currency.", files: {
     "frontend/src/pages/research/GeographyProfile.jsx": 1,

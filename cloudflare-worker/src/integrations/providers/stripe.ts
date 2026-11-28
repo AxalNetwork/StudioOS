@@ -9,10 +9,14 @@
  *   - `financial_models.assumptions_json` (current MRR/ARR/users/churn) so
  *     the cap-table simulator + scoring engine see live numbers.
  *
- * Anti-cheat: when a self-reported (`source!='stripe'`) snapshot in the last
- * 30 days disagrees with the latest Stripe snapshot by >20% (MRR), we insert
- * a row into `metric_anomalies`; scoring + portfolio surfaces read this
- * table to flag the project.
+ * No MRR mismatch flag is recorded (#9049). The sync used to compare the
+ * latest self-reported MRR with Stripe's and insert a row into
+ * `metric_anomalies` on a >20% difference, and this header said scoring and
+ * portfolio surfaces read that table. Nothing ever read it, and it never
+ * existed: no migration declares it and its runtime CREATE used a DEFAULT
+ * SQLite refuses, so every flagged sync's insert failed into a swallowed
+ * catch. The comparison and the bootstrap were deleted; a flag needs a
+ * declared store and a reader first.
  *
  * WEBHOOK DELIVERY IS THE PER-CONNECTION RECEIVER, AND ONLY THAT (D232).
  * `POST /api/integrations/webhook/stripe/:uid` (routes/integrations.ts) takes
@@ -345,26 +349,9 @@ function safeJson<T>(s: string | null, def: T): T {
   try { return JSON.parse(s) as T; } catch { return def; }
 }
 
-async function ensureMetricAnomalies(env: Env): Promise<void> {
-  try {
-    await env.DB.exec(
-      'CREATE TABLE IF NOT EXISTS metric_anomalies (' +
-      'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
-      'project_id INTEGER NOT NULL, ' +
-      'metric TEXT NOT NULL, ' +
-      'self_value REAL, stripe_value REAL, delta_pct REAL, ' +
-      'source TEXT NOT NULL DEFAULT "stripe", ' +
-      'severity TEXT NOT NULL DEFAULT "warn", ' +
-      'created_at TEXT NOT NULL DEFAULT (datetime("now")))',
-    );
-    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_metric_anomalies_project ON metric_anomalies(project_id, datetime(created_at) DESC)');
-  } catch (e) { console.warn('[stripe] ensureMetricAnomalies:', (e as Error).message); }
-}
-
 /**
  * Write a stripe-sourced project_metrics row + upsert the relevant
- * fields onto financial_models.assumptions_json. Also writes the anomaly
- * flag when self-reported MRR diverges by >20%.
+ * fields onto financial_models.assumptions_json.
  */
 async function projectMetricsToProject(
   env: Env, projectId: number, m: StripeMetrics,
@@ -466,31 +453,6 @@ async function projectMetricsToProject(
     }
   } catch (e) {
     console.warn('[stripe] financial_models upsert failed:', (e as Error).message);
-  }
-
-  // Anti-cheat — compare against most recent self-reported MRR snapshot in
-  // the last 30 days; flag >20% delta.
-  await ensureMetricAnomalies(env);
-  try {
-    const cutoff = new Date(Date.now() - 30 * 86400 * 1000).toISOString().slice(0, 10);
-    const self = await env.DB.prepare(
-      `SELECT mrr FROM project_metrics
-        WHERE project_id = ? AND (source IS NULL OR source != 'stripe')
-          AND snapshot_date >= ? AND mrr IS NOT NULL
-        ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
-    ).bind(projectId, cutoff).first<{ mrr: number | null }>();
-    const selfMrr = Number(self?.mrr || 0);
-    if (selfMrr > 0) {
-      const delta = Math.abs(selfMrr - m.mrr) / selfMrr;
-      if (delta > 0.2) {
-        await env.DB.prepare(
-          'INSERT INTO metric_anomalies (project_id, metric, self_value, stripe_value, delta_pct, severity) ' +
-          'VALUES (?, "mrr", ?, ?, ?, ?)',
-        ).bind(projectId, selfMrr, m.mrr, Math.round(delta * 10000) / 100, delta > 0.5 ? 'high' : 'warn').run();
-      }
-    }
-  } catch (e) {
-    console.warn('[stripe] anomaly check failed:', (e as Error).message);
   }
 }
 
