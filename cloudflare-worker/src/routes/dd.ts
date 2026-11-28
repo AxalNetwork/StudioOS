@@ -1,6 +1,6 @@
 import { liveFiles } from '../services/dataRoomTrash';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
-import { investorHasProjectDeal } from '../services/dealAccess';
+import { hiddenDealIds, hiddenJson, dealHiddenFrom } from '../services/dealPreparation';
 /**
  * Task #3 — Due Diligence routes mounted at /api/dd.
  *
@@ -370,7 +370,7 @@ dd.post('/cases', async (c) => {
       if (subjectType !== 'project') {
         return c.json({ error: 'You can only open diligence on a startup you are in a deal with' }, 403);
       }
-      if (!(await investorHasProjectDeal(c.env, user.id, subjectId))) {
+      if (!(await investorOnVisibleProjectDeal(c.env, user.id, subjectId))) {
         return c.json({ error: 'An invitation or commitment is required to open diligence on this startup.' }, 403);
       }
     }
@@ -1386,6 +1386,8 @@ dd.get('/requests/mine', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   try {
+    // D5454: the asking team's name is never read off a deal the preparation guard hides.
+    const hidden = hiddenJson(await hiddenDealIds(c.env, 'transactional'));
     const rows: any[] = await sql`
       SELECT r.id, r.title, r.details, r.state, r.due_date, r.responded_at, r.response_note, r.response_url, r.created_at,
              c.subject_type, c.subject_label,
@@ -1399,17 +1401,20 @@ dd.get('/requests/mine', async (c) => {
                   JOIN commitments k ON k.deal_id = d.id AND k.investor_user_id = requester.id
                   LEFT JOIN company_profiles cp ON cp.id = k.company_id
                  WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
                 UNION ALL
                 SELECT NULLIF(TRIM(requester.name), '') AS team_name
                   FROM deals d
                   JOIN deal_invitations i ON i.deal_id = d.id AND i.investor_user_id = requester.id
                  WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
                    AND NOT EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = requester.id)
                 UNION ALL
                 SELECT COALESCE(NULLIF(TRIM(partner.name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
                   FROM deals d
                   LEFT JOIN partners partner ON partner.id = d.partner_id AND LOWER(partner.email) = LOWER(requester.email)
                  WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
                    AND (d.lead_partner_id = requester.id OR partner.id IS NOT NULL)
              )) AS asking_team_name
         FROM dd_requests r
@@ -2060,6 +2065,25 @@ async function icRecordFor(env: Env, user: AppUser, caseId: number): Promise<{ u
   try { return await icRecordForCase(env, user as any, caseId); } catch { return null; }
 }
 
+/**
+ * D5454 (#5454, R4): diligence reads deals only through a relationship (staff by licence, an investor invited or
+ * committed, the venture's founder), so every deal read here is in `transactional` mode: a deal whose preparation is
+ * never released or unknown is a deal that does not exist, for an admin too, and a withdrawn or archived release
+ * stays for the people already on it. A guard failure throws, so the request fails rather than read unfiltered.
+ *
+ * `investorHasProjectDeal`'s relationship (D1149), less those deals: one statement, not one per deal.
+ */
+async function investorOnVisibleProjectDeal(env: Env, userId: number, projectId: number): Promise<boolean> {
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
+  return !!(await env.DB.prepare(
+    `SELECT 1 AS on_deal FROM deals d
+      WHERE d.project_id = ? AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+        AND (EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+             OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))
+      LIMIT 1`,
+  ).bind(projectId, hidden, userId, userId).first());
+}
+
 /** A case's deal context (D1246). */
 interface CaseContext {
   lead_user_id: number; target_ic_date: string | null; round_label: string | null;
@@ -2112,7 +2136,8 @@ async function caseContextFrom(env: Env, body: any, base: CaseContext): Promise<
     else {
       const id = Number(body.deal_id);
       const deal = Number.isInteger(id) ? await env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
-      if (!deal) return { error: 'That deal could not be found.', status: 404 };
+      // D5454: a deal the preparation guard hides is one that does not exist (see `investorOnVisibleProjectDeal`).
+      if (!deal || await dealHiddenFrom(env, id, 'transactional')) return { error: 'That deal could not be found.', status: 404 };
       next.deal_id = id;
     }
     changed.push('deal');
@@ -2475,6 +2500,7 @@ const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
  * deals Open a case may link — every deal for an Admin or a partner, an
  * investor's only those they are invited to or committed on. The ids go in
  * as one bound JSON array, so the SQL text never changes with the request.
+ * D5454: less the deals the preparation guard hides (`transactional`).
  */
 async function withDeals(env: Env, user: AppUser, projects: any[]) {
   const ids = projects.map((p) => Number(p.id));
@@ -2482,10 +2508,11 @@ async function withDeals(env: Env, user: AppUser, projects: any[]) {
     ? ((await env.DB.prepare(
       `SELECT d.id, d.project_id, d.status, d.instrument, d.created_at FROM deals d
         WHERE d.project_id IN (SELECT value FROM json_each(?))
+          AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
           AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
                OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))
         ORDER BY d.created_at DESC, d.id DESC`,
-    ).bind(JSON.stringify(ids), user.role === 'admin' || holdsLicence(user, 'partner') ? 1 : 0, user.id, user.id).all<any>()).results || [])
+    ).bind(JSON.stringify(ids), hiddenJson(await hiddenDealIds(env, 'transactional')), user.role === 'admin' || holdsLicence(user, 'partner') ? 1 : 0, user.id, user.id).all<any>()).results || [])
     : [];
   return projects.map((p) => ({
     id: p.id, name: p.name, type: 'project', stage: p.stage ?? null,
@@ -2507,11 +2534,12 @@ dd.get('/subjects', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT p.id, p.name, p.stage FROM projects p
         WHERE p.deleted_at IS NULL AND p.name LIKE ? ESCAPE '\\'
-          AND EXISTS (SELECT 1 FROM deals d WHERE d.project_id = p.id AND (
+          AND EXISTS (SELECT 1 FROM deals d WHERE d.project_id = p.id
+                AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) AND (
                 EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
                 OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)))
         ORDER BY p.name COLLATE NOCASE LIMIT 20`,
-    ).bind(likeOf(q), user.id, user.id).all<any>();
+    ).bind(likeOf(q), hiddenJson(await hiddenDealIds(c.env, 'transactional')), user.id, user.id).all<any>();
     return c.json({ items: await withDeals(c.env, user, rows.results || []) });
   }
   if (type === 'project') {

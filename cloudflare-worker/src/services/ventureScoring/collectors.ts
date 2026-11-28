@@ -24,6 +24,7 @@ import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { GRADES, VENTURE_MODEL_V1, type GradeLabel, type ScopeKey, type VentureModel } from './model';
 import { INDEX_SOURCES, recordedSources, type IndexSourceKey } from './countryIndex';
 import { unsourced, type InputFacts } from './engine';
+import { hiddenDealIds, hiddenJson } from '../dealPreparation';
 
 export const STATEMENTS = Object.freeze({
   venture: 'SELECT lifecycle_stage, status FROM projects WHERE id = ?',
@@ -89,8 +90,9 @@ export const STATEMENTS = Object.freeze({
   financial: {
     venture: 'SELECT runway_months, use_of_funds, funding_needed, updated_at FROM projects WHERE id = ?',
     raise: `SELECT COUNT(*) AS deals, COALESCE(SUM(target_raise), 0) AS target, COALESCE(SUM(capital_committed), 0) AS committed, MAX(updated_at) AS at,
-        (SELECT COUNT(*) FROM commitments c JOIN deals d2 ON d2.id = c.deal_id WHERE d2.project_id = ?) AS lines
-      FROM deals WHERE project_id = ?`,
+        (SELECT COUNT(*) FROM commitments c JOIN deals d2 ON d2.id = c.deal_id
+          WHERE d2.project_id = ? AND d2.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))) AS lines
+      FROM deals WHERE project_id = ? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`,
     narrative: `SELECT figure, stated_value, metric_value, checked_at FROM narrative_checks WHERE project_id = ? ORDER BY checked_at DESC, id DESC`,
   },
   risk: {
@@ -373,10 +375,23 @@ async function traction(env: Env, projectId: number): Promise<InputFacts[]> {
   return out;
 }
 
+/**
+ * D5454 (#5454, R4; `D5454-p4.md`): raise progress sums the venture's deals as a discovery reader does. A stored
+ * scorecard reaches every investor on any of the venture's deals, not only the people on each deal, so a deal whose
+ * preparation is never released or unknown and a withdrawn or archived release are left out
+ * (`hiddenDealIds('discovery')`). A guard failure makes raise progress alone unreadable, as Mercury's does for
+ * runway: the scope is drawn, never stored, and never summed unfiltered.
+ */
+async function raiseFacts(env: Env, projectId: number) {
+  const hidden = await hiddenDealIds(env, 'discovery').then(hiddenJson, () => null);
+  if (hidden == null) return 'unreadable' as const;
+  return first<{ deals: number; target: number; committed: number; at: string | null; lines: number }>(env, STATEMENTS.financial.raise, projectId, hidden, projectId, hidden);
+}
+
 async function financial(env: Env, projectId: number): Promise<InputFacts[]> {
   const [v, raise, checks, rows, bank] = await Promise.all([
     first<{ runway_months: number | null; use_of_funds: string | null; funding_needed: number | null; updated_at: string | null }>(env, STATEMENTS.financial.venture, projectId),
-    first<{ deals: number; target: number; committed: number; at: string | null; lines: number }>(env, STATEMENTS.financial.raise, projectId, projectId),
+    raiseFacts(env, projectId),
     all<{ figure: string; stated_value: number | null; metric_value: number | null; checked_at: string | null }>(env, STATEMENTS.financial.narrative, projectId),
     all<Metric>(env, STATEMENTS.metrics, projectId),
     // Mercury's read failing makes runway alone unreadable: the scope is drawn, never stored.
@@ -396,7 +411,9 @@ async function financial(env: Env, projectId: number): Promise<InputFacts[]> {
     ? recorded('use_of_funds', (alloc ? 1 : 0) + (target ? 1 : 0), 2, GRADES.stated, day(v?.updated_at), 'projects', 1,
       [target ? 'raise target set' : 'no raise target', alloc ? 'allocation recorded' : 'no allocation'].join(', '))
     : missing('use_of_funds', 'projects', 'No raise target or allocation is recorded'));
-  out.push(num(raise?.target) > 0
+  out.push(raise === 'unreadable'
+    ? { ...missing('raise_progress', 'deals', 'The deals could not be read'), unreadable: true, words: 'Could not be read' }
+    : num(raise?.target) > 0
     ? recorded('raise_progress', num(raise?.committed), num(raise?.target), num(raise?.lines) > 0 ? GRADES.measured : GRADES.stated, day(raise?.at), 'deals', num(raise?.deals),
       `Committed against target across ${plural(num(raise?.deals), 'deal', 'deals')}`)
     : missing('raise_progress', 'deals', 'No deal carries a raise target'));

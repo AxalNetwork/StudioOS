@@ -76,6 +76,14 @@ or advisor 403, an account with no firm 400, no credentials or a disabled accoun
 file changed; the firm's own partner then passes every gate. An unknown consent-link token answers 404 and writes
 nothing. Its first test fails if a ledger route under `/api/partner` is missing from it.
 
+`authz_research_d4570.test.ts` (#4570, D4570 part 10) asks the 29 `/api/research` ledger routes through the research
+routers, mounted in the Worker's order on the full schema. A member's own record (Library, Ask, benchmarks, collections,
+drafts, fund dossiers and reports, market readings, brief notes, attachments) answers every other account, an admin,
+the Super Admin and a share recipient included, with the 404 a missing record gets, naming nothing and changing
+nothing. The catalogue reads need a session, and Companies follows D7178's rule. The Sheets OAuth callback stores a
+token only for a Super Admin's own unspent, signed state. Its first test fails if a `/api/research` route is left
+`unreviewed`.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.

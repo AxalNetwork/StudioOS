@@ -25,8 +25,11 @@ const ME = 2, COMPANY = 41;
 async function world(provider: 'hubspot' | 'salesforce') {
   const db = new DatabaseSync(':memory:');
   db.exec(`
-    CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER, email TEXT, name TEXT, sf_contact_id TEXT);
-    INSERT INTO founders VALUES (9, ${ME}, 'ada@example.test', 'Ada King Lovelace', NULL);
+    CREATE TABLE founders (id INTEGER PRIMARY KEY, email TEXT, name TEXT, sf_contact_id TEXT);
+    INSERT INTO founders VALUES (9, 'ada@example.test', 'Ada King Lovelace', NULL);
+    -- D8964: a founder belongs to its user through users.founder_id; founders has no user_id.
+    CREATE TABLE users (id INTEGER PRIMARY KEY, founder_id INTEGER);
+    INSERT INTO users VALUES (${ME}, 9);
     CREATE TABLE projects (
       id INTEGER PRIMARY KEY, name TEXT, description TEXT, sector TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT,
       hubspot_company_id TEXT, hubspot_primary_contact_id TEXT, sf_account_id TEXT, sf_primary_contact_id TEXT

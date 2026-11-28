@@ -63,7 +63,7 @@ export function check(root = ROOT) {
     if (!existsSync(p)) { problems.push(`${f}: listed in the inventory but does not exist`); continue; }
     const src = readFileSync(p, 'utf8');
     if (!DEALS_SQL.test(src)) problems.push(`${f}: listed in the inventory but no longer names deals in SQL`);
-    if (cls === 'guarded' && !/from '\.{1,2}\/(services\/)?dealPreparation'/.test(src)) problems.push(`${f}: classed guarded but does not import dealPreparation`);
+    if (cls === 'guarded' && !/from '(?:\.{1,2}\/)+(services\/)?dealPreparation'/.test(src)) problems.push(`${f}: classed guarded but does not import dealPreparation`);
   }
   return problems;
 }

@@ -416,7 +416,8 @@ export default function StudioLens({ role, view: given = {} }) {
           onConfirm={async ({ reason, note }) => { await api.passDeal(open.row.id, { reason, note }); finished(`${open.row.name} is Not raising. The round is closed for every investor, and the founder is told.`); }} />
       )}
       {open?.key === 'terms' && <TermsDialog row={open.row} onClose={() => setOpen(null)} onDone={finished} />}
-      {draftOpen && <DraftDealModal onClose={() => setDraftOpen(false)} onCreated={() => { setDraftOpen(false); finished('The deal was drafted.'); }} />}
+      {draftOpen && <DraftDealModal onClose={() => setDraftOpen(false)} onCreated={() => { setDraftOpen(false); finished('The deal was drafted.'); }}
+        onSavedPrivately={() => { setDraftOpen(false); finished('Saved as a private draft. It is not live and is not on the board until the reviewed release ships.'); }} />}
     </div>
   );
 }
