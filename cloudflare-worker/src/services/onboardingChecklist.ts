@@ -67,12 +67,17 @@ export interface ChecklistItem {
 // targets (see the `guard([...])` role lists on each <Route>). The
 // reviewer flagged route-drift on the first pass; routes here were
 // normalised against App.jsx 2026-05-20.
+// D8776 (#8776, BLR05B): "Add 3 quarterly OKRs" opens Build's "Quarters, dependencies and scenarios" on its
+// By quarter view, and says it came from Home's checklist so that page names the row and Back goes Home. The
+// catalogue has no venture, so the page shows the reader's first and says the link named none.
+export const ROADMAP_OKRS_ROUTE = '/build/roadmap?view=quarters&from=home&step=okrs';
+
 export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
   newFounder: [
     { key: 'nf.persona',    label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
     { key: 'nf.project',    label: 'Add your project',                   route: '/build',                   autoDetect: true },
     { key: 'nf.discovery',  label: 'Log 3 customer-discovery interviews',route: '/validate/customer-research',         autoDetect: true },
-    { key: 'nf.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
+    { key: 'nf.okrs',       label: 'Add 3 quarterly OKRs',               route: ROADMAP_OKRS_ROUTE,               autoDetect: true },
     { key: 'nf.calendar',   label: 'Connect Google or Outlook Calendar', route: '/calendar',                   autoDetect: true },
     { key: 'nf.brand',      label: 'Upload or generate brand basics',    route: '/build/brand',                autoDetect: true },
     { key: 'nf.deck',       label: 'Draft pitch deck (5+ slides)',       route: '/raise/pitch',                 autoDetect: true },
@@ -98,7 +103,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // stays and the user ticks it via POST /checklist/:item/complete — a step
     // whose only possible answer is 'no' is worse than one you confirm yourself.
     { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/calendar?layer=compliance',  autoDetect: false },
-    { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
+    { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: ROADMAP_OKRS_ROUTE,               autoDetect: true },
     { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/build',                   autoDetect: true },
     { key: 'ef.nda',        label: 'Send first NDA to an investor',      route: '/trust',                      autoDetect: true },
   ],

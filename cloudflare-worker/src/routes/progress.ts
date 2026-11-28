@@ -3076,10 +3076,26 @@ export function inferStageFromSignals(s: LifecycleSignals): LifecycleStage {
 
 type ChecklistItem = { key: string; label: string; done: boolean; href: string; manual: boolean };
 
-function buildLifecycleChecklist(
+/**
+ * D8776 (#8776, BLR05B): a checklist row that opens Build's "Quarters, dependencies and scenarios"
+ * (`/build/roadmap`) names that page's view, keeps the venture, and says it came from Home's checklist
+ * (`from=home&step=<key>`), so the page can name the row and send Back to Home. The landing names only the
+ * keys it knows (`frontend/src/pages/cycles/roadmapShortcut.js` CHECKLIST_STEPS).
+ */
+export function roadmapChecklistHref(projectId: number | null, key: string): string {
+  const q = new URLSearchParams();
+  if (Number.isInteger(projectId) && (projectId as number) > 0) q.set('project_id', String(projectId));
+  q.set('view', 'quarters');
+  q.set('from', 'home');
+  q.set('step', key);
+  return `/build/roadmap?${q.toString()}`;
+}
+
+export function buildLifecycleChecklist(
   stage: LifecycleStage,
   s: LifecycleSignals,
   manual: Record<string, boolean>,
+  projectId: number | null = null,
 ): ChecklistItem[] {
   const m = (k: string): boolean => manual[k] === true;
   switch (stage) {
@@ -3097,15 +3113,15 @@ function buildLifecycleChecklist(
       ];
     case 'build':
       return [
-        { key: 'roadmap_set', label: 'Set a 90-day roadmap', done: m('roadmap_set'), href: '/build/roadmap', manual: true },
+        { key: 'roadmap_set', label: 'Set a 90-day roadmap', done: m('roadmap_set'), href: roadmapChecklistHref(projectId, 'roadmap_set'), manual: true },
         { key: 'key_role_filled', label: 'Fill a key team role', done: m('key_role_filled'), href: '/build/team', manual: true },
-        { key: 'mvp_shipped', label: 'Ship your MVP', done: m('mvp_shipped'), href: '/build/roadmap', manual: true },
+        { key: 'mvp_shipped', label: 'Ship your MVP', done: m('mvp_shipped'), href: roadmapChecklistHref(projectId, 'mvp_shipped'), manual: true },
       ];
     case 'launch':
       return [
         { key: 'launch_page', label: 'Publish your public launch page', done: s.landing_published, href: '/build/brand', manual: false },
         { key: 'first_campaign', label: 'Run your first campaign', done: m('first_campaign'), href: '/build/brand', manual: true },
-        { key: 'launch_checklist', label: 'Complete your launch checklist', done: m('launch_checklist'), href: '/build/roadmap', manual: true },
+        { key: 'launch_checklist', label: 'Complete your launch checklist', done: m('launch_checklist'), href: roadmapChecklistHref(projectId, 'launch_checklist'), manual: true },
       ];
     case 'grow':
       return [
@@ -3159,7 +3175,7 @@ export async function buildLifecycleResponse(env: Env, projectId: number) {
     stored: !!storedStage,
     stages: LIFECYCLE_STAGES.map((id) => ({ id, ...LIFECYCLE_STAGE_META[id] })),
     signals,
-    checklist: buildLifecycleChecklist(stage, signals, manual),
+    checklist: buildLifecycleChecklist(stage, signals, manual, projectId),
     suggestions: buildLifecycleSuggestions(stage, signals),
   };
 }

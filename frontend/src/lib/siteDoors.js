@@ -163,7 +163,8 @@ export const DOORS = {
       { t: 'Hypotheses and evidence', route: '/validate/experiments' },
       { t: 'Verdict', route: '/validate/verdict' },
       { t: 'This week and the board', route: '/build/this-week' },
-      { t: 'Roadmap', route: '/build/roadmap' },
+      // D8776 (#8776): named after the page it opens (Product roadmap is the Now / Next / Later board).
+      { t: 'Quarters, dependencies and scenarios', route: '/build/roadmap' },
       { t: 'Cadence and KPIs', route: '/build/cadence' },
       { t: 'Pitch deck builder', route: '/raise/pitch' },
       { t: 'Cap table', route: '/raise/cap-table' },
