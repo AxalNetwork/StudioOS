@@ -18,7 +18,7 @@
       "gaps": []
     },
     "cloudflare-worker": {
-      "checks": ["build-worker-contracts.yml#contracts", "channel-worker-contracts.yml#contracts", "ci.yml#drift", "ci.yml#worker", "github-alerts.yml#future-clock-part", "mcp-worker-contracts.yml#contracts", "meeting-worker-contracts.yml#contracts", "post-deploy-smoke.yml#smoke", "release-rehearsal.yml#rehearse", "round-call-worker-contracts.yml#contracts", "suite:test:types", "suite:test:worker"],
+      "checks": ["billing-webhook-contracts.yml#contracts", "build-worker-contracts.yml#contracts", "channel-worker-contracts.yml#contracts", "ci.yml#drift", "ci.yml#worker", "github-alerts.yml#future-clock-part", "mcp-worker-contracts.yml#contracts", "meeting-worker-contracts.yml#contracts", "post-deploy-smoke.yml#smoke", "release-rehearsal.yml#rehearse", "round-call-worker-contracts.yml#contracts", "suite:test:types", "suite:test:worker"],
       "gaps": []
     },
     "cloudflare-worker-tail": {
@@ -90,6 +90,7 @@
     "agent-provenance.yml#provenance": "unit",
     "agent-stage-a.yml#stage-a": "staging",
     "backup-d1.yml#backup": "production",
+    "billing-webhook-contracts.yml#contracts": "unit",
     "build-worker-contracts.yml#contracts": "unit",
     "channel-worker-contracts.yml#contracts": "unit",
     "ci.yml#dev-backend": "unit",
@@ -147,10 +148,10 @@
       "tests": ["cloudflare-worker/test/aiRouter*.test.*", "cloudflare-worker/test/ai_usage*.test.ts", "frontend/test/airail*.test.mjs"]
     },
     "billing": {
-      "checks": ["guard:check-money-cents", "guard:stripe-idempotency", "post-deploy-smoke.yml#smoke", "suite:test:retention", "suite:test:worker"],
+      "checks": ["billing-webhook-contracts.yml#contracts", "guard:check-money-cents", "guard:stripe-idempotency", "post-deploy-smoke.yml#smoke", "suite:test:retention", "suite:test:worker"],
       "gaps": ["#8512"],
       "name": "Billing (Stripe)",
-      "tests": ["cloudflare-worker/test/*stripe*.test.ts", "cloudflare-worker/test/billing_*.test.ts", "scripts/lib/stripeReconciliation.test.mjs"]
+      "tests": ["cloudflare-worker/test/*stripe*.test.ts", "cloudflare-worker/test/billing_*.test.mjs", "cloudflare-worker/test/billing_*.test.ts", "scripts/lib/stripeReconciliation.test.mjs"]
     },
     "disaster-recovery": {
       "checks": ["backup-d1.yml#backup", "dr-drill.yml#drill", "dr-drill.yml#independent-file-drill", "file-recovery.yml#snapshot", "file-recovery.yml#synthetic-proof", "suite:test:frontend"],

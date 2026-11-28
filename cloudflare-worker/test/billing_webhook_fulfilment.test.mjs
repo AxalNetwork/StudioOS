@@ -21,25 +21,31 @@
  *   (4) customer.subscription.deleted scoped by subscription_id leaves a
  *       CO-EXISTING subscription on the SAME Stripe customer intact.
  *
- * Gating: skipped unless RUN_BILLING_WEBHOOK_TEST is set. A wrangler
- * cold-start plus four CLI seed spawns add ~20-40s and require the
- * wrangler binary + a writable temp dir, so this is opt-in (the same
- * pattern as api_drift_runtime.test.mjs's RUN_RUNTIME_DRIFT gate).
+ * Gating: skipped unless RUN_BILLING_WEBHOOK_TEST is set. Two wrangler
+ * cold-starts plus a ~40k-statement seed take about two minutes (plus the
+ * schema build when node_modules/.cache has none) and need the wrangler
+ * binary and a writable temp dir, so the suite does not run it. #9165:
+ * `.github/workflows/billing-webhook-contracts.yml` sets the variable and runs
+ * this file, and `billing_webhook_ci_9165.test.mjs` fails if no workflow does,
+ * so the test cannot go dark again.
  *
  * Run directly:
- *   RUN_BILLING_WEBHOOK_TEST=1 node --test cloudflare-worker/test/billing_webhook_fulfilment.test.mjs
+ *   RUN_BILLING_WEBHOOK_TEST=1 node --experimental-strip-types --no-warnings \
+ *     --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/billing_webhook_fulfilment.test.mjs
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { schemaPath } from './_schema_once.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKER_DIR = resolve(__dirname, '..'); // cloudflare-worker/
-const SQL_DIR = resolve(WORKER_DIR, 'sql');
 const ENTRY = resolve(WORKER_DIR, 'src', 'index.ts');
 const WRANGLER_BIN = resolve(WORKER_DIR, 'node_modules', '.bin', 'wrangler');
 const DB_NAME = 'studioos-test-db';
@@ -47,17 +53,49 @@ const DB_NAME = 'studioos-test-db';
 // (via the d1Databases option) resolve to the SAME local sqlite under persistTo.
 const DB_ID = '00000000-0000-4000-8000-0000000000c0';
 
-// schema_baseline.sql first (base tables incl. users + subscription_plans), then the
-// migrations that add the founder-tier / investor columns and the MI Pro side
-// table. schema_baseline.sql predates these columns so the ALTERs apply cleanly.
-const SEED_FILES = [
-  resolve(SQL_DIR, 'schema_baseline.sql'),
-  resolve(SQL_DIR, 'migrations', '011_subscription_tiers.sql'),
-  resolve(SQL_DIR, 'migrations', '027_investor_paywall.sql'),
-  resolve(SQL_DIR, 'migrations', '103_mi_pro_subscriptions.sql'),
-  resolve(SQL_DIR, 'migrations', '097_stripe_products.sql'),
-  resolve(SQL_DIR, 'migrations', '691_stripe_mode_stamps.sql'),
-];
+// #9165: the local D1 gets the schema production has: sql/schema_baseline.sql
+// plus every migration above BASELINE_CUTOFF (the set `scripts/migrate-d1.mjs
+// --bootstrap` and a later plain run apply), and nothing the baseline already
+// contains. The old seed re-ran 011, 027, 103, 097 and 691 on top of the
+// baseline, which already has their columns, so it died on the first ALTER
+// ("duplicate column name"; D1 says "too many columns") and nothing noticed
+// because nothing set RUN_BILLING_WEBHOOK_TEST. _schema_once.mjs builds that
+// schema once per checkout; seedSqlFromSchema() writes it out as one SQL file,
+// so one `wrangler d1 execute --file` seeds the local D1 instead of ~800.
+const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
+
+/**
+ * The cached schema build as one SQL file: every table in creation order, its
+ * rows as literals (sqlite's quote()), then indexes, views and triggers (after
+ * the rows, so the copy fires no trigger). Foreign keys are deferred because
+ * rows are copied table by table, not in reference order.
+ */
+function seedSqlFromSchema(dir) {
+  const db = new DatabaseSync(schemaPath(), { readOnly: true });
+  const out = ['PRAGMA defer_foreign_keys = true;'];
+  try {
+    const objects = db
+      .prepare("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid")
+      .all();
+    const tables = objects.filter((o) => o.type === 'table');
+    for (const t of tables) out.push(`${t.sql};`);
+    for (const t of tables) {
+      const cols = db.prepare('SELECT name FROM pragma_table_info(?)').all(t.name).map((c) => c.name);
+      const values = cols.map((c) => `quote(${q(c)})`).join(" || ',' || ");
+      for (const row of db.prepare(`SELECT ${values} AS v FROM ${q(t.name)}`).all()) {
+        out.push(`INSERT INTO ${q(t.name)} VALUES (${row.v});`);
+      }
+    }
+    for (const type of ['index', 'view', 'trigger']) {
+      for (const o of objects.filter((x) => x.type === type)) out.push(`${o.sql};`);
+    }
+  } finally {
+    db.close();
+  }
+  const file = join(dir, 'seed.sql');
+  writeFileSync(file, `${out.join('\n')}\n`);
+  return file;
+}
 
 /**
  * Config used ONLY by the wrangler CLI for the d1 seed + read commands — it
@@ -89,10 +127,13 @@ function runWrangler(args) {
       cwd: WORKER_DIR,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // A --file run prints one result object per statement (~40k for the
+      // seed); the default 1 MiB buffer would kill a seed that succeeded.
+      maxBuffer: 512 * 1024 * 1024,
     });
   } catch (e) {
     const out = `${e.stdout ?? ''}\n${e.stderr ?? ''}`.trim();
-    throw new Error(`wrangler ${args.join(' ')} failed:\n${out}`);
+    throw new Error(`wrangler ${args.join(' ')} failed:\n${out.slice(-4000)}`);
   }
 }
 
@@ -103,6 +144,35 @@ function seedFile(cfgPath, persistTo, file) {
     '--local', '--persist-to', persistTo,
     '--file', file,
   ]);
+}
+
+// The seed takes about a minute (~40k statements), so it runs once per file
+// and each test copies the seeded state into its own directory.
+let seededTemplate = null;
+after(() => { if (seededTemplate) rmSync(seededTemplate, { recursive: true, force: true }); });
+
+function seedState(persistTo) {
+  if (!seededTemplate) {
+    const dir = mkdtempSync(join(tmpdir(), 'billing-webhook-seed-'));
+    try {
+      seedFile(writeTestConfig(dir), join(dir, 'state'), seedSqlFromSchema(dir));
+    } catch (error) {
+      rmSync(dir, { recursive: true, force: true });
+      throw error;
+    }
+    seededTemplate = dir;
+  }
+  cpSync(join(seededTemplate, 'state'), persistTo, { recursive: true });
+}
+
+// unstable_dev still reads the root wrangler.toml, whose [assets] directory is
+// docs/, and docs/ is not committed (D529). The webhook needs no SPA, so the
+// boot points the assets binding at an empty directory of the test's own and
+// runs whether or not the frontend has been built.
+function emptyAssetsDir(dir) {
+  const assets = join(dir, 'assets');
+  mkdirSync(assets, { recursive: true });
+  return assets;
 }
 
 function parseD1Json(out) {
@@ -206,18 +276,16 @@ async function postWebhook(worker, event) {
 
 /* -------------------------------- the test ------------------------------ */
 
-test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_BILLING_WEBHOOK_TEST, timeout: 120000 }, async (t) => {
-  let unstable_dev;
-  try {
-    ({ unstable_dev } = await import('wrangler'));
-  } catch {
-    t.skip('wrangler unavailable in this environment');
-    return;
-  }
-  if (typeof unstable_dev !== 'function') {
-    t.skip('wrangler does not expose unstable_dev');
-    return;
-  }
+// #9165: once RUN_BILLING_WEBHOOK_TEST asks for this test, a missing wrangler
+// is a failure, not a skip, so the CI job cannot pass without running it.
+async function loadUnstableDev() {
+  const { unstable_dev } = await import('wrangler');
+  assert.equal(typeof unstable_dev, 'function', 'wrangler must expose unstable_dev');
+  return unstable_dev;
+}
+
+test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_BILLING_WEBHOOK_TEST, timeout: 600000 }, async (t) => {
+  const unstable_dev = await loadUnstableDev();
 
   const tmp = mkdtempSync(join(tmpdir(), 'billing-webhook-'));
   // Guarantee temp-dir cleanup on EVERY exit path (seed / boot / query / assert
@@ -226,8 +294,8 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
   const persistTo = join(tmp, 'state');
   const cfgPath = writeTestConfig(tmp);
 
-  // Seed the local D1 with the real prod schema + migrations.
-  for (const f of SEED_FILES) seedFile(cfgPath, persistTo, f);
+  // Seed the local D1 with the production schema (baseline + later migrations).
+  seedState(persistTo);
 
   // NOTE: bindings are wired via OPTIONS, not `config`. Passing a `config`
   // that lives in a temp dir makes wrangler resolve `main` / node_modules
@@ -236,6 +304,7 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
   // database_id with the CLI-seeded sqlite. vars sets ENVIRONMENT=test so the
   // webhook soft-accepts unsigned events and the prod secret guard stands down.
   const worker = await unstable_dev(ENTRY, {
+    assets: emptyAssetsDir(tmp),
     persistTo,
     local: true,
     ip: '127.0.0.1',
@@ -257,10 +326,21 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
       'webhook must soft-accept unsigned checkout in ENVIRONMENT=test (got non-200 → ENVIRONMENT/secret misconfig)',
     );
 
-    // (2) replayed checkout must NOT double-grant — send the identical event twice.
-    const replay = checkoutEvent({ userId: 102, subscription: 'sub_replay', customer: 'cus_2' });
+    // (2) replayed checkout must NOT double-grant. Stripe redelivers the SAME
+    // event id, which the receipt answers as a duplicate without running the
+    // handler again; a second delivery under a NEW id runs the handler, whose
+    // upsert keyed on user_id must update the one row rather than fail or add one.
+    const replayCheckout = () => checkoutEvent({ userId: 102, subscription: 'sub_replay', customer: 'cus_2' });
+    const replay = { ...replayCheckout(), id: 'evt_checkout_replay_102' };
     assert.equal((await postWebhook(worker, replay)).status, 200);
-    assert.equal((await postWebhook(worker, replay)).status, 200);
+    const redelivered = await postWebhook(worker, replay);
+    assert.equal(redelivered.status, 200);
+    assert.equal((await redelivered.json()).duplicate, true, 'a redelivered event id must be answered as a duplicate');
+    assert.equal(
+      (await postWebhook(worker, replayCheckout())).status,
+      200,
+      'a second checkout event for the same user must update the grant, not fail on it',
+    );
 
     // (3) out-of-order: subscription.created (carries period_end) BEFORE checkout.
     assert.equal(
@@ -356,25 +436,15 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
  *   (5) a founder-tier customer.subscription.updated re-aligns the renewal date
  *       on the tier columns (the created/updated branch, scoped to isTier).
  */
-test('Stripe webhook fulfilment invariants (founder tier + investor)', { skip: !process.env.RUN_BILLING_WEBHOOK_TEST, timeout: 120000 }, async (t) => {
-  let unstable_dev;
-  try {
-    ({ unstable_dev } = await import('wrangler'));
-  } catch {
-    t.skip('wrangler unavailable in this environment');
-    return;
-  }
-  if (typeof unstable_dev !== 'function') {
-    t.skip('wrangler does not expose unstable_dev');
-    return;
-  }
+test('Stripe webhook fulfilment invariants (founder tier + investor)', { skip: !process.env.RUN_BILLING_WEBHOOK_TEST, timeout: 600000 }, async (t) => {
+  const unstable_dev = await loadUnstableDev();
 
   const tmp = mkdtempSync(join(tmpdir(), 'billing-webhook-tier-'));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
   const persistTo = join(tmp, 'state');
   const cfgPath = writeTestConfig(tmp);
 
-  for (const f of SEED_FILES) seedFile(cfgPath, persistTo, f);
+  seedState(persistTo);
 
   // The tier/investor branches UPDATE users WHERE id = ?, so the rows must
   // exist first. (email + name are NOT NULL; everything else defaults.)
@@ -390,6 +460,7 @@ test('Stripe webhook fulfilment invariants (founder tier + investor)', { skip: !
   );
 
   const worker = await unstable_dev(ENTRY, {
+    assets: emptyAssetsDir(tmp),
     persistTo,
     local: true,
     ip: '127.0.0.1',
