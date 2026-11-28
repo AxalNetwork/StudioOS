@@ -13,6 +13,7 @@ import type { Env } from '../types';
 import { verifySignedToken, shareLinkLive, viewerHashOf, linkSentCards } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { normalizeEmail } from '../util/accountEmail';
 import { verifyTurnstile } from '../services/turnstile';
 import { ipPrefix } from '../services/securityEvents';
 import { applyMergeFields, mergeTokensIn } from '../services/mergeFields';
@@ -290,7 +291,7 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   await ensureDeckShareConversionSchema(c.env);
 
   const body = await c.req.json().catch(() => null) as any;
-  const email = String(body?.email || '').trim().toLowerCase();
+  const email = normalizeEmail(body?.email);
   const name = String(body?.name || '').trim();
   const role = body?.role && ['investor', 'partner', 'founder'].includes(body.role)
     ? body.role : 'investor';
@@ -329,7 +330,7 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   // them to /login (or a magic-link flow) without minting a session.
   // This closes the account-takeover vector flagged in code review.
   const existing = await c.env.DB.prepare(
-    'SELECT id FROM users WHERE email = ?'
+    'SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1'
   ).bind(email).first<any>();
   if (existing?.id) {
     return c.json({
@@ -350,7 +351,7 @@ deckShareActions.post('/share/:token/signup', async (c) => {
     userId = Number((ins as any)?.meta?.last_row_id || 0);
     if (!userId) {
       // Lost an INSERT race against a concurrent signup with same email.
-      const race = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<any>();
+      const race = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1').bind(email).first<any>();
       if (race?.id) {
         return c.json({
           ok: false, requires_login: true, email,

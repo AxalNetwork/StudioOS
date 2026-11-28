@@ -34,6 +34,7 @@ import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { hashEmail } from '../util/hashEmail';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { rpID, rpName, expectedOrigins } from '../util/webauthn';
+import { normalizeEmail } from '../util/accountEmail';
 
 const passkey = new Hono<{ Bindings: Env }>();
 
@@ -191,14 +192,14 @@ passkey.post('/auth-options', async (c) => {
   try {
     await ensureAuthBlockersSchema(c.env);
     const body = await readJson(c);
-    const email = String(body?.email || '').toLowerCase().trim();
+    const email = normalizeEmail(body?.email);
 
     let userId: number | null = null;
     let allowCredentials: { id: string; transports?: any }[] | undefined;
     if (email && EMAIL_RE.test(email)) {
       const sql = getSQL(c.env);
       try {
-        const rows = await sql`SELECT id FROM users WHERE email = ${email}`;
+        const rows = await sql`SELECT id FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
         if (rows.length) {
           userId = Number(rows[0].id);
           const keys = await c.env.DB.prepare(

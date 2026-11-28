@@ -129,6 +129,7 @@ import { hasActiveVentureNda } from '../services/dealAccess';
 import { roomCan, roomCapabilities } from '../services/dataRoomCapabilities';
 import { liveFiles, purgeFile, readTrash, restoreFile, trashCount, trashFile, PurgeIncomplete, TrashUnavailable } from '../services/dataRoomTrash';
 import { putRecord } from '../services/recordStore';
+import { normalizeEmail } from '../util/accountEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -1641,8 +1642,8 @@ r.post('/:projectUid/grants', async (c) => {
 
     // Resolves to an EXISTING account. No invitation is sent and no row is
     // written for an unknown address. Both outcomes return the same response.
-    const investor = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ?')
-      .bind(email).first<{ id: number }>();
+    const investor = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1')
+      .bind(normalizeEmail(email)).first<{ id: number }>();
     if (!investor) return c.json({ ok: true }, 201);
     if (investor.id === user.id) return c.json({ ok: true }, 201);
 

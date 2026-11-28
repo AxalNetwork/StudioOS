@@ -2,6 +2,8 @@
 
 `network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
 
+`account_email_9043.test.ts` (#9043, D9043) runs register, magic link, admin create, partner deal activation, Google and Apple first sign-in and the email change over the full schema with synthetic mixed-case addresses: one mailbox is one `users` row and one id, stored lowercased, and a case pair seeded before D9043 is never merged or added to. Its guard fails on an `INSERT INTO users` or `UPDATE users SET email` that skips `normalizeEmail`, and on an exact-match `users.email` lookup.
+
 `mutation_atomic_writes.test.mjs` pins `_atomic_write.mjs`, the one way an in-suite mutation check rewrites a source file: a temporary file beside it renamed over it, so a test file running in parallel never imports a truncated copy. The guard fails if any suite under `cloudflare-worker/test`, `frontend/test` or `scripts` writes a mutated or restored source with `writeFileSync(<file>, original…)`. Mutations run on a private copy (`_isolated_mutation_source.mjs`, D6811), not on the checkout.
 
 `research_global_funds_7326.test.ts` replays the worldwide manager import over

@@ -50,6 +50,7 @@ import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
 import { countsOnly, insightsParams, type InsightsLoader } from '../services/insightsScope';
 import { programsParams, type ProgramsLoader } from '../services/programCatalogue';
 import { subscriptionRevenue } from '../services/subscriptionRevenue';
+import { normalizeEmail } from '../util/accountEmail';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -2403,9 +2404,9 @@ export async function emergencySignOut(
     row = await env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first<Row>();
     if (!row) throw new Error(`rpc: ${branch} holds no account with id ${id}`);
   } else {
-    const email = String(target.email ?? '').trim().toLowerCase().slice(0, 320);
+    const email = normalizeEmail(target.email).slice(0, 320);
     if (!email || !email.includes('@')) throw new Error('rpc: a sign-out from HQ names an account by its id here or its email');
-    row = await env.DB.prepare('SELECT id, email FROM users WHERE lower(email) = ?').bind(email).first<Row>();
+    row = await env.DB.prepare('SELECT id, email FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1').bind(email).first<Row>();
   }
 
   if (!row) {
@@ -2567,7 +2568,7 @@ export async function inviteAccount(
 
   // Normalised HERE as well as at the caller, because this is the side that
   // writes the row the unique index and the accept-time match both read.
-  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
+  const email = normalizeEmail(req?.email).slice(0, 320);
   if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
     throw new Error('rpc: an invitation needs a valid email address');
   }
@@ -2595,8 +2596,8 @@ export async function inviteAccount(
       }
       // The active-account refusal still holds before a new token is issued.
       const activeNow = await env.DB.prepare(
-        'SELECT id FROM users WHERE email = ? AND is_active = 1',
-      ).bind(email).first<{ id: number }>();
+        'SELECT id FROM users WHERE LOWER(email) = ? AND is_active = 1 ORDER BY id LIMIT 1',
+      ).bind(normalizeEmail(email)).first<{ id: number }>();
       if (activeNow) throw new Error(`rpc: ${email} already has an active account on ${branch}`);
       const rawToken = newInvitationToken();
       await env.DB.prepare('UPDATE branch_invitations SET token_hash = ?, updated_at = ? WHERE uid = ?')
@@ -2612,8 +2613,8 @@ export async function inviteAccount(
   }
 
   const existing = await env.DB.prepare(
-    'SELECT id FROM users WHERE email = ? AND is_active = 1',
-  ).bind(email).first<{ id: number }>();
+    'SELECT id FROM users WHERE LOWER(email) = ? AND is_active = 1 ORDER BY id LIMIT 1',
+  ).bind(normalizeEmail(email)).first<{ id: number }>();
   if (existing) {
     throw new Error(`rpc: ${email} already has an active account on ${branch}`);
   }

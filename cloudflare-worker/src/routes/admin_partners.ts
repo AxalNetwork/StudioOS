@@ -39,6 +39,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { likeNeedleLower } from '../util/likeSearch';
 import { renewPartnerInvitationSigningLink } from './esign';
 import { clientIp } from '../util/clientIp';
+import { normalizeEmail } from '../util/accountEmail';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -325,7 +326,7 @@ admin_partners.get('/invitations/lookup', async (c) => {
         WHERE LOWER(recipient_email) = ? AND status NOT IN ('signed','revoked','expired')
         ORDER BY julianday(created_at) DESC, id DESC LIMIT 1`,
     ).bind(email).first<{ id: number; created_at: string }>(),
-    c.env.DB.prepare(`SELECT role FROM users WHERE LOWER(email) = ? LIMIT 1`).bind(email).first<{ role: string }>(),
+    c.env.DB.prepare(`SELECT role FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1`).bind(normalizeEmail(email)).first<{ role: string }>(),
   ]);
   return c.json({
     open_invitation: open ? { id: Number(open.id), created_at: open.created_at } : null,

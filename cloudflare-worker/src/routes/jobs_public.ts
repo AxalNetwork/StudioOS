@@ -21,6 +21,7 @@ import { publicCompensation, shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhe
 import { putResumeFromDataUri } from '../services/r2';
 import { notify } from '../services/notify';
 import { refuse } from '../util/refusal';
+import { normalizeEmail } from '../util/accountEmail';
 
 const jobsPublic = new Hono<{ Bindings: Env }>();
 
@@ -39,7 +40,7 @@ function clampInt(v: string | null, def: number, max: number): number {
 }
 
 async function resolveUserIdByEmail(env: Env, email: string): Promise<number | null> {
-  const r: any = await env.DB.prepare(`SELECT id FROM users WHERE lower(email) = lower(?)`).bind(email).first();
+  const r: any = await env.DB.prepare(`SELECT id FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1`).bind(normalizeEmail(email)).first();
   return r ? Number(r.id) : null;
 }
 

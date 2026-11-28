@@ -164,8 +164,9 @@ test('every other area, and anything unsafe, goes to a bare /login as before', (
 
 test('the route guard uses the redirect, and the sign-in page reads the destination for every method', () => {
   const app = src('App.jsx');
-  // D8680: the kept destination is still loginRedirectFor's; an email link whose session could not be read adds its reason.
-  assert.match(app, /<Navigate to=\{withLinkFailure\(loginRedirectFor\(location\), linkBootstrapFailure\)\} state=\{\{ from: location \}\} replace \/>/);
+  // D8793 (#8793): `signedOutRedirectFor` is `loginRedirectFor` unless a session just ended in another tab.
+  // D8680: an email link whose session could not be read adds its reason to whichever sign-in address that gives.
+  assert.match(app, /<Navigate to=\{withLinkFailure\(signedOutRedirectFor\(location\), linkBootstrapFailure\)\} state=\{\{ from: location \}\} replace \/>/);
   const login = src('pages/LoginPage.jsx');
   // The authenticator, Google and passkey paths each read the validated destination; the email link stores it first.
   const uses = login.match(/safeNextPath\(\)/g) || [];

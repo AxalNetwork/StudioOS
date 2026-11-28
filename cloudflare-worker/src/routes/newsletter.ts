@@ -294,7 +294,7 @@ newsletter.post('/newsletter/confirm', async (c) => {
     ).bind(row.id, row.confirm_token_hash).run();
     if (!Number((claimed as any)?.meta?.changes ?? 1)) return badToken(c);
 
-    const member = await c.env.DB.prepare('SELECT id FROM users WHERE lower(trim(email)) = ?').bind(row.email).first<{ id: number }>();
+    const member = await c.env.DB.prepare('SELECT id FROM users WHERE lower(trim(email)) = ? ORDER BY id LIMIT 1').bind(row.email).first<{ id: number }>();
     const ipHash = await newsletterIpHash(key, c.req.header('CF-Connecting-IP'));
     await markConfirmed(c.env, row, { userId: member?.id ?? null, ipHash });
 

@@ -24,6 +24,7 @@
  *     next request tries again.
  */
 import type { Env } from '../types';
+import { normalizeEmail } from '../util/accountEmail';
 
 export interface LpClaimResult {
   /** Rows whose user_id this call wrote. 0 is the normal steady state. */
@@ -119,9 +120,9 @@ export async function claimLpRowsForAddress(
   try {
     const found = await env.DB.prepare(
       `SELECT id, email FROM users
-        WHERE LOWER(email) = LOWER(?) AND email_verified = 1 AND is_active = 1
-        LIMIT 2`,
-    ).bind(addr).all<{ id: number; email: string }>();
+        WHERE LOWER(email) = ? AND email_verified = 1 AND is_active = 1
+        ORDER BY id LIMIT 2`,
+    ).bind(normalizeEmail(addr)).all<{ id: number; email: string }>();
     const rows = found?.results || [];
     if (rows.length !== 1) return { claimed: 0 };
     return claimLpRowsByEmail(env, Number(rows[0].id), rows[0].email, fundId);
