@@ -46,13 +46,19 @@ export const MUTABLE_IMAGES = Object.freeze({});
 // SC-02 (claude-code.yml) was closed by gating each comment event on its author's association.
 export const UNGATED_COMMENT_TRIGGERS = Object.freeze({});
 /**
- * `workflow_run` workflows that may exist, each with its decision. GitHub runs a
- * `workflow_run` workflow from the default branch with a write-capable token, so
- * each must take the run it reacts to as data: it never checks out the branch,
- * never runs the artifact through an action, and refuses fork and non-pull_request
- * runs. WF-4 holds those three rules for every entry.
+ * `workflow_run` workflows that may exist, each with its decision and the one
+ * event of the run it reacts to. GitHub runs a `workflow_run` workflow from the
+ * default branch with a write-capable token, so each must take the run it reacts
+ * to as data: it never checks out the branch, never runs the artifact through an
+ * action, and refuses fork runs and runs of any other event. WF-4 holds those
+ * three rules for every entry. D7125-p2 added the stall check on `merge_group`
+ * runs: a queue candidate is built by GitHub in this repository, and the check
+ * reads nothing of the run but its event, repository and conclusion.
  */
-export const TRUSTED_WORKFLOW_RUN = Object.freeze({ 'pr-preview-deploy.yml': 'D7146' });
+export const TRUSTED_WORKFLOW_RUN = Object.freeze({
+  'pr-preview-deploy.yml': Object.freeze({ decision: 'D7146', event: 'pull_request' }),
+  'queue-stalled.yml': Object.freeze({ decision: 'D7125-p2', event: 'merge_group' }),
+});
 
 /** A secret that is, or looks like, a Cloudflare credential. Account ids ride along: a PR run reads none. */
 const CLOUDFLARE_SECRET = /\bsecrets\.[A-Z0-9_]*(?:CLOUDFLARE|WRANGLER|CF_API|CF_ACCOUNT)[A-Z0-9_]*\b/;
@@ -186,7 +192,7 @@ test('WF-4: no pull_request_target, and workflow_run only in the reviewed truste
     (/\bworkflow_run\b/.test(triggersOf(read(f))) && !TRUSTED_WORKFLOW_RUN[f]));
   assert.deepEqual(bad, [], 'both run with this repository\'s secrets and a write token on a fork\'s pull request');
   // Mutation checked: `ref: ${{ github.event.workflow_run.head_sha }}` added to pr-preview-deploy.yml's checkout.
-  for (const [f, decision] of Object.entries(TRUSTED_WORKFLOW_RUN)) {
+  for (const [f, { decision, event }] of Object.entries(TRUSTED_WORKFLOW_RUN)) {
     assert.ok(FILES.includes(f), `${f} is listed but does not exist`);
     assert.ok(existsSync(new URL(`documentation/architecture/decisions/${decision}.md`, ROOT)), `${f}: ${decision} records why it may exist`);
     const src = codeLines(read(f)).join('\n');
@@ -194,7 +200,9 @@ test('WF-4: no pull_request_target, and workflow_run only in the reviewed truste
     assert.doesNotMatch(src, CHECKS_OUT_PR, `${f}: never check out the triggering branch`);
     assert.doesNotMatch(src, /\bref:/, `${f}: its only checkout is main's own commit`);
     assert.doesNotMatch(src, /actions\/download-artifact/, `${f}: an artifact is fetched as data and checked, never unpacked by an action`);
-    assert.match(src, /github\.event\.workflow_run\.event == 'pull_request'/, `${f}: refuses runs that are not pull_request runs`);
+    assert.match(src, new RegExp(`github\\.event\\.workflow_run\\.event == '${event}'`), `${f}: refuses runs that are not ${event} runs`);
+    // Mutation checked (D7125-p2): queue-stalled.yml's event test changed to 'push'.
+    assert.ok(['pull_request', 'merge_group'].includes(event), `${f}: ${event} runs carry this repository's code only after review`);
     assert.match(src, /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/, `${f}: refuses fork runs`);
     assert.match(src, /^permissions: \{\}$/m, `${f}: no token by default`);
   }
