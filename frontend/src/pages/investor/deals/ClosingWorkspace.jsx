@@ -14,6 +14,7 @@ import {
   phoneCell, portfolioRows, companyHref, afterCloseFigures, captableCard,
   myClosingRoomHref,
 } from './closingWorkspaceModel';
+import { CLOSING_RECORD_NOT_READ } from './closingSeatModel';
 
 /**
  * THE WORKSPACE IS A VIEW OF READS THAT ALREADY EXIST. Every tab reads a
@@ -28,6 +29,12 @@ import {
  * checklist; an investor reads, has no Audit tab and acts nowhere here: their
  * one action, Open my closing room on their own line (D8838), leaves for the
  * deal page's Closing tab, where the room is.
+ *
+ * D9072 (#9072, D6158 Q1 = A): a partner reaches this workspace only for a
+ * round they lead (ClosingZone refuses any other, as the Worker refuses the
+ * Audit's read). The lead edits the checklist and reads the other tabs; they
+ * record no transfer and close nothing, and they read no closing record
+ * (D1213), so its total and close rules say so rather than "none is open".
  */
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -97,7 +104,8 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
   const role = user?.role;
   const investor = role === 'investor';
   const isAdmin = role === 'admin';
-  const canEditChecklist = isAdmin || role === 'partner';
+  const lead = role === 'partner';
+  const canEditChecklist = isAdmin || lead;
   const [tab, setTab] = useState('checklist');
   const [reads, setReads] = useState({ checklist: LOADING, envelopes: LOADING, conditions: LOADING, transfers: LOADING, gate: LOADING, events: LOADING, closing: LOADING });
   const [sheet, setSheet] = useState(null);
@@ -114,13 +122,15 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
     // The gate is an Admin's read; anyone else is refused before it is asked.
     if (isAdmin) dealStaffApi.transferGate(dealId).then((r) => put('gate', ok(r || {})), () => put('gate', UNREADABLE));
     if (!investor) dealClosingHistoryApi.events(dealId).then((r) => put('events', ok(Array.isArray(r?.events) ? r.events : [])), () => put('events', UNREADABLE));
-    closingsApi.list().then(async (r) => {
+    // D9072: an Operating Partner reads no closing record; nothing is asked.
+    if (lead) put('closing', ok(null));
+    else closingsApi.list().then(async (r) => {
       const rows = Array.isArray(r?.closings) ? r.closings : Array.isArray(r?.items) ? r.items : Array.isArray(r) ? r : [];
       const mine = rows.find((x) => Number(x.deal_id) === Number(dealId));
       if (!mine) return put('closing', ok(null));
       try { put('closing', ok(await closingsApi.read(mine.uid))); } catch { put('closing', UNREADABLE); }
     }, () => put('closing', UNREADABLE));
-  }, [dealId, isAdmin, investor]);
+  }, [dealId, isAdmin, investor, lead]);
   useEffect(() => { load(); }, [load]);
 
   const day = today();
@@ -173,11 +183,12 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
           {title}{closingRec?.round_label ? ` · ${closingRec.round_label}` : ''}{closingRec?.instrument ? ` · ${closingRec.instrument}` : ''}
         </h2>
         <dl className="mt-2 grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-3" data-testid="closing-workspace-facts">
-          <div><dt className="text-gray-500 dark:text-gray-400">Deadline</dt><dd>{closingRec?.deadline ? <span className="font-mono">{closingRec.deadline}</span> : <NotRecorded />}</dd></div>
+          <div><dt className="text-gray-500 dark:text-gray-400">Deadline</dt><dd>{lead ? <span className="text-gray-500 dark:text-gray-400">Not read here</span> : closingRec?.deadline ? <span className="font-mono">{closingRec.deadline}</span> : <NotRecorded />}</dd></div>
           <div>
             <dt className="text-gray-500 dark:text-gray-400">{investor ? 'Round total' : 'Total committed'}</dt>
             <dd data-testid="closing-workspace-total">
-              {reads.closing.state === 'unreadable' ? UNAVAILABLE_WORD
+              {lead ? <span className="text-gray-500 dark:text-gray-400" data-testid="closing-record-not-read">Not read here</span>
+                : reads.closing.state === 'unreadable' ? UNAVAILABLE_WORD
                 : closingRec ? <><b className="font-mono">{money(closingRec.total_cents, currency)}</b> across {closingRec.line_count} line{closingRec.line_count === 1 ? '' : 's'}, withdrawn not counted</>
                   : reads.closing.state === 'loading' ? 'Reading…' : <span className="text-gray-500 dark:text-gray-400">No closing record is open on this deal</span>}
             </dd>
@@ -253,14 +264,14 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
           {tab === 'paper' && (
             paper.state === 'loading' ? <Reading testid="paper-loading" />
               : paper.state === 'unreadable' ? <Unavailable what="The signing archive" onRetry={load} testid="paper-unavailable" />
-                : paper.rows.length === 0 ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="paper-empty">No envelope on this deal{investor ? ' is yours to read' : ''} yet.</p>
+                : paper.rows.length === 0 ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="paper-empty">No envelope on this deal{investor || lead ? ' is yours to read' : ''} yet.</p>
                   : (
                     <div className="space-y-3">
                       <p className="flex flex-wrap gap-x-4 text-[12px] text-gray-700 dark:text-gray-300" data-testid="paper-summary">
                         <span><b className="font-mono">{paper.executed}</b> of {paper.rows.length} envelopes executed</span>
                         {paper.partly ? <span><b className="font-mono">{paper.partly}</b> partly signed</span> : null}
                         {paper.voided || paper.rejected ? <span><b className="font-mono">{paper.voided}</b> voided · <b className="font-mono">{paper.rejected}</b> rejected</span> : null}
-                        <span className="text-gray-500 dark:text-gray-400">{investor ? 'You see your own paper.' : 'Signatures are counted per envelope.'}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{investor ? 'You see your own paper.' : lead ? 'You see the paper you sent or sign.' : 'Signatures are counted per envelope.'}</span>
                       </p>
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse" data-testid="paper-table">
@@ -401,7 +412,8 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
       {!investor && (
         <section className="rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="close-rules">
           <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">Close the closing</h3>
-          {reads.closing.state === 'loading' ? <Reading testid="close-rules-loading" />
+          {lead ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="close-rules-not-read">{CLOSING_RECORD_NOT_READ}</p>
+            : reads.closing.state === 'loading' ? <Reading testid="close-rules-loading" />
             : reads.closing.state === 'unreadable' ? <Unavailable what="The closing record" onRetry={load} testid="close-rules-unavailable" />
               : rules.state === 'none' ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="close-rules-none">No closing record is open on this deal, so there is nothing to close yet.</p>
                 : rules.state === 'closed' ? (

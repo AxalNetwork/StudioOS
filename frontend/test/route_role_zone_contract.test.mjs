@@ -75,6 +75,10 @@ const BRANCHED = {
 const FIXED_SHELL = {
   '/deals/commit': { roles: ['partner'], element: 'InvestorDealsRoutes', shell: 'investor',
     source: 'frontend/src/workspaces/investor/InvestorDealsRoutes.jsx' },
+  // D9072 (#9072, D6158 Q1 = A): the round's lead Operating Partner enters Closing, in the same
+  // investor shell; ClosingZone narrows the partner to the rounds they lead.
+  '/deals/closing': { roles: ['partner'], element: 'InvestorDealsRoutes', shell: 'investor',
+    source: 'frontend/src/workspaces/investor/InvestorDealsRoutes.jsx' },
 };
 
 /**

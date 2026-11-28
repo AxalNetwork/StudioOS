@@ -165,7 +165,8 @@ test('agreements read Executed, as the agreement lifecycle says (#5796)', () => 
 test('the empty state is the canvas’s sentence', () => {
   assert.equal(EMPTY_TITLE, 'No deals are currently in closing.');
   assert.equal(EMPTY_BODY, 'Closing tracks documents, conditions and recorded transfer status.');
-  assert.match(ZONE, /empty=\{<NothingYet title=\{EMPTY_TITLE\} body=\{EMPTY_BODY\} \/>\}/);
+  // D9072: a partner's body says they lead no round at closing; everyone else reads the canvas's sentence.
+  assert.match(ZONE, /empty=\{<NothingYet title=\{EMPTY_TITLE\} body=\{seatRole === 'partner' \? NO_LED_ROUND : EMPTY_BODY\} \/>\}/);
 });
 
 test('the joins live in the model only, so #6157 is a one-place swap', () => {
