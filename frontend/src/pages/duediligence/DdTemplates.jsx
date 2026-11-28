@@ -126,10 +126,13 @@ export default function DdTemplates() {
                       <td className="px-3 py-2.5 font-mono">{shares[i] == null ? '—' : `${shares[i]}%`}</td>
                       <td className="px-3 py-2.5">
                         {edit ? (
+                          // D8792 (#8792): the switch is named by `aria-label`, not by an `sr-only` span. That span is
+                          // `position: absolute` with no positioned ancestor inside the table's `overflow-x-auto`, so it
+                          // escaped the scroller and widened the whole document on a phone (325 px at 320, 448 px with
+                          // long section names). The hit area and the column's layout wait on the canvas.
                           <label className="inline-flex items-center gap-2">
-                            <input type="checkbox" role="switch" aria-checked={Boolean(s.blocking)} checked={Boolean(s.blocking)}
+                            <input type="checkbox" role="switch" aria-label={`${s.title} blocks`} aria-checked={Boolean(s.blocking)} checked={Boolean(s.blocking)}
                               onChange={(e) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, blocking: e.target.checked } : x)))} />
-                            <span className="sr-only">{s.title} blocks</span>
                           </label>
                         ) : (s.blocking ? <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11.5px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">Blocking</span> : <span className={muted}>—</span>)}
                       </td>
