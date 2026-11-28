@@ -25,9 +25,11 @@ export function linuxExecutorDependencies({ policyPath = LINUX_POLICY_PATH, read
 
 /**
  * Coordinator-owned hosted children (`hosted`, `github-8`) use S30's accepted hosted-verification port (#8007).
- * Trusted readers are composed here only, never from inputs or the environment. S39 owns them (#8345); none exists
- * on main yet, so every hosted admission refuses. The factory receives the trusted boundary job, so a reader can
- * inspect that exact instance (job.inspectBoundary / job.inspectReadiness) instead of trusting a claimed one.
+ * Trusted readers are composed here only, never from inputs or the environment. S39 owns them (#8345): this default
+ * supplies none, and capacity-executor.mjs passes S39's `hostedReaderFactory` as `readers`. The factory receives the
+ * trusted boundary job, so a reader can inspect that exact instance (job.inspectBoundary / job.inspectReadiness)
+ * instead of trusting a claimed one. With `hostedBoundaryJob()` null, those readers refuse before any outbound call
+ * (D8345-p1), so every hosted admission still refuses.
  */
 export function hostedReaders() { return {}; }
 

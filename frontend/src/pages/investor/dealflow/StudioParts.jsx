@@ -4,16 +4,21 @@
  * task #127), the terms editor and the draft (D463), Why we passed, the stage
  * funnel over recorded moves and the Stage SLA preference. The lens
  * (`StudioLens.jsx`) opens them; nothing here reads on its own but the draft's
- * pickers.
+ * pickers. D5456 part 2: the draft saves a private deal preparation by default
+ * and keeps "Live deal now" until ADP-04's release (#5458).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { adminDealPreparationsApi } from '../../../lib/api/adminDealPreparations.js';
 import { reportError } from '../../../lib/log';
 import {
   PASS_TAXONOMY, PASS_REASON_UNRECORDED, passReasonLabel, passReasonRevisit,
   SLA_PRESETS, slaPreset, fmtPct, fmtDays,
 } from '../../../lib/dealFlow';
+import {
+  RELEASE_GAP_NOTE, changesSince, formFromContent, initialContent, keepsKey, operationKeyFor, refusalSentence, savedLine,
+} from './draftPreparationModel';
 
 const PIPELINE = ['applied', 'scored', 'active', 'funded'];
 
@@ -296,9 +301,16 @@ export function PassAnalyticsPanel({ stats, active, onQuery }) {
   );
 }
 
-export function DraftDealModal({ onClose, onCreated }) {
+/**
+ * The Draft Deal dialog. D5456 part 2 (#5456): by default it saves a PRIVATE DRAFT through
+ * `adminDealPreparationsApi` — create, then each save names the revision it last saved — and it keeps "Live deal
+ * now", the existing `api.draftDeal` path, because a private draft cannot go live until ADP-04's release (#5458).
+ * Both the choice and `/api/deals/draft` retire together then. A refusal is worded from its code, never `e.message`.
+ */
+export function DraftDealModal({ onClose, onCreated, onSavedPrivately }) {
   const [projects, setProjects] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [mode, setMode] = useState('private');
   const [form, setForm] = useState({
     project_id: '', lead_partner_id: '', status: 'applied', description: '', website: '',
     target_raise: '', minimum_check: '', valuation_cap: '', carry_pct: '', management_fee_pct: '',
@@ -306,6 +318,12 @@ export function DraftDealModal({ onClose, onCreated }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  // The private draft this dialog saved: its uid, the revision token the next save starts from, and its content.
+  const [draft, setDraft] = useState(null);
+  const [savedNote, setSavedNote] = useState('');
+  const [reloadUid, setReloadUid] = useState(null);
+  // The operation key of a save whose outcome is not known yet; a retry of the same payload reuses it.
+  const pending = useRef(null);
 
   useEffect(() => {
     api.listProjects?.().then(p => setProjects(Array.isArray(p) ? p : [])).catch(() => {});
@@ -314,6 +332,9 @@ export function DraftDealModal({ onClose, onCreated }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const num = (v) => (v === '' || v == null ? null : Number(v));
+  const isPrivate = mode === 'private';
+  const project = projects.find(p => String(p.id) === String(form.project_id));
+  const noCompany = isPrivate && !draft && project && project.company_id == null;
 
   const submit = async () => {
     if (!form.project_id) { setErr('Select a company/project.'); return; }
@@ -342,41 +363,106 @@ export function DraftDealModal({ onClose, onCreated }) {
     } finally { setSaving(false); }
   };
 
+  const savePrivate = async () => {
+    if (!form.project_id) { setErr('Select a company/project.'); return; }
+    if (!draft && (!project || project.company_id == null)) { setErr(refusalSentence({ status: 422, code: 'project_has_no_company' })); return; }
+    const content = draft ? null : initialContent(form);
+    const changes = draft ? changesSince(form, draft.content) : null;
+    if (draft && !Object.keys(changes).length) { setErr(''); setSavedNote(savedLine(draft.revisionNo, true)); return; }
+    const payload = JSON.stringify(draft ? ['save', draft.uid, draft.revision, changes] : ['create', form.project_id, content]);
+    const operationKey = operationKeyFor(pending.current, payload);
+    pending.current = { key: operationKey, payload };
+    setSaving(true); setErr(''); setSavedNote(''); setReloadUid(null);
+    try {
+      if (!draft) {
+        const out = await adminDealPreparationsApi.create({
+          companyId: Number(project.company_id), projectId: Number(form.project_id), operationKey, content,
+        });
+        setDraft({ uid: out.preparation_uid, revision: out.revision, revisionNo: out.revision_no, content });
+        setSavedNote(savedLine(out.revision_no));
+      } else {
+        const out = await adminDealPreparationsApi.save(draft.uid, { expectedRevision: draft.revision, operationKey, changes });
+        setDraft(d => ({ ...d, revision: out.revision, revisionNo: out.revision_no, content: { ...d.content, ...changes } }));
+        setSavedNote(savedLine(out.revision_no, !!out.unchanged));
+      }
+      pending.current = null;
+    } catch (e) {
+      if (!keepsKey(e)) pending.current = null;
+      setErr(refusalSentence(e));
+      if (e?.code === 'revision_conflict' && draft) setReloadUid(draft.uid);
+      if (e?.code === 'open_preparation_exists' && e.data?.preparation_uid) setReloadUid(String(e.data.preparation_uid));
+      reportError('DraftDealModal:savePrivate', e);
+    } finally { setSaving(false); }
+  };
+
+  // Loads the draft's latest revision (after a conflict, or to continue an open draft): the next save starts from it.
+  const loadLatest = async () => {
+    if (!reloadUid) return;
+    setSaving(true); setErr('');
+    try {
+      const d = await adminDealPreparationsApi.get(reloadUid);
+      const content = d?.preparation?.content || {};
+      setForm(f => ({ ...f, ...formFromContent(content), project_id: String(d?.issuer?.project_id ?? f.project_id) }));
+      setDraft({ uid: reloadUid, revision: d.revision, revisionNo: d.revision_no, content });
+      setReloadUid(null);
+      pending.current = null;
+      setSavedNote(`Loaded revision ${d.revision_no}. Your next save starts from it.`);
+    } catch (e) {
+      setErr(refusalSentence(e));
+      reportError('DraftDealModal:loadLatest', e);
+    } finally { setSaving(false); }
+  };
+
+  const close = () => (draft && onSavedPrivately ? onSavedPrivately() : onClose());
+
   const input = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-violet-500 focus:ring-1 focus:ring-violet-200 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
   const label = 'block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400';
+  const choice = (on) => `flex-1 px-3 py-2 text-sm font-medium rounded-lg border ${on
+    ? 'border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-500'
+    : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'} disabled:opacity-60`;
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={close} />
       <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-8 dark:bg-gray-900">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-8 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="draft-deal-title">
           <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Draft Deal</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1"><X size={18} /></button>
+            <h2 id="draft-deal-title" className="text-lg font-bold text-gray-900 dark:text-gray-100">Draft Deal</h2>
+            <button onClick={close} aria-label="Close" className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1"><X size={18} /></button>
           </div>
           <div className="p-5 space-y-4">
+            <div className="flex gap-2" role="radiogroup" aria-label="How to save this deal">
+              <button type="button" role="radio" aria-checked={isPrivate} disabled={!!draft || saving} onClick={() => { setMode('private'); setErr(''); }} className={choice(isPrivate)} data-testid="draft-mode-private">Private draft</button>
+              <button type="button" role="radio" aria-checked={!isPrivate} disabled={!!draft || saving} onClick={() => { setMode('live'); setErr(''); }} className={choice(!isPrivate)} data-testid="draft-mode-live">Live deal now</button>
+            </div>
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="draft-release-gap">
+              {isPrivate ? RELEASE_GAP_NOTE : 'Creates the deal on the board straight away, as before. Investors you invite can see it.'}
+            </p>
             <div>
               <label className={label}>Company / Project *</label>
-              <select value={form.project_id} onChange={e => set('project_id', e.target.value)} className={input}>
+              <select value={form.project_id} onChange={e => set('project_id', e.target.value)} className={input} disabled={!!draft}>
                 <option value="">Select…</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              {noCompany && <p className="mt-1 text-xs text-amber-800 dark:text-amber-300" data-testid="draft-no-company">This project has no linked company, so it cannot be drafted privately. Link its company first, or use Live deal now.</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={label}>Lead Partner</label>
-                <select value={form.lead_partner_id} onChange={e => set('lead_partner_id', e.target.value)} className={input}>
-                  <option value="">Unassigned</option>
-                  {leads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+            {!isPrivate && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={label}>Lead Partner</label>
+                  <select value={form.lead_partner_id} onChange={e => set('lead_partner_id', e.target.value)} className={input}>
+                    <option value="">Unassigned</option>
+                    {leads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={label}>Stage</label>
+                  <select value={form.status} onChange={e => set('status', e.target.value)} className={input}>
+                    {PIPELINE.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className={label}>Stage</label>
-                <select value={form.status} onChange={e => set('status', e.target.value)} className={input}>
-                  {PIPELINE.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
+            )}
             <div>
               <label className={label}>Description</label>
               <textarea rows={2} value={form.description} onChange={e => set('description', e.target.value)} className={input} />
@@ -385,6 +471,7 @@ export function DraftDealModal({ onClose, onCreated }) {
               <div><label className={label}>Website</label><input value={form.website} onChange={e => set('website', e.target.value)} className={input} placeholder="https://" /></div>
               <div><label className={label}>Instrument</label>
                 <select value={form.instrument} onChange={e => set('instrument', e.target.value)} className={input}>
+                  {isPrivate && <option value="">Not recorded</option>}
                   {['SAFE', 'Convertible Note', 'Equity', 'SPV'].map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
               </div>
@@ -397,16 +484,27 @@ export function DraftDealModal({ onClose, onCreated }) {
               <div className="col-span-2"><label className={label}>Closing Deadline</label><input type="date" value={form.closing_deadline} onChange={e => set('closing_deadline', e.target.value)} className={input} /></div>
               {/* D463 — where the deal came from. Free text on purpose: the
                   source taxonomy is the owner's call, and a select written
-                  before it would enshrine a guess. */}
-              <div className="col-span-2"><label className={label}>Source</label><input value={form.source} onChange={e => set('source', e.target.value)} className={input} placeholder="Where this deal came from — e.g. a referral, the Lab, inbound" data-testid="input-deal-source" /></div>
+                  before it would enshrine a guess. A private draft has no
+                  source key yet (D5456), so the field is the live path's. */}
+              {!isPrivate && <div className="col-span-2"><label className={label}>Source</label><input value={form.source} onChange={e => set('source', e.target.value)} className={input} placeholder="Where this deal came from — e.g. a referral, the Lab, inbound" data-testid="input-deal-source" /></div>}
             </div>
-            {err && <div className="text-sm text-red-600">{err}</div>}
+            {savedNote && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300" data-testid="draft-saved">{savedNote}</p>}
+            {err && (
+              <div role="alert" className="text-sm text-red-600 dark:text-red-400" data-testid="draft-error">
+                {err}
+                {reloadUid && (
+                  <button type="button" onClick={loadLatest} disabled={saving} className="ml-2 underline font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100" data-testid="draft-load-latest">
+                    Load the latest version
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div className="p-5 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
-            <button onClick={submit} disabled={saving}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center gap-2">
-              {saving && <Loader2 size={14} className="animate-spin" />} Create Deal
+            <button onClick={close} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">{draft ? 'Done' : 'Cancel'}</button>
+            <button onClick={isPrivate ? savePrivate : submit} disabled={saving || noCompany}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center gap-2" data-testid="draft-save">
+              {saving && <Loader2 size={14} className="animate-spin" />} {isPrivate ? (draft ? 'Save changes' : 'Save private draft') : 'Create live deal'}
             </button>
           </div>
         </div>

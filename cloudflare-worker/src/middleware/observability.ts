@@ -9,6 +9,7 @@ import { branchOf } from '../util/branch';
 import { activityLogged } from '../services/activeAccounts';
 // D4672 — a credential carried in the path never reaches a telemetry store.
 import { redactPath } from '../util/pathRedaction';
+import { produceRequestSectionIncident } from '../services/sectionIncidentRequestProducer';
 
 // Endpoints completely excluded from system_metrics — prevents the monitoring
 // dashboard's polling from inflating the very metrics it displays.
@@ -41,7 +42,9 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
       // replaced by its parameter name. `path` itself is kept for the
       // decisions (metering, activity) that read prefixes.
       let recorded = path;
-      try { recorded = redactPath(path, (c.req as any).routePath); } catch { recorded = redactPath(path); }
+      let routePattern: string | undefined;
+      try { routePattern = (c.req as any).routePath; } catch {}
+      try { recorded = redactPath(path, routePattern); } catch { recorded = redactPath(path); }
       const env = c.env;
       const ctx = c.executionCtx as any;
 
@@ -57,6 +60,15 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
           actor = u?.email ?? null;
           role = u?.role ?? 'anon';
         } catch {}
+
+        // ---- D5981: section incident producer (off unless its start time is set) ----
+        // Only the method, the route pattern and the status are passed; the
+        // outbox write is its own background task and never fails this one.
+        if (ctx && env.AXAL_SECTION_REQUEST_INCIDENT_START_UTC) {
+          await produceRequestSectionIncident(env, ctx, {
+            method, routePattern, status, errored: Boolean(errored), authenticated: userId != null,
+          });
+        }
 
         // ---- increment a metric counter (skip self-monitoring paths) ----
         if (shouldMeter(path)) {

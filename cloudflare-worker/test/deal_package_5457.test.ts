@@ -572,6 +572,9 @@ test('editing the manifest, a version, the terms or the audience changes the can
   assert.equal(digests.size, variants.length);
 });
 
-test('the package adds no mutation: preparation writes stay disabled', () => {
-  assert.deepEqual(Object.values(PREPARATION_MUTATIONS_ENABLED), [false, false, false, false, false, false]);
+test('the package adds no mutation: only ADP-02 drafting is enabled, release writes stay disabled', () => {
+  // #5456 (ADP-02) enables private draft create and edit; the package (ADP-03) enables nothing, and
+  // submit, review, publish and withdraw wait for ADP-04 (#5458).
+  assert.deepEqual({ ...PREPARATION_MUTATIONS_ENABLED },
+    { create: true, edit: true, submit: false, review: false, publish: false, withdraw: false });
 });

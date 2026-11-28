@@ -4,9 +4,10 @@
  * jurisdiction, facts, fee lines and pack, read from the tables of migration
  * 202611151923_6689_formation_catalogue.sql.
  *
- * NOTHING READS THIS IN PRODUCTION YET. The seed is #6690 (C2), the first
- * reader #6691 (E8), the editor #6699 (H3). Until then the store is empty and
- * every read answers null.
+ * The seed is #6690 (C2), the editor #6699 (H3). The incorporation readers
+ * (#6691, D6691) read the store through `formationCatalogueReaders.ts`, with
+ * a logged fallback to the code arrays when it cannot answer; where the
+ * store is empty every read here answers null.
  *
  * WHAT A READ NEVER INVENTS. A fact's value is returned only with its status;
  * a fee line with no amount reads `amount_cents: null` ("Not recorded"),
