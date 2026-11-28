@@ -25,6 +25,8 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | `ExportDialog.jsx` | D6070 (#6070, RAN22): "Take vN out" from Story: Copy text, a watermarked PDF (DOCX shown, not offered), the include checklist with Not recorded sections left out, a preview of exactly what goes out, the export log, and the blocked-clipboard fallback. A PDF is made only after the Worker's export log (`cloudflare-worker/src/routes/narrative_exports.ts`) records it; an admin copies the text only, recorded with their read reason first. |
 | `exportModel.js` | D6070: pure: the export's heading (version, audience, date, revision), its blocks and text, bound figures as shown at export time, the checklist defaults, the states' words and the log lines. |
 | `narrativePdf.js` | D6070: the PDF on jsPDF from `exportModel.js`'s blocks, every page watermarked with the version and the date. |
+| `BuildDeckDialog.jsx` | D9104 (#9104, RAN24b): "Build a deck from v[n]", the confirm before the hand-off to Pitch deck studio, opened from Story's Share ▾ and the Versions table's Deck cell. It reads the deck outline only (`POST /api/decks/narrative/outline`, nothing runs or is charged) and the deck versions, and Continue opens `/raise/pitch/new?…&from=narrative`. |
+| `buildDeckModel.js` | D9104: pure: the Deck cell, the Share items, the outline's answer as a state (a 403 or a 404 is refused, never "Coming later"), and the confirm's lines (outline, not current, price, Read by). |
 | `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
 
 D909 (#2693) adds `NarrativeHome` to `NarrativeTool.jsx`: Home's tiles, Needs

@@ -15,6 +15,16 @@
  *          the file carried and `copy` the dialog's preset they make
  *          (`copyOf`); each is null for a row written before they were
  *          recorded, which the dialog says as "Not recorded", never "no".
+ *          D8772 (#8772) part 3: `warnings_confirmed` and `confirmed_findings`
+ *          are the check's warnings the dialog confirmed before the file was
+ *          made (`confirmedOf`), null when the row never said.
+ *
+ * D8772 (#8772) part 3: every export route also reads `confirmed`, the ids of
+ * the preflight warnings the export dialog confirmed ("Export v7 with these 3
+ * warnings"), and the ledger row keeps them and their count, so the history
+ * can say "Exported with 3 warnings confirmed". It is the dialog's own
+ * statement: the Worker does not run the check, and an id is kept only when it
+ * looks like one (`FINDING_ID`); a body without `confirmed` records null.
  *
  * D8771 (#8771): the PowerPoint and .odp files answer with
  * `X-Deck-Export-Report`, the writer's own counts as JSON (`reportOf`), and
@@ -119,6 +129,23 @@ export function reportOf(r: {
 }
 export const REPORT_HEADER = 'X-Deck-Export-Report';
 
+/**
+ * D8772 (#8772) part 3: the preflight warnings the export dialog confirmed,
+ * as `{ count, ids }`, from the body's `confirmed` (an array of finding ids,
+ * `preflightModel.js`'s `check:card:block:n`). Anything but an array is null
+ * (not recorded). Ids that are not shaped like one are dropped, duplicates
+ * once, at most `CONFIRMED_MAX`; an empty array is 0 (nothing to confirm).
+ */
+export const FINDING_ID = /^[A-Za-z0-9_.-]{1,40}(:[A-Za-z0-9_.-]{1,64}){1,4}$/;
+export const CONFIRMED_MAX = 200;
+export type Confirmed = { count: number; ids: string[] };
+export function confirmedOf(body: any): Confirmed | null {
+  const list = body?.confirmed;
+  if (!Array.isArray(list)) return null;
+  const ids = [...new Set(list.filter((x: unknown): x is string => typeof x === 'string' && FINDING_ID.test(x)))].slice(0, CONFIRMED_MAX);
+  return { count: ids.length, ids };
+}
+
 export const NOT_RECORDED_MESSAGE = 'The export could not be recorded, so no file was made. Try again in a moment. Nothing was shared.';
 
 const AUDIT_SUMMARY: Record<ExportFormat, string> = {
@@ -146,11 +173,15 @@ export function exportStatements(env: Env, a: {
   deck: DeckRow; format: ExportFormat; contentHash: string | null; externalRef?: string | null; userId: number; audit: boolean;
   /** D8771 (#8771): what the file carried; the row keeps it, and the preset it makes. */
   options: ExportOptions;
+  /** D8772 (#8772) part 3: the warnings the dialog confirmed (`confirmedOf`); null when it did not say. */
+  confirmed?: Confirmed | null;
 }) {
+  const confirmed = a.confirmed ?? null;
   const out = [env.DB.prepare(
-    'INSERT INTO deck_exports (deck_id, version, format, content_hash, external_ref, created_by, notes, sources, copy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO deck_exports (deck_id, version, format, content_hash, external_ref, created_by, notes, sources, copy, warnings_confirmed, confirmed_findings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   ).bind(a.deck.id, a.deck.version ?? null, a.format, a.contentHash, a.externalRef ?? null, a.userId,
-    a.options.notes ? 1 : 0, a.options.sources ? 1 : 0, copyOf(a.options.notes, a.options.sources))];
+    a.options.notes ? 1 : 0, a.options.sources ? 1 : 0, copyOf(a.options.notes, a.options.sources),
+    confirmed ? confirmed.count : null, confirmed ? JSON.stringify(confirmed.ids) : null)];
   if (a.audit) {
     out.push(logCycleWriteStatement(env, {
       projectId: Number(a.deck.project_id), userId: a.userId, cycle: 'raise', module: 'pitch-deck',
@@ -275,7 +306,7 @@ deckExports.post('/:id/export/html', async (c) => {
   const bytes = new TextEncoder().encode(html);
   const hash = await sha256Hex(bytes);
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'html', contentHash: hash, userId: Number(user.id), audit: true, options: opts }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'html', contentHash: hash, userId: Number(user.id), audit: true, options: opts, confirmed: confirmedOf(body) }));
   } catch (e) {
     return refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
   }
@@ -347,7 +378,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   });
   const hash = await sha256Hex(odp.bytes);
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'odp', contentHash: hash, userId: Number(user.id), audit: true, options: opts }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'odp', contentHash: hash, userId: Number(user.id), audit: true, options: opts, confirmed: confirmedOf(body) }));
   } catch (e) {
     return refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
   }
@@ -422,7 +453,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
     return c.json({ error: w.code }, w.status as any);
   }
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'google_slides', contentHash: hash, externalRef: created.file_id, userId: Number(user.id), audit: true, options: opts }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'google_slides', contentHash: hash, externalRef: created.file_id, userId: Number(user.id), audit: true, options: opts, confirmed: confirmedOf(body) }));
   } catch (e) {
     console.warn('[decks/export/google-slides] created but not recorded', (e as Error)?.name);
     return c.json({ error: 'export_not_recorded_created', url: created.url, converted: created.converted }, 503);
@@ -442,7 +473,8 @@ deckExports.get('/:id/exports', async (c) => {
   try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const { results } = await c.env.DB.prepare(
-    `SELECT e.id, e.deck_id, e.version, e.format, e.content_hash, e.created_at, e.notes, e.sources, e.copy, u.name AS by_name
+    `SELECT e.id, e.deck_id, e.version, e.format, e.content_hash, e.created_at, e.notes, e.sources, e.copy,
+            e.warnings_confirmed, e.confirmed_findings, u.name AS by_name
        FROM deck_exports e JOIN pitch_decks d ON d.id = e.deck_id
        LEFT JOIN users u ON u.id = e.created_by
       WHERE d.project_id = ? ORDER BY e.id DESC LIMIT 50`,
@@ -454,9 +486,21 @@ deckExports.get('/:id/exports', async (c) => {
       // D8771: null (Not recorded) for a row written before migration 202611270209.
       notes: r.notes == null ? null : r.notes === 1, sources: r.sources == null ? null : r.sources === 1,
       copy: typeof r.copy === 'string' ? r.copy : null,
+      // D8772 part 3: null for a row written before migration 202611271712, or by a caller that did not say.
+      warnings_confirmed: Number.isInteger(r.warnings_confirmed) ? r.warnings_confirmed : null,
+      confirmed_findings: findingIds(r.confirmed_findings),
     })),
   });
 });
+
+/** The stored JSON array of finding ids, or null when it is absent or unreadable. */
+function findingIds(raw: unknown): string[] | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : null;
+  } catch { return null; }
+}
 
 const FORMAT_OF_TYPE: Record<string, ExportFormat> = {
   'application/pdf': 'pdf',
@@ -476,10 +520,11 @@ deckExports.use('/:id/export', async (c, next) => {
   const user = await requireAuth(c);
   const hash = await sha256Hex(bytes);
   // D8771: the same body the route read (Hono keeps it), so the row says what the file carried.
-  const options = optionsOf(await c.req.json().catch(() => ({})));
+  const sent = await c.req.json().catch(() => ({}));
+  const options = optionsOf(sent);
   try {
     if (!row) throw new Error('deck row gone');
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format, contentHash: hash, userId: Number(user.id), audit: false, options }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format, contentHash: hash, userId: Number(user.id), audit: false, options, confirmed: confirmedOf(sent) }));
   } catch (e) {
     c.res = undefined as any;
     c.res = refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });

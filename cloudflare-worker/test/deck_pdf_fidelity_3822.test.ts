@@ -129,6 +129,8 @@ function fixture(slides: unknown[], theme: unknown = null) {
   db.exec(MIGRATION);
   // D8771 (#8771): the ledger records what each file carried.
   db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'), 'utf8'));
+  // D8772 part 3: the ledger also keeps the warnings an export confirmed.
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611271712_8772_deck_exports_confirmed.sql'), 'utf8'));
   try { db.exec('ALTER TABLE pitch_decks ADD COLUMN theme_json TEXT'); } catch { /* already there */ }
   db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.3822@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();

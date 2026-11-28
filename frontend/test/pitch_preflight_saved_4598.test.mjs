@@ -98,7 +98,7 @@ test('unsaved edits that fix a defect do not clear the saved version that has it
     assert.ok(dGate, 'the dialog runs its own check on the version it opened with, and finds the same warning');
     assert.match(w.text(dGate), /\[Your logo\]/);
     assert.equal(w.pr(w.by('pitch-export-run')).disabled, true, 'Export stays disabled: not yet confirmed at THIS check');
-    await w.press(w.by('pitch-export-gate-anyway'));
+    await w.type(w.by('pitch-export-gate-anyway'), true); // D8772 part 3: the confirm is a checkbox
     assert.ok(w.by('pitch-export-confirmed'), 'the dialog\'s own confirm, not the editor\'s gate');
     assert.equal(w.pr(w.by('pitch-export-run')).disabled, false, 'confirmed: Export unblocks');
     await w.press(w.by('pitch-export-run'));
@@ -156,7 +156,7 @@ test('Export\'s version picker checks the picked version itself, and a change in
     assert.ok(m.by('pitch-export-dialog'));
     assert.ok(m.by('pitch-export-gate'), 'v3 is picked by default, and it has the sample');
     assert.equal(m.pr(m.by('pitch-export-run')).disabled, true);
-    await m.press(m.by('pitch-export-gate-anyway'));
+    await m.type(m.by('pitch-export-gate-anyway'), true); // D8772 part 3: the confirm is a checkbox
     assert.equal(m.pr(m.by('pitch-export-run')).disabled, false, 'confirmed for v3');
 
     // Picking v2 is a new combination: the confirmation for v3 does not carry over, and v2's own

@@ -173,6 +173,8 @@ function fixture(opts: { scope?: string | null; enabled?: boolean } = {}) {
   db.exec(read('cloudflare-worker/sql/migrations/537_deck_exports.sql'));
   // D8771 (#8771): the ledger records what each file carried.
   db.exec(read('cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'));
+  // D8772 part 3: the ledger also keeps the warnings an export confirmed.
+  db.exec(read('cloudflare-worker/sql/migrations/202611271712_8772_deck_exports_confirmed.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/445_connector_fed_items.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/588_google_workspace_files.sql'));
   db.exec('CREATE TABLE google_oauth_tokens(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER UNIQUE,refresh_token TEXT,scope TEXT,google_sub TEXT,google_email TEXT,updated_at TEXT)');

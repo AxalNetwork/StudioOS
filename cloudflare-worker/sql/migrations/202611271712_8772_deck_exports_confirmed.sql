@@ -1,0 +1,23 @@
+-- D8772 (#8772) part 3: the deck export ledger records the warnings the
+-- exporter confirmed.
+--
+-- Named by its UTC minute (D4106).
+--
+-- deck_exports (537, rebuilt by 754, widened by 202611270209) gains, for a
+-- row written from now on:
+--   warnings_confirmed  how many of the check's warnings the export dialog
+--                       confirmed before this file was made ("Export v7 with
+--                       these 3 warnings"); 0 when the check found nothing
+--                       to confirm
+--   confirmed_findings  those warnings' finding ids, as a JSON array of
+--                       strings (`preflightModel.js` ids, such as
+--                       "sources:2:b3:0"): no title, figure or text
+-- Both are what the dialog sent (`routes/deck_exports.ts` `confirmedOf`); the
+-- Worker does not run the check itself. A row written before this file, or by
+-- a caller that did not say, keeps NULL in both, which
+-- `GET /api/decks/:id/exports` returns as null and the dialog says nothing
+-- about, never "no warnings".
+--
+-- Additive: ADD COLUMN only. No row is changed.
+ALTER TABLE deck_exports ADD COLUMN warnings_confirmed INTEGER CHECK (warnings_confirmed IS NULL OR warnings_confirmed >= 0);
+ALTER TABLE deck_exports ADD COLUMN confirmed_findings TEXT;

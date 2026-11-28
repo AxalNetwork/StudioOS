@@ -13,8 +13,12 @@ import {
   chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
   lastExportLine, needsConnect, optionsApply, presentHref, whatExportDoes,
 } from './presentExportModel';
-import { DEFAULT_PRESET, PRESETS, ackNeeded, ledgerSettings, parseReport, planOf, presetOf, reportLines } from './exportDisclosureModel';
-import { CopyPicker, ExportCompleted, ExportPreview, NotesAck } from './ExportDisclosure';
+import {
+  DEFAULT_PRESET, PRESETS, ackNeeded, copyAnnouncement, exportingLine, ledgerSettings, parseReport, planOf, presetOf, recordedLine, reportLines,
+} from './exportDisclosureModel';
+import { CopyPicker, ExportCompleted, ExportHistory, ExportPreview, NotesAck } from './ExportDisclosure';
+import { SHOW_IN_DRAFT, confirmWords, confirmedIds, confirmedLine, draftDiffers, findingKey, inDraft, scopeLine, showInDraftLabel } from './exportGateModel';
+import { cardUid } from './editorModel';
 
 /**
  * D901 (#2680) — the export dialog (PD17), opened from the current-deck card.
@@ -56,6 +60,22 @@ import { CopyPicker, ExportCompleted, ExportPreview, NotesAck } from './ExportDi
  * the file's fingerprint (`X-Content-SHA256`) and what the writer made
  * (`X-Deck-Export-Report`), with Download again while the dialog is open and
  * the version in Present. A failure offers Try again with the same settings.
+ *
+ * D8772 (#8772) part 3 — the preflight gate in this dialog (PTF05 to PTF07), and
+ * only that: it says what it checked ("Checked: v7 · the saved version Export
+ * sends"); its rows offer "Show in your draft" when the editor is open
+ * (`onShowInDraft`, for a card the draft still has); "Export anyway" is now the
+ * checkbox "Export v7 with these 3 warnings", which can be unticked, and Export
+ * says it waits for it; with unsaved edits on this version, a note says how the
+ * draft differs (`draftDiffers`, from the editor's `draft`). The export sends the
+ * confirmed warnings' ids (`confirmed`) and the ledger line adds "Exported with
+ * 3 warnings confirmed" (`deck_exports.warnings_confirmed`).
+ * D8771 part 3: while an export runs, the copy, format, version and both
+ * settings are locked and the start is announced; the finished export takes
+ * focus and says who recorded it and when; a failure moves focus to Try
+ * again. The venture's export history (`ExportHistory`) lists what each
+ * export carried, Not recorded for an older row, and offers Try again when
+ * it cannot be read. No file is kept (Q3, answered no by the owner).
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -75,7 +95,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function ExportDialog({ versions, current, kit = null, refresh = null, onClose }) {
+export default function ExportDialog({ versions, current, kit = null, refresh = null, draft = null, onShowInDraft = null, onClose }) {
   const rows = versionRows(versions);
   const [format, setFormat] = useState('pdf');
   const [versionId, setVersionId] = useState(current?.id ?? rows[0]?.id ?? null);
@@ -149,15 +169,28 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
     setSources(PRESETS[k].sources);
   };
   const mustAck = optionsApply(format) && ackNeeded(notes, cards);
+  // D8771 part 3 (PTX11): a change of copy or setting says, politely, what goes into the file; nothing is said on open.
+  const [said, setSaid] = useState(null);
+  const opened = useRef(true);
+  useEffect(() => {
+    if (opened.current) { opened.current = false; return; }
+    const plan = cards ? planOf(format, cards, { notes, sources, theme: content?.theme, methodId: content?.methodId }) : null;
+    setSaid(copyAnnouncement(presetOf(notes, sources), plan, { notes, sources }));
+  }, [notes, sources]); // eslint-disable-line react-hooks/exhaustive-deps
+  // PTX06/PTX11: a failure is an alert, and focus goes to Try again; the settings are kept.
+  const retryRef = useRef(null);
+  useEffect(() => { if (failed) retryRef.current?.focus?.(); }, [failed]);
 
   const run = async () => {
     if (!version?.id || busy) return;
     setBusy(true); setFailed(null); setFailRef(null); setDone(null); setCreated(null); setFile(null);
     // D8771: the settings this export carries, as the completed panel says them.
     const sent = { format, version, notes, sources };
+    // D8772 part 3: the warnings this export goes out with, confirmed, for its ledger row.
+    const confirmed = confirmedIds(send.gate, send.confirmed);
     try {
       if (format === 'google_slides') {
-        const res = await api.deckExportGoogleSlides(version.id, { notes, sources });
+        const res = await api.deckExportGoogleSlides(version.id, { notes, sources, confirmed });
         const body = await res.json().catch(() => null);
         if (!res.ok) {
           setFailed(exportFailure(format, res.status, body));
@@ -170,10 +203,10 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         return;
       }
       const r = format === 'html'
-        ? await api.deckExportHtml(version.id, { notes, sources })
+        ? await api.deckExportHtml(version.id, { notes, sources, confirmed })
         : format === 'odp'
-          ? await api.deckExportOdp(version.id, { notes, sources })
-          : await api.deckExport(version.id, format, { notes, sources });
+          ? await api.deckExportOdp(version.id, { notes, sources, confirmed })
+          : await api.deckExport(version.id, format, { notes, sources, confirmed });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         setFailed(exportFailure(format, r.status, body));
@@ -198,11 +231,19 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
     } finally { setBusy(false); }
   };
 
-  // D4598 (#4598) part 2: "Export anyway" is the gate's own confirm — the warnings
-  // found for the CURRENT combination are confirmed, which unblocks Export; it does
-  // not export by itself, so a press never exports twice.
-  const anyway = () => send.confirm();
+  // D4598 (#4598) part 2: the gate's own confirm — the warnings found for the CURRENT
+  // combination are confirmed, which unblocks Export; it does not export by itself, so
+  // a press never exports twice. D8772 part 3: a checkbox, so it can be taken back.
   const apply = optionsApply(format);
+  const gate = send.gate;
+  const words = confirmWords(version?.version, gate?.look?.length || 0, exportButton(format));
+  const waiting = Boolean(gate?.open && gate.anyway && !send.confirmed);
+  // D8772 part 3 (PTF05): "Show in your draft" closes this dialog and selects the element in the editor.
+  const showInDraft = onShowInDraft && draft && cards
+    ? (row) => onShowInDraft({ uid: cardUid(cards[row.card]), block: row.block ?? null, key: findingKey(row, cards) })
+    : null;
+  const showWords = showInDraft ? { word: SHOW_IN_DRAFT, label: showInDraftLabel, can: (r) => inDraft(draft, r, cards) } : null;
+  const differs = send.ready && cards ? draftDiffers({ draft, version, rows: gate ? [...(gate.fix || []), ...(gate.look || [])] : [], slides: cards }) : null;
   return (
     <Lightbox
       label="Export"
@@ -213,7 +254,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading') || contentUnreadable || send.blocked || (mustAck && !ack)} data-testid="pitch-export-run">
+          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading') || contentUnreadable || send.blocked || (mustAck && !ack)} aria-describedby={waiting ? 'pitch-export-why' : undefined} data-testid="pitch-export-run">
             {busy ? 'Exporting…' : exportButton(format)}
           </button>
         </div>
@@ -225,7 +266,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <PreflightMeasure key={send.pf.running.done} card={send.pf.running.snapshot.slides[send.pf.running.done]} index={send.pf.running.done}
             theme={send.pf.running.snapshot.theme} kit={kit} onMeasured={send.pf.onMeasured} />
         ) : null}
-        <CopyPicker copy={copy} onPick={pick} />
+        <CopyPicker copy={copy} onPick={pick} disabled={busy} said={said} />
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Format">
           {FORMATS.map((f) => {
             const on = f.id === format;
@@ -235,9 +276,9 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
                 type="button"
                 role="radio"
                 aria-checked={on}
-                aria-disabled={!f.available}
-                disabled={!f.available}
-                onClick={() => { if (!f.available) return; setFormat(f.id); setCreated(null); setFailed(null); }}
+                aria-disabled={!f.available || busy}
+                disabled={!f.available || busy}
+                onClick={() => { if (!f.available || busy) return; setFormat(f.id); setCreated(null); setFailed(null); }}
                 className={`flex flex-col gap-0.5 rounded-[10px] border px-3 py-2.5 text-left ${on ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'} ${f.available ? '' : 'cursor-not-allowed opacity-60'}`}
                 data-testid={`pitch-export-format-${f.id}`}
               >
@@ -252,6 +293,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <select
             className="min-h-[34px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[12px] dark:border-gray-700 dark:bg-gray-900"
             value={versionId ?? ''}
+            disabled={busy}
             onChange={(e) => setVersionId(e.target.value)}
             data-testid="pitch-export-version"
           >
@@ -272,28 +314,42 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <span role="status" className={MUTED} data-testid="pitch-export-checking">
             {send.pf.running ? `Checking before export · slide ${Math.min(send.pf.progress.done + 1, send.pf.progress.total)} of ${send.pf.progress.total}` : 'Checking before export…'}
           </span>
-        ) : send.gate?.open ? (
+        ) : gate?.open ? (
           <div className="flex flex-col gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" role="alertdialog" aria-label="Before you export" data-testid="pitch-export-gate">
-            <GateBody gate={send.gate} prefix="pitch-export-gate" />
-            {send.gate.anyway && !send.confirmed ? (
-              <button type="button" className={`${GHOST} self-start`} onClick={anyway} data-testid="pitch-export-gate-anyway">{send.gate.anyway}</button>
+            {/* D8772 part 3 (PTF05): what this check read — the saved version, never the draft. */}
+            <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-scope">{scopeLine(version?.version)}</span>
+            <GateBody gate={gate} prefix="pitch-export-gate" onShow={showInDraft} show={showWords} />
+            {gate.anyway ? (
+              <label className="flex items-start gap-2.5 rounded-[10px] border border-axal-hairline px-3 py-2.5 text-[12.5px] dark:border-gray-700" data-testid="pitch-export-gate-confirm">
+                <input type="checkbox" className="mt-0.5" checked={send.confirmed} onChange={(e) => send.confirm(Boolean(e.target.checked))} data-testid="pitch-export-gate-anyway" />
+                <span className="flex flex-col gap-0.5">
+                  <b className={INK}>{words.label}</b>
+                  <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-gate-record">{words.record}</span>
+                </span>
+              </label>
             ) : null}
+            {waiting ? <span id="pitch-export-why" className={MUTED} data-testid="pitch-export-why">{words.waits}</span> : null}
             {send.confirmed ? (
-              <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-export-confirmed">Exporting with the warnings above confirmed.</span>
+              <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-export-confirmed">{words.done}</span>
             ) : null}
           </div>
         ) : null}
+        {/* D8772 part 3 (PTF05): with unsaved edits on this version, how the draft differs from what is exported. */}
+        {differs ? (
+          <p className="m-0 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12px] leading-[1.45] text-axal-ink dark:border-violet-900 dark:bg-violet-950/40 dark:text-gray-100" data-testid="pitch-export-draft-differs">{differs}</p>
+        ) : null}
         <div className="flex flex-col gap-2 text-[12.5px]">
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
-            <input ref={notesRef} type="checkbox" checked={notes} disabled={!apply} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
+            <input ref={notesRef} type="checkbox" checked={notes} disabled={!apply || busy} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
           </label>
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
-            <input type="checkbox" checked={sources} disabled={!apply} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
+            <input type="checkbox" checked={sources} disabled={!apply || busy} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
           </label>
           {apply && (notes || sources) ? <span className={MUTED} data-testid="pitch-export-where">{OPTIONS_WHERE[format]}</span> : null}
         </div>
         <ExportPreview format={format} slides={content?.slides ?? null} cards={cards} notes={notes} sources={sources} theme={content?.theme ?? null} methodId={content?.methodId ?? null} />
-        {mustAck ? <NotesAck cards={cards} checked={ack} onChange={setAck} /> : null}
+        {mustAck ? <NotesAck cards={cards} checked={ack} onChange={setAck} disabled={busy} /> : null}
+        {busy ? <span role="status" className={MUTED} data-testid="pitch-export-exporting">{exportingLine(format, version)}</span> : null}
         {isGoogle && connectFirst ? (
           <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="pitch-export-google-connect">
             <span className={`text-[12.5px] ${INK}`}>{GOOGLE_CONNECT}</span>
@@ -303,9 +359,12 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         {isGoogle && google.state === 'unreadable' ? <span className={MUTED} data-testid="pitch-export-google-unreadable">{GOOGLE_STATE_UNREADABLE}</span> : null}
         <p className={`m-0 ${MUTED}`} data-testid="pitch-export-what">{whatExportDoes(version, format)}</p>
         <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last">
-          {ledger.status === 'error' ? 'The export history could not be read.' : ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
+          {ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
         </span>
         {ledger.status === 'ok' && ledger.rows[0] ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last-settings">{ledgerSettings(ledger.rows[0])}</span> : null}
+        {/* D8772 part 3: the ledger's own record of the warnings that export confirmed. */}
+        {ledger.status === 'ok' && confirmedLine(ledger.rows[0]) ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last-confirmed">{confirmedLine(ledger.rows[0])}</span> : null}
+        <ExportHistory ledger={ledger} fileHash={done?.hash ?? null} onRetry={readLedger} onDownloadAgain={file ? () => download(file.blob, file.name) : null} />
         {failed ? (
           <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-export-failed">
             {failed}
@@ -313,7 +372,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           </div>
         ) : null}
         {/* D8771: the same version, format and settings, once more. */}
-        {failed ? <button type="button" className={`${GHOST} self-start`} onClick={run} disabled={busy || (mustAck && !ack)} data-testid="pitch-export-retry">Try again</button> : null}
+        {failed ? <button ref={retryRef} type="button" className={`${GHOST} self-start`} onClick={run} disabled={busy || (mustAck && !ack)} data-testid="pitch-export-retry">Try again</button> : null}
         {created ? (
           <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-positive dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-export-google-created">
             <span>
@@ -326,7 +385,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           </div>
         ) : null}
         {done ? (
-          <ExportCompleted done={done} onDownloadAgain={file ? () => download(file.blob, file.name) : null} presentTo={done.version?.id != null ? presentHref(done.version.project_id ?? null, done.version.id) : null} />
+          <ExportCompleted done={done} recorded={ledger.status === 'ok' ? recordedLine(ledger.rows, done.hash) : null} onDownloadAgain={file ? () => download(file.blob, file.name) : null} presentTo={done.version?.id != null ? presentHref(done.version.project_id ?? null, done.version.id) : null} />
         ) : null}
       </div>
     </Lightbox>

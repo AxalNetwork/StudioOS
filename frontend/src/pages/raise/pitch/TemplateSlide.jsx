@@ -17,6 +17,14 @@
  *                     table, the source and what the blank structure holds.
  *   ViewSwitch        Example / Blank structure, two `aria-pressed` buttons.
  *
+ * D8770 part 3 (canvas PTP08, PTP23): the card draws its template's chrome
+ * (`face.chrome`: the name top left, bottom left or nowhere, the number, a
+ * footer rule, a section label) and its decor (`DecorLayer`): rules under
+ * headings and in gutters, and the elements library's icons, shapes and
+ * textures when `art` holds their drawings. On a phone, full size is titled
+ * "3 of 13 · Traction", says it can be turned or pinched, and its controls
+ * are 44 px.
+ *
  * Reads and draws only.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -26,13 +34,14 @@ import { measureBlocks } from './preflightMeasure';
 import { boxOf, ratioOf } from './gridModel';
 import { EMPTY_CARD, cardOf, chartLabel } from './presentExportModel';
 import {
-  IN_BLANK, KEYS_LINE, OPEN_FULL, READ_SLIDE, RUNS_PAST, TOO_SMALL, VIEWS, VIEW_GROUP,
-  chartPlan, fontsHref, layoutSize, overflowing, readSlide, sourceLine, tooSmall, withMedia,
+  EXAMPLE_UNAVAILABLE, EXAMPLE_UNAVAILABLE_LINE, IN_BLANK, KEYS_LINE, OPEN_FULL, READ_SLIDE, RUNS_PAST, TOO_SMALL, VIEWS, VIEW_GROUP,
+  PHONE_HINT, chartPlan, chromeLines, decorArtSrc, decorPlan, fontsHref, layoutSize, overflowing, phoneHeading, readSlide, toneColour, tooSmall, withMedia,
 } from './templatePreviewModel';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import { EXAMPLE_BADGE, EXAMPLE_COMPANY, EXAMPLE_NOTE } from './templateExamples';
 
 const SMALL = 'text-[11.5px] text-axal-muted dark:text-gray-400';
-const GHOST = 'inline-flex min-h-[32px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[12px] font-bold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const GHOST = 'inline-flex min-h-[32px] max-sm:min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[12px] font-bold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 const loaded = new Set();
 /** The theme's faces, from Google Fonts (each under an open licence), once per page. */
@@ -219,12 +228,41 @@ function FieldedCard({ slide, index, face }) {
   );
 }
 
+const RULES = { line: '2px solid', double: '8px double', dashed: '2px dashed', dotted: '4px dotted' };
+
+/**
+ * The card's decor at export size, under its areas (canvas PTP08). Rules are
+ * drawn here; an icon, shape or texture is drawn only when `art` holds the
+ * elements library's drawing of it, and is left out otherwise.
+ */
+export function DecorLayer({ slide, face, aspect = '16:9', art = null, testId = 'template-decor' }) {
+  const plan = decorPlan(slide, aspect);
+  if (!plan.length) return null;
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true" data-testid={testId}>
+      {plan.map((d) => {
+        const at = { position: 'absolute', left: d.box.x, top: d.box.y, width: d.box.w, height: d.box.h };
+        const colour = toneColour(d.tone, face);
+        if (d.kind === 'divider') {
+          const line = `${RULES[d.style] || RULES.line} ${colour}`;
+          const style = d.style === 'accent'
+            ? { ...at, background: colour, borderRadius: (d.vertical ? d.box.w : d.box.h) / 2 }
+            : d.vertical ? { ...at, left: d.box.x + d.box.w / 2, width: 0, borderLeft: line } : { ...at, height: 0, borderTop: line };
+          return <span key={d.id} style={style} data-testid={`${testId}-${d.id}`} data-kind="divider" data-style={d.style} />;
+        }
+        const src = decorArtSrc(art?.[`${d.kind}:${d.ref}`], d.tone, face);
+        return src ? <img key={d.id} alt="" src={src} style={{ ...at, objectFit: d.kind === 'texture' ? 'cover' : 'contain', opacity: d.kind === 'texture' ? 0.5 : 1 }} data-testid={`${testId}-${d.id}`} data-kind={d.kind} /> : null;
+      })}
+    </div>
+  );
+}
+
 /**
  * One card in the template's face, laid out at export size and scaled to its
  * width. `label` is its accessible name (the picture itself is hidden from
  * assistive technology; Read this slide gives the words).
  */
-export default function TemplateSlide({ slide, index = 0, count = 1, face, aspect = '16:9', label = '', onOpen = null, initialWidth = 320, notes = true, testId = 'template-slide' }) {
+export default function TemplateSlide({ slide, index = 0, count = 1, face, aspect = '16:9', label = '', onOpen = null, initialWidth = 320, notes = true, art = null, testId = 'template-slide' }) {
   const outer = useRef(null);
   const frame = useRef(null);
   const width = useWidth(outer, initialWidth);
@@ -249,46 +287,67 @@ export default function TemplateSlide({ slide, index = 0, count = 1, face, aspec
     return () => { live = false; };
   }, [blocks, face, index, gridId]);
   const small = tooSmall(width, aspect);
-  const source = sourceLine(slide);
+  const ch = face.chrome || { mark: 'top_left', number: true, rule: false, section: false };
+  const lines = chromeLines(slide, ch, slide?.example ? EXAMPLE_COMPANY : '[Venture name]');
   const chrome = { position: 'absolute', fontFamily: face.mono, fontSize: 22, color: face.muted, letterSpacing: '0.04em' };
   return (
     <div className="flex min-w-0 flex-col gap-1" data-testid={testId} data-overflow={over.length ? 'true' : 'false'} data-measured={measured ? 'true' : 'false'} data-small={small ? 'true' : 'false'} data-view={slide?.example ? 'example' : 'blank'}>
       <div ref={outer} role="img" aria-label={label || undefined} className="relative w-full overflow-hidden rounded-[6px] border border-axal-hairline dark:border-gray-700" style={{ aspectRatio: ratioOf(aspect), background: face.bg }}>
         <div ref={frame} aria-hidden="true" data-testid={`${testId}-frame`} data-scale={scale.toFixed(4)}
           style={{ position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, transform: `scale(${scale})`, transformOrigin: '0 0', background: face.bg, color: face.ink, fontFamily: face.body, overflow: 'hidden' }}>
+          <DecorLayer slide={slide} face={face} aspect={aspect} art={art} testId={`${testId}-decor`} />
           {blocks.length
             ? <BlockGrid blocks={blocks} colours={face} live size="print" aspect={aspect} testId={gridId} renderChart={(b) => <PreviewChart block={b} face={face} aspect={aspect} />} />
             : <FieldedCard slide={slide} index={index} face={face} />}
-          <span style={{ ...chrome, left: 112, top: 36 }}>{slide?.example ? EXAMPLE_COMPANY : '[Venture name]'}</span>
+          {lines.top ? <span style={{ ...chrome, left: 112, top: 36 }} data-testid={`${testId}-chrome-top`}>{lines.top}</span> : null}
           {slide?.example ? (
             <span style={{ position: 'absolute', right: 112, top: 26, padding: '6px 18px', border: `3px solid ${face.accent}`, color: face.accent, fontFamily: face.mono, fontSize: 24, fontWeight: 700, background: face.bg }} data-testid={`${testId}-badge`}>{EXAMPLE_BADGE}</span>
           ) : null}
-          {source ? <span style={{ ...chrome, left: 112, bottom: 30 }} data-testid={`${testId}-source`}>{source}</span> : null}
-          <span style={{ ...chrome, right: 112, bottom: 30 }}>{String(index + 1).padStart(2, '0')}</span>
+          {ch.rule ? <span style={{ position: 'absolute', left: 112, right: 112, bottom: 76, borderTop: `2px solid ${face.hairline}` }} data-testid={`${testId}-footer-rule`} /> : null}
+          {lines.bottom ? <span style={{ ...chrome, left: 112, bottom: 30 }} data-testid={`${testId}-source`}>{lines.bottom}</span> : null}
+          {ch.number ? <span style={{ ...chrome, right: 112, bottom: 30 }} data-testid={`${testId}-number`}>{String(index + 1).padStart(2, '0')}</span> : null}
         </div>
       </div>
       {notes && (small || over.length || onOpen) ? (
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {over.length ? <span className="text-[11.5px] font-semibold text-amber-800 dark:text-amber-300" role="note" data-testid={`${testId}-runs-past`}>{RUNS_PAST}</span> : null}
           {small && !over.length ? <span className={SMALL} data-testid={`${testId}-too-small`}>{TOO_SMALL}</span> : null}
-          {onOpen ? <button type="button" className="min-h-[28px] text-[11.5px] font-bold text-axal-violet underline-offset-2 hover:underline dark:text-violet-300" onClick={onOpen} aria-label={`${OPEN_FULL}: slide ${index + 1} of ${count}${slide?.title ? `, ${slide.title}` : ''}`} data-testid={`${testId}-open`}>{OPEN_FULL}</button> : null}
+          {onOpen ? <button type="button" className="min-h-[28px] max-sm:min-h-[44px] text-[11.5px] font-bold text-axal-violet underline-offset-2 hover:underline dark:text-violet-300" onClick={onOpen} aria-label={`${OPEN_FULL}: slide ${index + 1} of ${count}${slide?.title ? `, ${slide.title}` : ''}`} data-testid={`${testId}-open`}>{OPEN_FULL}</button> : null}
         </span>
       ) : null}
     </div>
   );
 }
 
-/** Example / Blank structure (canvas PTP01 to PTP04). */
-export function ViewSwitch({ view, onChange, testId = 'template-view' }) {
+/**
+ * Example / Blank structure (canvas PTP01 to PTP04). `exampleOff` (PTP16):
+ * the example covers none of the template's cards, so Example cannot be
+ * chosen and the view stays on the blank structure.
+ */
+export function ViewSwitch({ view, onChange, exampleOff = false, testId = 'template-view' }) {
+  const shown = exampleOff ? 'blank' : view;
   return (
     <div role="group" aria-label={VIEW_GROUP} className="flex gap-1 self-start rounded-[9px] bg-axal-ground p-1 dark:bg-gray-800" data-testid={testId}>
       {Object.entries(VIEWS).map(([id, text]) => (
-        <button key={id} type="button" aria-pressed={view === id} onClick={() => onChange(id)}
-          className={`min-h-[32px] rounded-[7px] px-3 text-[12px] font-bold ${view === id ? 'bg-white text-axal-violet shadow-sm dark:bg-gray-900 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}
+        <button key={id} type="button" aria-pressed={shown === id} onClick={() => onChange(id)} disabled={exampleOff && id === 'example'}
+          className={`min-h-[32px] max-sm:min-h-[44px] rounded-[7px] px-3 text-[12px] font-bold disabled:cursor-not-allowed disabled:opacity-50 ${shown === id ? 'bg-white text-axal-violet shadow-sm dark:bg-gray-900 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}
           data-testid={`${testId}-${id}`}>{text}</button>
       ))}
     </div>
   );
+}
+
+/** The line under the switch: what the Example is, or that it is unavailable here (PTP16). */
+export function ViewNote({ view, exampleOff = false, testId = 'template-view-note' }) {
+  if (exampleOff) {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-axal-muted dark:text-gray-400" role="note" data-testid={`${testId}-unavailable`}>
+        <span className="inline-flex items-center rounded-full border border-axal-hairline bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">{EXAMPLE_UNAVAILABLE}</span>
+        {EXAMPLE_UNAVAILABLE_LINE}
+      </span>
+    );
+  }
+  return view === 'example' ? <span className={SMALL} data-testid={testId}>{EXAMPLE_NOTE}</span> : null;
 }
 
 /** Read this slide: the takeaway, the data as a table, the source, and the blank structure in words. */
@@ -323,7 +382,9 @@ export function ReadThisSlide({ read }) {
  * (and ← →), and Read this slide. `blank` are the store's cards, `shown` the
  * cards the chosen view draws.
  */
-export function TemplateFullSize({ blank, shown, at, onMove, onClose, view, onView, face, aspect = '16:9' }) {
+export function TemplateFullSize({ blank, shown, at, onMove, onClose, view, onView, face, aspect = '16:9', art = null, exampleOff = false, phone: phoneProp = null }) {
+  const phoneWidth = usePhoneWidth();
+  const phone = phoneProp ?? phoneWidth;
   const n = shown.length;
   const i = Math.min(Math.max(0, at), Math.max(0, n - 1));
   const read = readSlide(blank[i], shown[i], i, n);
@@ -340,15 +401,15 @@ export function TemplateFullSize({ blank, shown, at, onMove, onClose, view, onVi
   }, [i, n]);
   const title = (k) => blank[k]?.title || `Card ${k + 1}`;
   return (
-    <Lightbox label={read.heading} title={read.heading} width={1240} onClose={onClose} testId="template-full">
+    <Lightbox label={read.heading} title={phone ? phoneHeading(blank[i], i, n) : read.heading} width={1240} onClose={onClose} testId="template-full">
       <div className="flex flex-col gap-3">
-        <ViewSwitch view={view} onChange={onView} testId="template-full-view" />
+        <ViewSwitch view={view} onChange={onView} exampleOff={exampleOff} testId="template-full-view" />
         <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="flex min-w-0 flex-col gap-2">
-            <TemplateSlide key={`${view}-${i}`} slide={shown[i]} index={i} count={n} face={face} aspect={aspect} label={read.takeaway || title(i)} initialWidth={860} testId="template-full-slide" />
+            <TemplateSlide key={`${view}-${i}`} slide={shown[i]} index={i} count={n} face={face} aspect={aspect} label={read.takeaway || title(i)} initialWidth={phone ? 358 : 860} art={art} testId="template-full-slide" />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button type="button" className={GHOST} disabled={i === 0} onClick={() => onMove(i - 1)} aria-label={i > 0 ? `Previous: slide ${i}, ${title(i - 1)}` : 'Previous'} data-testid="template-full-prev">‹ {i > 0 ? title(i - 1) : 'Previous'}</button>
-              <span className={SMALL}>{KEYS_LINE}</span>
+              <span className={`${SMALL} max-sm:order-last max-sm:w-full`} data-testid="template-full-hint">{phone ? PHONE_HINT : KEYS_LINE}</span>
               <button type="button" className={GHOST} disabled={i >= n - 1} onClick={() => onMove(i + 1)} aria-label={i < n - 1 ? `Next: slide ${i + 2}, ${title(i + 1)}` : 'Next'} data-testid="template-full-next">{i < n - 1 ? title(i + 1) : 'Next'} ›</button>
             </div>
           </div>
