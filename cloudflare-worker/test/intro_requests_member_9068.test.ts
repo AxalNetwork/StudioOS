@@ -19,6 +19,9 @@ function fixture() {
       (${ME},'9068-me@example.test','Synthetic founder','founder',1),
       (${OTHER},'9068-other@example.test','Synthetic investor','investor',1),
       (${OPERATOR},'9068-op@example.test','Synthetic operator','admin',1);
+    -- D9067: readiness decisions require the named reviewer entitlement.
+    INSERT INTO network_intro_staff_grants(uid,user_id,kind,granted_by,reason) VALUES
+      ('g9068-rev',${OPERATOR},'reviewer',${OPERATOR},'Synthetic readiness reviewer');
     INSERT INTO network_directory_sources(uid,name,url) VALUES ('src-9068','Synthetic source','https://directory.example.test');
     INSERT INTO network_directory_entries(uid,kind,source_uid,source_external_id,display_name,publication_status,observed_at) VALUES
       ('p-one','person','src-9068','r1','Person One Example','published','2026-11-01 00:00:00'),
