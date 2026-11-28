@@ -760,8 +760,19 @@ export function filterItemsByTier(items /* , user */) {
  * component that draws it rather than by the page container, and the carve-out
  * has nothing left to compensate for.
  */
+/** The Geographies list, reached from Markets (D8821). */
+const RESEARCH_GEOGRAPHIES = '/research/geographies';
+
 function workspaceRoutes(role) {
-  return [...bucketsFor(role).map((b) => b.prefix), ...allZoneRoutes(role)];
+  const buckets = bucketsFor(role);
+  return [
+    ...buckets.map((b) => b.prefix),
+    ...allZoneRoutes(role),
+    // D8821 (#8821): Geographies opens inside Markets and is no longer a zone of
+    // its own, but it is still a page the Research shell draws. Without this it
+    // falls out of every list here and is centred and padded twice.
+    ...(buckets.some((b) => b.prefix === '/research') ? [RESEARCH_GEOGRAPHIES] : []),
+  ];
 }
 
 /**

@@ -9,6 +9,15 @@
  * yet" is a recorded zero. The canvas's progress bar is the share of key
  * questions answered, which is not stored, so no bar is drawn.
  *
+ * STARTED FROM A MARKET (D7729, canvas D7703-p2 RST-02). New market research
+ * may carry the market it started from (`newFromSearch`). The form then says
+ * so in one block, "Started from", with the Markets filters labelled as where
+ * listed companies are based, and Create saves the project and its study in
+ * one request (`researchStudiesApi.createWithStudy`, `POST …/with-study`,
+ * D7719): a failure creates nothing and keeps what was typed. Without an
+ * origin, including the form inside Add to research, it calls
+ * `researchProjectsApi.create` exactly as before.
+ *
  * ARCHIVED projects sit under their own tab. Restore is not destructive and
  * runs on press; archiving happens in the project, through Scope → Review →
  * Result.
@@ -18,8 +27,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Pill } from '../../ui';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { researchProjectsApi } from '../../lib/api/researchProjects.js';
+import { researchStudiesApi } from '../../lib/api/researchStudies.js';
+import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { shortDate } from './researchHome.js';
-import { LIMITS, draftBody, draftErrors, newFromSearch, projectList } from './researchProjects.js';
+import { LIMITS, draftBody, draftErrors, newFromSearch, originBody, projectList } from './researchProjects.js';
+import { newRequestId } from './study/studyModel.js';
+import { OriginLines } from './study/StudyParts.jsx';
 
 const PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-lg bg-violet-700 px-4 text-[13px] font-bold text-white hover:bg-violet-800 disabled:opacity-50 sm:min-h-[36px] dark:bg-violet-600 dark:hover:bg-violet-700';
 const SECONDARY = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-ink hover:bg-axal-ground disabled:opacity-50 sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
@@ -55,12 +68,41 @@ function Field({ id, label, hint, error, children }) {
   );
 }
 
-/** The New research form: the question first; the title defaults to it. */
-export function NewResearchForm({ initialQuestion = '', onCreated, onCancel }) {
+/** RST-02: the market this form started from. The name is read from the market directory; the rest came with the link. */
+function StartedFrom({ origin }) {
+  const [name, setName] = useState({ status: 'loading', value: null });
+  useEffect(() => {
+    let live = true;
+    researchMarketsApi.get(origin.market).then(
+      (res) => { if (live) setName({ status: 'ok', value: res?.item?.name || null }); },
+      () => { if (live) setName({ status: 'failed', value: null }); },
+    );
+    return () => { live = false; };
+  }, [origin.market]);
+  const market = name.status === 'ok' && name.value ? name.value
+    : name.status === 'loading' ? origin.market : `${origin.market} (its name could not be read)`;
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="new-research-origin">
+      <span className="text-[11px] font-extrabold uppercase tracking-wide text-violet-800 dark:text-violet-300">Started from</span>
+      <OriginLines market={market} sector={origin.sector ? { state: 'tracked', name: origin.sector } : { state: 'none' }}
+        filters={{ country: origin.country, fresh: origin.fresh, src: origin.src }} />
+      <span className="text-[12px] text-axal-muted dark:text-gray-400">These filters say where listed companies are based. Customer geography is chosen on Scope.</span>
+    </div>
+  );
+}
+
+/**
+ * The New research form: the question first; the title defaults to it. With
+ * `origin` (D7729) it carries the market and creates the project and its study
+ * together, or nothing.
+ */
+export function NewResearchForm({ initialQuestion = '', origin = null, onCreated, onCancel }) {
   const [draft, setDraft] = useState({ question: initialQuestion, title: '', objective: '', scope: '', exclusions: '' });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState(null);
+  // One request id per form: a second press after a lost answer is a repeat, never a second project.
+  const requestId = useRef(null);
   const set = (name) => (e) => setDraft((d) => ({ ...d, [name]: e.target.value }));
   const submit = async (e) => {
     e?.preventDefault?.();
@@ -70,10 +112,20 @@ export function NewResearchForm({ initialQuestion = '', onCreated, onCancel }) {
     setBusy(true);
     setFailure(null);
     try {
-      const res = await researchProjectsApi.create(draftBody(draft, { creating: true }));
-      onCreated?.(res?.item);
+      if (origin) {
+        if (!requestId.current) requestId.current = newRequestId();
+        const res = await researchStudiesApi.createWithStudy({
+          project: draftBody(draft, { creating: true }), origin: originBody(origin), request_id: requestId.current,
+        });
+        onCreated?.(res?.project, { study: true });
+      } else {
+        const res = await researchProjectsApi.create(draftBody(draft, { creating: true }));
+        onCreated?.(res?.item);
+      }
     } catch (err) {
-      setFailure(err?.message || 'The project could not be created.');
+      setFailure(origin
+        ? { lead: 'Nothing was created.', text: `${err?.message || 'The project and its study could not be saved together.'} What you typed is kept.` }
+        : { lead: null, text: `${err?.message || 'The project could not be created.'} Nothing was created.` });
     } finally {
       setBusy(false);
     }
@@ -96,10 +148,17 @@ export function NewResearchForm({ initialQuestion = '', onCreated, onCancel }) {
         {area('scope', 2, 'Scope', 'optional')}
         {area('exclusions', 2, 'Excluded', 'optional')}
       </div>
-      {failure ? <p role="alert" className="text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="status-project-create-failed">{failure} Nothing was created.</p> : null}
+      {origin ? <StartedFrom origin={origin} /> : null}
+      {failure ? (
+        <p role="alert" className="text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="status-project-create-failed">
+          {failure.lead ? <b>{failure.lead} </b> : null}{failure.text}
+        </p>
+      ) : null}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel ? <button type="button" className={SECONDARY} onClick={onCancel} disabled={busy}>Cancel</button> : null}
-        <button type="submit" className={PRIMARY} disabled={busy} data-testid="button-create-project">{busy ? 'Creating…' : 'Create project'}</button>
+        <button type="submit" className={PRIMARY} disabled={busy} data-testid="button-create-project">
+          {busy ? 'Creating…' : origin ? (failure ? 'Create again' : 'Create project and study') : 'Create project'}
+        </button>
       </div>
     </form>
   );
@@ -138,8 +197,8 @@ export default function MyResearch({ role = 'founder' }) {
   const [read, retry] = useProjectRead(() => researchProjectsApi.list(tab), tab);
   const list = projectList(read);
 
-  const created = (item) => {
-    if (item?.uid) navigate(`/research/projects/${encodeURIComponent(item.uid)}`);
+  const created = (item, { study = false } = {}) => {
+    if (item?.uid) navigate(`/research/projects/${encodeURIComponent(item.uid)}${study ? '/study/scope' : ''}`);
   };
   const restore = async (card) => {
     setRestoring(card.uid);
@@ -161,7 +220,7 @@ export default function MyResearch({ role = 'founder' }) {
       primary={creating ? null : { label: 'New research', onClick: () => setCreating(true), testid: 'button-new-research-project' }}>
       <div className="flex flex-col gap-4" data-testid="my-research">
         <p className="text-[13.5px] text-axal-muted dark:text-gray-400">Each project keeps one question together with its evidence and your Ask history.</p>
-        {creating ? <NewResearchForm initialQuestion={wanted.question} onCreated={created} onCancel={() => setCreating(false)} /> : null}
+        {creating ? <NewResearchForm initialQuestion={wanted.question} origin={wanted.origin} onCreated={created} onCancel={() => setCreating(false)} /> : null}
         <div role="tablist" aria-label="Project status" className="flex gap-2">
           {tabs.map(([key, label]) => (
             <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} data-testid={`tab-projects-${key}`}

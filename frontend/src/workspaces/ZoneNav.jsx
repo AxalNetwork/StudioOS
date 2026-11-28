@@ -1,7 +1,7 @@
 import React, { useId, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ACCENT, zonePath as shellZonePath, zoneForPath } from './shellConfig';
-import { LensNavLink } from './lens';
+import { LensLink, LensNavLink } from './lens';
 import { projectSearch } from '../pages/cycles/founderToolNavigation';
 import ZoneNavMore from './ZoneNavMore';
 
@@ -137,14 +137,17 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
   const rowClass = `flex gap-1.5 ${scroll ? 'flex-nowrap overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-wrap lg:overflow-visible lg:pb-0' : 'flex-wrap'}`;
   const pills = items.map((zone) => {
         const on = zone.root ? active === null : zone.slug === active?.slug;
+        // A nested view can belong to a zone whose URL is not its path prefix.
+        const namedParent = on && activeSlug && !location.pathname.startsWith(zonePath(bucket, zone));
+        const ZoneLink = namedParent ? LensLink : LensNavLink;
         return (
-          <LensNavLink
+          <ZoneLink
             key={zone.slug}
             to={`${zonePath(bucket, zone)}${search}`}
             // D4817 part 3: the root item matches its own address only. Without
             // `end`, NavLink also matched it under every route of the bucket and
             // set aria-current="page" on Overview beside the current item.
-            end={Boolean(zone.root)}
+            {...(namedParent ? {} : { end: Boolean(zone.root) })}
             aria-current={on ? 'page' : undefined}
             data-testid={`link-zone-${zone.slug}`}
             // HOVER AND FOCUS (D403). The colours used to be inline `color` /
@@ -175,7 +178,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             }}
           >
             {zone.label}
-          </LensNavLink>
+          </ZoneLink>
         );
       });
   if (more.size) {

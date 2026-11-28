@@ -163,7 +163,11 @@ test('App renders the lens through its one <Routes>, inside the provider', () =>
 
 test('the shared zone row is the lens switcher', () => {
   const nav = read('frontend/src/workspaces/ZoneNav.jsx');
-  assert.match(nav, /^import \{ LensNavLink \} from '\.\/lens';$/m, 'ZoneNav\'s pill is not the lens link');
+  assert.match(nav, /^import \{ LensLink, LensNavLink \} from '\.\/lens';$/m, 'ZoneNav\'s pill is not the lens link');
+  // D8821 (#8821): the pill is LensNavLink, or LensLink for a nested view whose
+  // zone is not its path prefix (Geographies inside Markets). Both carry the lens click.
+  assert.match(nav, /const ZoneLink = namedParent \? LensLink : LensNavLink;/, 'the pill is not one of the two lens links');
+  assert.match(nav, /<ZoneLink\b/);
   assert.match(nav, /<LensNavLink\b/);
-  assert.doesNotMatch(nav, /<NavLink\b/, 'ZoneNav renders a pill that only navigates');
+  assert.doesNotMatch(nav, /<(?:NavLink|Link)\b/, 'ZoneNav renders a pill that only navigates');
 });

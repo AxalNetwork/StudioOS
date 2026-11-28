@@ -74,9 +74,8 @@ test('investor Research zones match Pages · Investor Research (IR1–IR5)', () 
     ['ask', 'FEED'],
     ['diligence', 'COLLECTION'],
     ['benchmarking', 'ANALYTICS'],
+    // D8821 (#8821): Geographies opens inside Markets; it is no longer a pill of its own (D546).
     ['markets', 'ANALYTICS'],
-    // D546 (#1080) — the Geographies pill, beside Markets in every licence.
-    ['geographies', 'ANALYTICS'],
     ['library', 'COLLECTION'],
   ]);
 });

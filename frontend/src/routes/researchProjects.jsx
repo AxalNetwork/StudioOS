@@ -16,6 +16,10 @@ const ResearchProject = lazy(() => import('../pages/research/ResearchProject'));
  * licences is a shell change, not a store change. The research role is the
  * one `App.jsx` gives the other `/research/*` pages: an admin browses as a
  * founder.
+ *
+ * D7729 (#7729): the Study tab is one route with an optional `:section`, so
+ * `/study` is the study home and each section (`study/sections/`) needs no
+ * route line of its own.
  */
 export default function researchProjectsRoutes({ guard, labRoles, effectiveRole }) {
   const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
@@ -27,6 +31,7 @@ export default function researchProjectsRoutes({ guard, labRoles, effectiveRole 
       <Route path="/research/projects/:uid/findings" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="findings" />)} />
       <Route path="/research/projects/:uid/comparisons" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="comparisons" />)} />
       <Route path="/research/projects/:uid/brief" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="brief" />)} />
+      <Route path="/research/projects/:uid/study/:section?" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="study" />)} />
     </>
   );
 }

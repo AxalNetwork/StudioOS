@@ -20,6 +20,11 @@
  *
  * Part 4 (D5157-p4): the Brief tab reads and saves the member's eight sections.
  * Key questions are not stored, so no "2 of 5" is drawn.
+ *
+ * D7729 (#7729, canvas D7703-p2 RST-01): the sixth tab, Study
+ * (`/research/projects/:uid/study` and `/study/:section`), mounted once here as
+ * `study/StudyFrame.jsx`, which reads the market study itself (D7719) and
+ * loads its sections from `study/sections/`.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -37,6 +42,7 @@ import { researchProjectFindingsApi } from '../../lib/api/researchProjectFinding
 import { findingsBadge } from './researchFindings.js';
 import { ProjectComparisons } from './ProjectComparisons.jsx';
 import ProjectBrief, { useBriefDraft } from './ProjectBrief.jsx';
+import StudyFrame from './study/StudyFrame.jsx';
 import ResearchContext from './ResearchContext.jsx';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { researchProjectBriefsApi } from '../../lib/api/researchProjectBriefs.js';
@@ -428,6 +434,7 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
             {tab === 'findings' ? <ProjectFindings projectUid={item.uid} read={findings} retry={retryFindings} archived={archived} onChanged={reload} /> : null}
             {tab === 'comparisons' ? <ProjectComparisons projectUid={item.uid} read={compared} retry={retryCompared} archived={archived} onChanged={reload} /> : null}
             {tab === 'brief' ? <ProjectBrief read={brief} retry={retryBrief} archived={archived} draft={briefDraft} /> : null}
+            {tab === 'study' ? <StudyFrame project={item} archived={archived} /> : null}
             {tab === 'overview' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
             {archiving ? <ArchiveDialog data={data} onClose={() => setArchiving(false)} onArchived={() => navigate('/research/projects')} /> : null}
           </>

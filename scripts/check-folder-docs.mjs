@@ -210,6 +210,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
   ['frontend/src/pages/relationships',         'relationship intelligence, introduction records and consent-based offers'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
+  ['frontend/src/pages/research/study',       'the market study: the Study tab’s frame, its section loader and its sections (D7729)'],
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
   ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],

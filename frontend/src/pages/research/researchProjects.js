@@ -9,6 +9,7 @@
  * the brief) reads Not recorded with its reason, never a zero or a sample.
  */
 import { NOT_RECORDED, answerabilityOf, indexStateOf } from './researchStates.js';
+import { readMarketQuery } from './marketDirectoryQuery.js';
 
 /** The Worker's CHECK limits, mirrored for the form's own messages. */
 export const LIMITS = { title: 160, question: 1000, objective: 2000, scope: 1000, exclusions: 1000 };
@@ -20,13 +21,18 @@ export const PROJECT_STATUS = {
 };
 export const statusOf = (p) => PROJECT_STATUS[p?.status] || { label: NOT_RECORDED, tone: 'neutral' };
 
-/** The workspace's tabs. Overview, Evidence, (part 2) Findings and (part 3) Comparisons have a store behind them. */
+/**
+ * The workspace's tabs. Overview, Evidence, (part 2) Findings and (part 3)
+ * Comparisons have a store behind them; Study (D7729) is the market study's
+ * frame, `study/StudyFrame.jsx`, on its own store (D7719).
+ */
 export const PROJECT_TABS = [
   { slug: 'overview', label: 'Overview', built: true },
   { slug: 'evidence', label: 'Evidence', built: true },
   { slug: 'findings', label: 'Findings', built: true },
   { slug: 'comparisons', label: 'Comparisons', built: true },
   { slug: 'brief', label: 'Brief', built: true },
+  { slug: 'study', label: 'Study', built: true },
 ];
 
 export const NOT_STORED = {
@@ -147,10 +153,42 @@ export function draftBody(draft, { creating = false } = {}) {
   return body;
 }
 
-/** `?new=1&question=…` opens the create form, prefilled. */
+/** A tracked sector's name as carried in a link: plain text, at most 120 characters, or none. */
+const SECTOR_RE = /^[\p{L}\p{N}][\p{L}\p{N} &/.,'()+-]{0,119}$/u;
+
+/**
+ * `?new=1&question=…` opens the create form, prefilled. D7729: New market
+ * research may add the market it started from (`marketDirectoryExport.js`):
+ * `market`, `sector`, `country` (repeatable), `fresh` and `src`. Each is read
+ * back through the checks `readMarketQuery` applies (a slug, two-letter codes,
+ * at most 20, the Worker's freshness and source lists) and anything else is
+ * dropped; no valid `market` means no origin. The Worker checks it all again
+ * and reads the tracked sector itself: `sector` is shown, never sent.
+ */
 export function newFromSearch(search) {
   const params = new URLSearchParams(search || '');
-  return { open: params.get('new') === '1', question: (params.get('question') || '').slice(0, LIMITS.question) };
+  const out = { open: params.get('new') === '1', question: (params.get('question') || '').slice(0, LIMITS.question), origin: null };
+  const asked = new URLSearchParams();
+  asked.set('open', params.get('market') || '');
+  for (const c of params.getAll('country')) asked.append('country', c);
+  for (const k of ['fresh', 'src']) if (params.get(k)) asked.set(k, params.get(k));
+  const view = readMarketQuery(asked);
+  if (!view.open || view.open.length > 64) return out;
+  const sector = String(params.get('sector') || '').trim();
+  out.origin = {
+    market: view.open,
+    sector: SECTOR_RE.test(sector) ? sector : null,
+    country: view.country,
+    fresh: view.fresh || null,
+    src: view.src || null,
+  };
+  return out;
+}
+
+/** The origin as `POST /with-study` takes it: exactly the five keys the Worker accepts (no sector). */
+export function originBody(origin) {
+  if (!origin?.market) return null;
+  return { market_slug: origin.market, country: origin.country || [], fresh: origin.fresh || null, src: origin.src || null };
 }
 
 /** What archiving reaches, said before it happens (Scope → Review → Result). */
