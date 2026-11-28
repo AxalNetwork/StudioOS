@@ -26,7 +26,23 @@ This queues a release of the dispatched `main` SHA. Follow the Actions run for t
 
 ### 1.1 Admission before production writes
 
-For a push or dispatch, the admission job verifies the six required jobs from their expected Actions workflows on the exact landed `main` SHA. A missing or pending result can wait up to 95 minutes, outside the shared production release lock. Failure, an untrusted result, or a newer `main` prevents production writes. A completed CI push can use the merge-queue result through CI's exact-SHA reuse logic. A different merge-group SHA provides no proof for this candidate.
+For a push or dispatch, the admission job verifies the six required jobs from their expected Actions workflows on the landed `main` SHA. A missing or pending result can wait up to 95 minutes, outside the shared production release lock. Failure or an untrusted result prevents production writes.
+
+The candidate need not be the exact `main` tip ([D8932](../architecture/decisions/D8932.md), changing D5501). Both admission checks also accept an ancestor of the tip, provided it:
+
+- is at most 30 commits and 6 hours behind the tip;
+- is not older than the version production serves, the `sha` from `GET https://axal.vc/api/public/version`.
+
+The candidate is refused in these cases:
+
+| Case | Status |
+| --- | --- |
+| Further behind the tip than the bound | `superseded` |
+| Diverged from `main`, or ahead of it | `untrusted` |
+| Older than the deployed version | `stale` |
+| Deployed version unreadable (non-tip candidate) | `unreadable` |
+
+The initial job skips a `superseded` or `stale` candidate; under the lock, every refusal stops the release. The evidence records `main`, `behind_by` and `deployed`. A completed CI push can use the merge-queue result through CI's exact-SHA reuse logic. A different merge-group SHA provides no proof for this candidate.
 
 Under the lock, the release job revalidates eligibility, builds the SPA from the pinned checkout, verifies the production queue inventory, and measures the production-shaped dry-run bundle. It records the migration plan and previous Worker deployment and rechecks `main` immediately before migrations. A missing DLQ must be provisioned by the Cloudflare account owner. An inconclusive queue lookup or startup profile blocks the release. See [D5535](../architecture/decisions/D5535.md) and [D5532](../architecture/decisions/D5532.md).
 
