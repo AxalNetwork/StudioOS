@@ -770,7 +770,8 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
     <div data-testid="market-directory" className="space-y-4">
       {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(scoped, opsHandlers)} /> : null}
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Markets</h1>
+        {/* #9038: the shell (WorkspaceShell) draws the page h1; this is the section heading under it. */}
+        <h2 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Markets</h2>
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted">
           The markets of the Axal sector taxonomy, the listed companies StudioOS knows, and six indexes for each tracked sector.
         </p>

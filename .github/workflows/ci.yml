@@ -226,10 +226,12 @@ jobs:
       actions: read
       id-token: write
     # Exact local preparation pin; publication and activation remain held under #5719.
-    # D8335: the pin must be a commit on main. 3d41671dfe is #8658's merge commit and carries the reviewed D8626
-    # planner (blob 40b0b0fa) byte for byte. The previous pin, cb63d3997d (#8234, blob 4f7dfaca), submitted on main
-    # pushes only. The first pin, 19927c89, became unreachable when its branch was deleted.
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
+    # D8335: the pin must be a commit on main. #9022: 12fd3e4e36 is #8719's squash commit; it carries D8693's
+    # capacity-planner.mjs (blob 5d46f27b), which on a push refuses an artifact that is not the equal-weight plan
+    # (planner_plan_not_equal_weight), and the same D8626 workflow (blob 40b0b0fa). The previous pin, 3d41671dfe
+    # (#8658), read the push artifact unchecked; cb63d3997d (#8234, blob 4f7dfaca) before it submitted on main pushes
+    # only. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@12fd3e4e36953c7d93cb8e069d8618547f413d8b
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
@@ -273,8 +275,8 @@ jobs:
         run: node scripts/ci/capacity-submission.mjs
 
   # D8626: the trusted planner, at the same reviewed pin as `capacity-submit` (D8335: a main commit). Its
-  # `accepted` output is the only thing that lets a Worker part skip its tests. The planner revision pinned today
-  # submits on main pushes only, so until a later PR moves both pins this job ends with `accepted` unset.
+  # `accepted` output is the only thing that lets a Worker part skip its tests. The pinned planner (D8626, #8697 on)
+  # also submits for a queue candidate; while vars.CI_CAPACITY_QUEUE_ROUTING is off this job never starts.
   capacity-route:
     name: capacity route
     needs: route
@@ -283,7 +285,7 @@ jobs:
       contents: read
       actions: read
       id-token: write
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@12fd3e4e36953c7d93cb8e069d8618547f413d8b
     with:
       submission: ${{ needs.route.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
@@ -995,7 +997,8 @@ jobs:
     name: editor visual regression and axe
     if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # #9038: 30 -> 45. The job ran about 18 minutes on main before the three frame and reload checks (#9038) were added.
+    timeout-minutes: 45
     container:
       image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
       options: --user 1001
@@ -1058,6 +1061,38 @@ jobs:
       - name: eSign signer journey (real router on SQLite, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/esign_signer_journey.spec.js --retries=0 --trace off
+      # #9037 (D9037): the axe gate on the ten top public routes, signed out, at 1440 and 390 in light and dark: no serious
+      # or critical WCAG 2.0/2.1 A or AA violation, no exceptions. The local Worker serves the docs/ built above; a route
+      # that renders Not Found fails. No preview, no account.
+      - name: Public routes axe gate (local Worker, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/axe-top-routes.spec.js --retries=0 --trace off
+      # #9038 (D9038): every workspace route of four licences rendered from the docs/ built above with /api/* stubbed:
+      # no crash, one h1, one rail, the zone asked for, the shell padding, no sideways scroll. PW_CHROMIUM_PATH is the
+      # pinned browser; with CI set a browser that cannot launch fails the step, it never reports SKIPPED.
+      - name: Workspace frames (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs
+      # #9038 (D9038): the same routes with every read answered 500: each states the failure, no skeleton left up and no
+      # claim of "no records".
+      - name: Workspace frames with failed reads (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs --fail-reads
+      # #9038 (D9038): a storm of service-worker controllerchange events reloads the page a bounded number of times.
+      - name: Service-worker reload loop is bounded (built SPA)
+        run: node scripts/check-reload-loop.mjs
+      # #9039: Help guides into the Introductions desk (#4639). The local Worker serves the docs/ built above;
+      # every /api/* answer is the spec's own synthetic fixture and the service worker is blocked. No preview, no account.
+      - name: Help introductions journey (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/help_intro_journey_4639.spec.js --retries=0 --trace off
+      # #9039: each Help workflow guide to its task, role filtering and the phone Build guide (#4639). Same pattern.
+      - name: Help workflow guides (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/help_workflows_4639.spec.js --retries=0 --trace off
+      # #9039: the studio board's keyboard entry and creation recovery at 1440 and 390 (#4705). The spec starts
+      # its own Vite server for tests/e2e/pipeline_4705.html, which imports the real PipelinePage with synthetic answers.
+      - name: Pipeline keyboard and phone (local Vite fixture, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/pipeline_accessibility_4705.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

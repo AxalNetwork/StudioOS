@@ -50,7 +50,7 @@
       "gaps": []
     },
     "frontend": {
-      "checks": ["ci.yml#frontend", "ci.yml#og-tags", "ci.yml#visual", "cloudflare-worker-deploy.yml#spa-smoke", "deck-visual.yml#visual", "form-lightbox-contracts.yml#contracts", "github-alerts.yml#future-clock-part", "pr-preview.yml#login-e2e", "record-page-contracts.yml#contracts", "suite:lint:undef", "suite:node scripts/check-dark-mode.mjs", "suite:test:frontend", "suite:test:types:frontend"],
+      "checks": ["ci.yml#frontend", "ci.yml#og-tags", "ci.yml#visual", "cloudflare-worker-deploy.yml#spa-smoke", "deck-visual.yml#visual", "form-lightbox-contracts.yml#contracts", "github-alerts.yml#future-clock-part", "guard:check-test-collection", "pr-preview.yml#login-e2e", "record-page-contracts.yml#contracts", "suite:lint:undef", "suite:node scripts/check-dark-mode.mjs", "suite:test:frontend", "suite:test:types:frontend"],
       "gaps": []
     },
     "infra": {
@@ -66,7 +66,7 @@
       "gaps": []
     },
     "scripts": {
-      "checks": ["agent-provenance.yml#provenance", "claude-review.yml#selftest", "ownership.yml#ownership", "release-alpha-rename.yml#rename", "release-draft.yml#draft", "release-rehearsal.yml#release-window", "suite:test:guards", "suite:test:retention"],
+      "checks": ["agent-provenance.yml#provenance", "claude-review.yml#selftest", "guard:check-test-collection", "ownership.yml#ownership", "release-alpha-rename.yml#rename", "release-draft.yml#draft", "release-rehearsal.yml#release-window", "suite:test:guards", "suite:test:retention"],
       "gaps": []
     },
     "workspace-engine": {

@@ -5,7 +5,7 @@
  *
  *  1. The record: read set first, the union listed, paid plans only, Social,
  *     switched on per company, its own managed key (never HQ's X_CLIENT_ID),
- *     no feed claimed before part 3.
+ *     only the feeds part 3a built (D8815) claimed.
  *  2. Not ready without the founders app (HQ's posting app alone is not it).
  *  3. Connect end to end asks for the read set only and records what X granted.
  *  4. A read sign-in that comes back with a write scope is revoked and refused.
@@ -127,7 +127,7 @@ async function withFetch<R>(t: T, fn: () => Promise<R>): Promise<R> {
   try { return await fn(); } finally { globalThis.fetch = real; }
 }
 
-test('1. the record: read first, union listed, paid plans only, Social, per company, its own key, no feed yet', () => {
+test('1. the record: read first, union listed, paid plans only, Social, per company, its own key, the built feeds only', () => {
   assert.deepEqual([...X_READ_SCOPES], ['tweet.read', 'users.read', 'offline.access']);
   assert.deepEqual([...X_PUBLISH_SCOPES], [...X_READ_SCOPES, 'tweet.write', 'media.write']);
   const d = getDescriptor(KEY)!;
@@ -139,8 +139,8 @@ test('1. the record: read first, union listed, paid plans only, Social, per comp
   assert.deepEqual(CONNECTOR_METADATA[KEY].sends, [], 'publishing is never a sends row');
   assert.equal(writesProjectData(KEY), true);
   assert.deepEqual(PROVIDER_ENV_VARS.x, { id: 'X_FOUNDERS_CLIENT_ID', secret: 'X_FOUNDERS_CLIENT_SECRET' }, 'owner decision 2B: never HQ\'s app');
-  // Nothing lands until part 3: the registry, the feed list and the page agree.
-  assert.deepEqual(X_BUILT_FEEDS, []);
+  // D8815 (part 3a) lands the two facts; the channel proposal waits. The registry, the feed list and the page agree.
+  assert.deepEqual(X_BUILT_FEEDS.map((f) => f.key), ['audience', 'posts']);
   assert.equal(X_FEED_LIST.length, 3);
   assert.deepEqual(CONNECTOR_METADATA[KEY].pulls, X_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })));
   assert.deepEqual(CONNECTOR_METADATA[KEY].feeds, [...X_FEEDS]);
