@@ -2763,6 +2763,20 @@ Seven board sets from the owner's Claude Design canvas "Axal VC – platform des
 
 Every person, venture, agent and figure is bracketed sample content, except names the briefs give. Each file is the canvas export as published; no value was edited. None is built yet.
 
+## Landed 2026-11-27 — Access and orientation: seven canvases from the 25 November role audit (#8676, #8677, #8678, #8682, #8683, #8684, #8687)
+
+Seven board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-27 from the briefs filed after the 25 November role audit. Each set is a page plus its boards. They were landed at the owner's request before the briefs' questions were answered, and each open question is drawn as option A.
+
+- **`Sign In Email Verification Readiness`** (EML00 onward, 18 frames): the email-link form checking readiness, ready to send, needing the visitor, and verification unavailable with retry and another method, sending once (#8687, D8687).
+- **`Registration Role Confirmation`** (RGR00 onward, 32 frames): generic registration confirms the intended role before creating an account, and the LP sign-in to registration journey keeps its LP context (#8676, D8676).
+- **`Account Menu Narrow Screens`** (AMN00 onward, 25 frames): one narrow header for every role, with the account menu fully reachable at 390 px and focus returned on close (#8682, D8682).
+- **`Investor LP and Own Fund Navigation`** (LPV00 onward, 22 frames): the investor's LP relationship with Axal VC Fund and the fund they manage, told apart in the sidebar, collapsed rail, phone menu and page titles (#8683, D8683).
+- **`Operating Partner First Delivery`** (OPO00 onward, 21 frames): a new operating partner's route from offer to pipeline, proposal and first engagement (#8684, D8684).
+- **`HQ Team Inline Instructions`** (HTM00 onward, 34 frames): HQ Team's Move, Retry invitation, Support and Unbind instructions inside the actions they explain, with Unbind reviewed first (#8678, D8678).
+- **`Partial Failure Recovery`** (PFR00 onward, 28 frames): one recovery path for a part that failed to load across Practice, Expertise and Cohorts (#8677, D8677).
+
+Cast: founder [Maya Ruiz], Super Admin [Iris Chen], Admin [Tom Becker], investor [Lena Sato], advisor [Dr. Jonas Weber] and operating partner [Sara Holm]. Every person, venture and figure is bracketed sample content. Each file is the canvas export as published; no value was edited. None is built yet.
+
 ## Landed 2026-11-26 — Learning: nine canvases from the 25 November production audit (#8662 to #8670)
 
 Nine board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-26 from the Learning briefs that followed the 25 November browser audit of axal.vc, each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A. Release work stays with #8288; the umbrella is #3726.

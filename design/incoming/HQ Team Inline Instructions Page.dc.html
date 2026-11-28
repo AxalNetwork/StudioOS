@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ Team Inline Instructions · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* HTM (#8678): boards use inline styles copied from shq.js (HQ shell) */
+.htm-be{vertical-align:middle}
+.htm-step{vertical-align:middle}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "HTM02", "options": ["HTM00", "HTM01", "HTM01B", "HTM01C", "HTM02", "HTM03", "HTM03B", "HTM03C", "HTM03D", "HTM04", "HTM04B", "HTM05", "HTM05B", "HTM05C", "HTM06", "HTM06B", "HTM06C", "HTM07", "HTM07B", "HTM07C", "HTM07D", "HTM10", "HTM10B", "HTM10C", "HTM10D", "HTM10E", "HTM10F", "HTM10G", "HTM10H", "HTM10J", "HTM10K", "HTM12", "HTM20", "HTMH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'HTM02';
+    const dark = /^HTM12/.test(B);
+    /* ---------- tokens and helpers: copied from the landed HQ AI Agents component (D4137) via sar.js ---------- */
+    const SG = "font-family:'Space Grotesk',system-ui,sans-serif";
+    const M = "font-family:'Roboto Mono',ui-monospace,monospace";
+    const V = dark ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', body: '#d1d5db', mut: '#9ca3af', faint: '#6b7280', line: '#374151', line2: '#4b5563', vio: '#a78bfa', vbtn: '#7c3aed', vdeep: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.42)', pos: '#34d399', posT: 'rgba(52,211,153,.13)', neg: '#f87171', negT: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.45)', ambF: 'rgba(252,211,77,.13)', ambE: 'rgba(252,211,77,.45)', ambT: '#fcd34d', sk: '#1f2937', hq: '#be123c', bar: '#881337' } : { bg: '#f4f3f7', card: '#ffffff', raised: '#faf9fc', ink: '#18181b', body: '#3f3a47', mut: '#6b6577', faint: '#a1a1aa', line: '#ececf1', line2: '#e2dfe8', vio: '#7c3aed', vbtn: '#7c3aed', vdeep: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posT: '#ecfdf5', neg: '#b91c1c', negT: '#fef2f2', negE: '#fecaca', ambF: '#fef3c7', ambE: '#fcd34d', ambT: '#92400e', sk: '#ececf1', hq: '#881337', bar: '#881337' };
+    const VARS = Object.keys(V).map(k => '--' + k + ':' + V[k]).join(';');
+    const SV = (d, s) => `<svg width="${s || 16}" height="${s || 16}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;display:block">${d}</svg>`;
+    const ICO = { search: SV('<circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path>'), bell: SV('<path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14a1.5 1.5 0 0 0 3 0"></path>'), x: SV('<path d="M4 4l8 8M12 4l-8 8"></path>'), info: SV('<circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.2v3.6M8 5.2v.1"></path>', 14), globe: SV('<circle cx="8" cy="8" r="5.8"></circle><path d="M2.2 8h11.6M8 2.2c1.8 1.7 2.6 3.6 2.6 5.8S9.8 12.1 8 13.8C6.2 12.1 5.4 10.2 5.4 8S6.2 3.9 8 2.2z"></path>', 15), chev: SV('<path d="M6 3.5L10.5 8 6 12.5"></path>', 14), refresh: SV('<path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3"></path>', 14), speak: SV('<path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"></path><path d="M11 5.5a3.5 3.5 0 0 1 0 5"></path>', 13) };
+    const EB = (t, c) => `<span style="${M};font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:${c || 'var(--mut)'}">${t}</span>`;
+    const BTN = `display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 14px;border-radius:9px;${SG};font-size:13px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box;`;
+    const bP = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--vbtn);background:var(--vbtn);color:#fff;${x || ''}">${t}</button>`;
+    const bS = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--line2);background:var(--card);color:var(--ink);${x || ''}">${t}</button>`;
+    const bG = (t, x) => `<button type="button" style="${BTN}border:1px solid transparent;background:transparent;color:var(--body);${x || ''}">${t}</button>`;
+    const SM = 'min-height:32px;padding:0 11px;font-size:12.5px;';
+    const LNK = (t, x) => `<a href="#" style="color:var(--vio);font-weight:600;text-decoration:none;${x || ''}">${t}</a>`;
+    const SK = (w, h, x) => `<span aria-hidden="true" style="display:block;width:${typeof w === 'number' ? w + 'px' : w};height:${h}px;border-radius:5px;background:var(--sk);${x || ''}"></span>`;
+    const PILL = (t, k) => { const S = { pub: ['var(--posT)', 'var(--posT)', 'var(--pos)'], draft: ['var(--raised)', 'var(--line2)', 'var(--body)'], rev: ['var(--lav)', 'var(--lavE)', 'var(--vdeep)'], wait: ['var(--ambF)', 'var(--ambE)', 'var(--ambT)'], hid: ['transparent', 'var(--line2)', 'var(--mut)'], neg: ['var(--negT)', 'var(--negE)', 'var(--neg)'], hq: ['var(--hq)', 'var(--hq)', '#ffffff'] }[k || 'draft']; return `<span style="display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:1px 9px;border-radius:999px;background:${S[0]};border:1px solid ${S[1]};color:${S[2]};font-size:12px;font-weight:600;white-space:nowrap;box-sizing:border-box;line-height:1.3">${k === 'hq' ? '' : '<span aria-hidden="true" style="width:6px;height:6px;border-radius:999px;background:currentColor;display:block;flex:none"></span>'}${t}</span>`; };
+    const TAG = (t, x) => `<span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--line2);font-size:11.5px;color:var(--body);white-space:nowrap;box-sizing:border-box;${x || ''}">${t}</span>`;
+    const PAV = (ini, s) => `<span aria-hidden="true" style="width:${s || 24}px;height:${s || 24}px;flex:none;border-radius:999px;background:var(--raised);border:1px solid var(--line2);display:grid;place-items:center;font-size:${Math.round((s || 24) * 0.36)}px;font-weight:800;color:var(--body);box-sizing:border-box">${ini}</span>`;
+    const MONO = (t, x) => `<span style="${M};font-size:12.5px;color:var(--ink);${x || ''}">${t}</span>`;
+    const TBL = (cols, heads, rows, o) => { o = o || {}; return `<div role="table" aria-label="${o.al || 'Table'}" style="flex:none;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden"><div role="row" style="display:grid;grid-template-columns:${cols};gap:12px;align-items:center;padding:9px 14px;background:var(--raised);border-bottom:1px solid var(--line)">${heads.map(h => `<span role="columnheader" style="${M};font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">${h}</span>`).join('')}</div>${rows.map((r, j) => `<div role="row" style="display:grid;grid-template-columns:${cols};gap:12px;align-items:start;padding:${o.py || 10}px 14px;${j ? 'border-top:1px solid var(--line);' : ''}">${r.map(c => `<span role="cell" style="min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;line-height:1.5;color:var(--body)">${c}</span>`).join('')}</div>`).join('')}</div>`; };
+
+    /* ---------- annotations (not product copy) ---------- */
+    const BE = (t) => `<span class="htm-be" style="display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1.5px dashed ${dark ? '#a78bfa' : '#7c3aed'};color:${dark ? '#c4b5fd' : '#6d28d9'};background:transparent;${M};font-size:10.5px;font-weight:600;white-space:nowrap;line-height:1.6">◇ ${t}</span>`;
+    const OQ = (t) => `<span class="htm-be" style="display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1.5px solid var(--ambE);background:var(--ambF);color:var(--ambT);${M};font-size:10.5px;font-weight:600;white-space:nowrap;line-height:1.6">⚑ ${t}</span>`;
+    const STEP = (n) => `<span class="htm-step" aria-hidden="true" style="width:22px;height:22px;flex:none;border-radius:999px;background:#18181b;color:#fff;border:2px solid #fff;box-shadow:0 0 0 1px #18181b;display:inline-grid;place-items:center;${M};font-size:11px;font-weight:700">${n}</span>`;
+    const ANN = (t, x) => `<div class="htm-ann" aria-hidden="true" style="display:flex;align-items:flex-start;gap:7px;padding:7px 10px;border-radius:8px;border:1.5px dashed #a1a1aa;background:${dark ? '#0f172a' : '#fafafa'};color:${dark ? '#d1d5db' : '#3f3a47'};${M};font-size:11px;line-height:1.5;${x || ''}">${t}</div>`;
+    const SAY = (t, k) => ANN(`<span style="flex:none;margin-top:1px">${ICO.speak}</span><span><b>${k || 'Announced (polite)'}:</b> “${t}”</span>`);
+
+    /* ---------- Platform States chips (st.js glyphs, D5129) ---------- */
+    const SG12 = (d) => `<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12" style="flex:none;display:block">${d}</svg>`;
+    const GL = {
+      nr: SG12('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"></path>'),
+      un: SG12(`<path d="M6 1.6v6" stroke="${V.neg}" stroke-width="2.2"></path><circle cx="6" cy="10.2" r="1.2" fill="${V.neg}"></circle>`),
+      ok: SG12('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"></path>'),
+      tri: SG12('<path d="M6 1l5 9.5H1z" fill="currentColor"></path>'),
+      clock: SG12('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"></path>'),
+      off: SG12('<circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1.6"></circle>'),
+      spin: SG12('<path d="M6 1.5a4.5 4.5 0 1 1-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8"></path>')
+    };
+    const STC = SG + ';display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font-size:11.5px;font-weight:700;line-height:1.6;white-space:nowrap;box-sizing:border-box;';
+    const ST = {
+      nr: (t) => `<span style="${STC}color:var(--mut);background:transparent;border:1.5px dotted var(--line2)">${GL.nr}${t || 'Not recorded'}</span>`,
+      un: (t) => `<span style="${STC}color:var(--ink);background:var(--card);border:1.5px dashed var(--line2)">${GL.un}${t || 'Unavailable'}</span>`,
+      off: (t) => `<span style="${STC}color:var(--mut);background:transparent;border:1px solid var(--line2)">${GL.off}${t || 'Not switched on'}</span>`,
+      load: (t) => `<span style="${STC}color:var(--mut);background:var(--raised);border:1px solid var(--line)">${GL.spin}${t || 'Reading'}</span>`,
+      clear: (t) => `<span style="${STC}color:var(--pos);background:var(--posT);border:1px solid var(--posT)">${GL.ok}${t || 'All clear'}</span>`,
+      past: () => `<span style="${STC}color:var(--neg);background:var(--negT);border:1px solid var(--negE)">${GL.tri}Past SLA</span>`,
+      soon: () => `<span style="${STC}color:var(--ambT);background:var(--ambF);border:1px solid var(--ambE)">${GL.clock}Due soon</span>`,
+      ontime: () => `<span style="${STC}color:var(--body);background:var(--raised);border:1px solid var(--line2)">${GL.ok}On time</span>`
+    };
+
+    /* ---------- shell (HQ, as on main: sidebarConfig.js super_admin rows) ---------- */
+    const APPH = () => `<div style="height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line);box-sizing:border-box"><div style="display:flex;align-items:center;gap:9px;width:208px;flex:none"><span aria-hidden="true" style="width:26px;height:26px;border-radius:6px;background:var(--vbtn);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px">A</span><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span>${PILL('HQ', 'hq')}</div><div style="flex:1;max-width:440px;height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--bg);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:13px;box-sizing:border-box">${ICO.search}Search HQ</div><div style="margin-left:auto;display:flex;align-items:center;gap:6px"><button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.bell}</button><button type="button" aria-label="Account menu, [Iris Chen]" style="display:flex;align-items:center;gap:6px;height:36px;padding:0 4px;border:none;background:transparent;color:var(--body);cursor:pointer">${PAV('IC', 30)}<span aria-hidden="true">▾</span></button></div></div>`;
+    const SROWS = ['Home', 'Licences', 'Programs', 'Funds oversight', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'AI agents', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const SB = (cur) => `<nav aria-label="HQ" style="width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:1px;padding:12px;box-sizing:border-box"><span style="padding:4px 10px 8px">${EB('HQ')}</span>${SROWS.map(r => `<a href="#"${r === cur ? ' aria-current="page"' : ''} style="display:flex;align-items:center;min-height:34px;padding:0 10px;border-radius:9px;font-size:13.5px;font-weight:${r === cur ? 700 : 500};color:${r === cur ? 'var(--vdeep)' : 'var(--body)'};background:${r === cur ? 'var(--lav)' : 'transparent'};text-decoration:none">${r}</a>`).join('')}</nav>`;
+    const RAILC = (t) => `<aside aria-label="Eadwyn" style="width:48px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0;box-sizing:border-box"><button type="button" aria-label="Expand Eadwyn" aria-expanded="false" style="width:32px;height:32px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vdeep);font-weight:800;font-size:13px;cursor:pointer;padding:0">E</button><span aria-hidden="true" style="writing-mode:vertical-rl;font-size:11.5px;color:var(--mut)">${t || 'Ask about Team'}</span></aside>`;
+    const SHELL = (main, o) => { o = o || {}; return `<div style="display:flex;flex-direction:column;height:${o.h}px">${APPH()}<div style="flex:1;display:flex;min-height:0">${SB(o.cur || 'Home')}<main id="main" style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--bg);overflow:hidden">${main}</main>${RAILC(o.rail)}</div></div>`; };
+    const ROOT = (w, h, inner) => `<div style="${VARS};width:${w}px;height:${h}px;box-sizing:border-box;overflow:hidden;position:relative;background:var(--bg);color:var(--ink);${SG};font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">${inner}</div>`;
+    const CARD = (inner, x) => `<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box;${x || ''}">${inner}</div>`;
+    const H2 = (t, meta, right, id) => `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><h2${id ? ` id="${id}"` : ''} style="margin:0;font-size:17px;font-weight:800;letter-spacing:-0.01em">${t}</h2>${meta ? `<span style="font-size:12.5px;color:var(--mut)">${meta}</span>` : ''}${right ? `<span style="margin-left:auto;display:flex;gap:8px;align-items:center">${right}</span>` : ''}</div>`;
+    const H3 = (t, right) => `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em">${t}</h3>${right ? `<span style="margin-left:auto;display:flex;gap:8px;align-items:center">${right}</span>` : ''}</div>`;
+    const PTOP = () => `<div style="height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;background:var(--card);border-bottom:1px solid var(--line)"><button type="button" aria-label="Menu" style="width:44px;height:44px;border:none;background:transparent;color:var(--ink);font-size:18px;cursor:pointer;display:grid;place-items:center">☰</button><span style="flex:1;font-size:16px;font-weight:800;letter-spacing:-0.02em">Axal VC</span>${PILL('HQ', 'hq')}<button type="button" aria-label="Ask Eadwyn" style="width:44px;height:44px;border:none;background:transparent;cursor:pointer;display:grid;place-items:center"><span style="width:28px;height:28px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep);display:grid;place-items:center;font-weight:800;font-size:12px">E</span></button></div>`;
+
+    /* ================= HTM (#8678) · HQ Team · instructions inside the actions ================= */
+    const NOW = '09:14 UTC';
+    const NEG = `display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 14px;border-radius:9px;${SG};font-size:13px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box;`;
+    const bN = (t, x) => `<button type="button" style="${NEG}border:1px solid var(--neg);background:var(--neg);color:#fff;${x || ''}">${t}</button>`;
+    const bNo = (t, x, al) => `<button type="button"${al ? ` aria-label="${al}"` : ''} style="${NEG}border:1px solid var(--negE);background:var(--card);color:var(--neg);${x || ''}">${t}</button>`;
+    const bA = (t, x, al) => `<button type="button"${al ? ` aria-label="${al}"` : ''} style="${BTN}border:1px solid var(--line2);background:var(--card);color:var(--ink);${x || ''}">${t}</button>`;
+    const FOC = 'outline:2px solid var(--vio);outline-offset:2px;';
+    const code = (t) => `<span style="${M};font-size:11.5px;color:var(--ink)">${t}</span>`;
+    const BR = (c) => `<span style="${M};font-size:11.5px;font-weight:600;color:var(--ink);padding:0 5px;border-radius:5px;border:1px solid var(--line2);background:var(--raised)">${c}</span>`;
+    const SUPB = `<span style="display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep);font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">Super admin</span>`;
+    const ANNS = (n, t, x) => `<div style="display:flex;gap:8px;align-items:flex-start;${x || ''}">${STEP(n)}${ANN(t, 'flex:1')}</div>`;
+
+    /* prerequisite rows: a glyph and a word for each state (never colour alone) */
+    const PRE = (k, t) => {
+      const S = {
+        met: [GL.ok, 'Met', 'var(--pos)'],
+        ask: [GL.clock, 'When you confirm', 'var(--vdeep)'],
+        todo: [GL.nr, 'To do', 'var(--mut)'],
+        no: [GL.tri, 'Not met', 'var(--neg)']
+      }[k];
+      return `<li style="list-style:none;display:grid;grid-template-columns:124px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;border-top:1px solid var(--line)"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:${S[2]};white-space:nowrap">${S[0]}${S[1]}</span><span style="font-size:12.5px;line-height:1.45;color:var(--body)">${t}</span></li>`;
+    };
+    const PRES = (rows, ph) => `<section aria-labelledby="pre-h" style="display:flex;flex-direction:column;gap:4px;min-width:0"><h4 id="pre-h" style="margin:0;font-size:12px;${M};font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Before you confirm</h4><ul style="margin:0;padding:0">${rows.map(r => PRE(r[0], r[1])).join('')}</ul></section>`;
+    const CONS = (title, rows, tone) => `<section aria-labelledby="con-h" style="display:flex;flex-direction:column;gap:6px;min-width:0"><h4 id="con-h" style="margin:0;font-size:12px;${M};font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:${tone === 'neg' ? 'var(--neg)' : 'var(--mut)'}">${title}</h4><ol style="margin:0;padding:0;display:flex;flex-direction:column;gap:0">${rows.map((r, i) => `<li style="list-style:none;display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="${M};font-size:11.5px;font-weight:600;color:${tone === 'neg' ? 'var(--neg)' : 'var(--vdeep)'}">${i + 1}</span><span style="font-size:12.5px;line-height:1.45;color:var(--body)">${r}</span></li>`).join('')}</ol></section>`;
+    const FIELD = (label, val, o) => { o = o || {}; return `<label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink)">${label}<span style="display:block;min-height:${o.h || 54}px;padding:8px 10px;border-radius:9px;border:1px solid ${o.focus ? 'var(--vio)' : 'var(--line2)'};background:var(--card);font-weight:400;font-size:13px;line-height:1.45;color:${val ? 'var(--ink)' : 'var(--faint)'};box-sizing:border-box;${o.focus ? 'box-shadow:0 0 0 3px var(--lav);' : ''}">${val || o.ph || ''}</span>${o.hint ? `<span style="font-weight:400;font-size:11.5px;color:var(--mut)">${o.hint}</span>` : ''}</label>`; };
+
+    /* ---------- the rose HQ bar, header ---------- */
+    const RBAR = (sc, ph) => `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bar);color:#fff;border-radius:12px;padding:${ph ? '8px 12px' : '9px 14px'}"><span style="display:flex;align-items:center;gap:8px">${ICO.globe}${sc === 'A' ? `<span style="font-size:12.5px;font-weight:700">HQ view</span>` : `<span role="combobox" aria-label="Narrow this page to one subsidiary" aria-expanded="false" style="display:inline-flex;align-items:center;gap:6px;min-height:${ph ? 44 : 30}px;padding:0 10px;border-radius:7px;background:rgba(255,255,255,.16);font-size:12.5px;font-weight:700;box-sizing:border-box">All subsidiaries <span aria-hidden="true">▾</span></span>`}</span>${ph ? '' : `<span style="font-size:12px;opacity:.85;${M}">${sc === 'A' ? 'no branch provisioned' : '6 branches provisioned'}</span><span style="margin-left:auto;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,.16);font-size:10.5px;font-weight:700;letter-spacing:.05em">AXAL VC HQ</span>`}</div>`;
+    const HEAD = (ph) => `<header style="display:flex;align-items:flex-start;gap:16px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px"><nav aria-label="Breadcrumb">${EB('HQ › Team')}</nav><h1 style="margin:0;font-size:${ph ? 24 : 26}px;font-weight:800;letter-spacing:-0.02em;line-height:1.15">Team</h1><p style="margin:0;font-size:13px;line-height:1.5;color:var(--mut);max-width:700px">Find an administrator or a branch account and see what you can do with it. Each action explains itself when you open it.</p></div>${ph ? '' : `<span style="flex:none;padding-top:18px">${bS('Ask Eadwyn', SM)}</span>`}</header>`;
+
+    /* ---------- scope summary (small, above the list) ---------- */
+    const SCOPESUM = (sc, o) => {
+      o = o || {}; const ph = o.ph;
+      const facts = [
+        ['HQ-held', '3 administrators, 3 active'],
+        ['Branches', sc === 'A' ? 'None provisioned' : (o.searched ? 'Of 6 asked, 5 answered · 1 could not be read' : '6 ready to search')],
+        ['Read', NOW]
+      ];
+      const line = sc === 'A'
+        ? `<p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--body)">No branch is provisioned, so every account is HQ-held and this list is the whole team. <b style="color:var(--ink)">Move, Support and Unbind act on accounts that live on a branch, so none of them applies here.</b></p>`
+        : (o.searched ? '' : `<p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--body)">Branch accounts live on each branch’s own database. Search by name or email to ask the branches; their accounts appear below with the actions that apply.</p>`);
+      const disc = sc === 'A' ? `<details${o.open ? ' open' : ''} style="font-size:12.5px"><summary style="cursor:pointer;color:var(--vio);font-weight:600;${ph ? 'min-height:44px;display:flex;align-items:center;' : ''}${o.focusDisc ? FOC : ''}">How branch actions work</summary>${o.open ? `<div style="margin-top:8px;display:grid;grid-template-columns:${ph ? '1fr' : 'repeat(3,minmax(0,1fr))'};gap:10px">${[['Move', 'Closes a branch account where it lives and invites it on another branch. Never on an administrator.'], ['Support', 'Opens a 30-minute session on a branch account, on that branch’s own site. Changes nothing on the account.'], ['Unbind', 'Removes the admin role from a branch administrator and deactivates the account there.']].map(([k, v]) => `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--raised)"><b style="font-size:12.5px;color:var(--ink)">${k}</b><p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:var(--body)">${v}</p></div>`).join('')}</div><p style="margin:8px 0 0;font-size:12px;color:var(--mut)">Each one asks for a reason, your authenticator and a fresh step-up, and says what it will do before you confirm. They appear on a branch account’s row once a branch is provisioned.</p>` : ''}</details>` : '';
+      return `<section aria-label="Scope" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:${ph ? '10px 12px' : '10px 14px'};display:flex;flex-direction:column;gap:8px"><dl style="margin:0;display:flex;flex-wrap:wrap;gap:${ph ? '4px 14px' : '4px 22px'}">${facts.map(([k, v]) => `<div style="display:flex;gap:6px;align-items:baseline"><dt style="${M};font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">${k}</dt><dd style="margin:0;font-size:12.5px;font-weight:600;color:var(--ink);${k === 'Read' ? M + ';font-weight:500;font-size:11.5px' : ''}">${v}</dd></div>`).join('')}</dl>${line}${disc}</section>`;
+    };
+
+    /* ---------- search ---------- */
+    const SEARCH = (q, ph, st) => `<div style="display:flex;flex-direction:column;gap:5px"><label for="team-q" style="font-size:12.5px;font-weight:600;color:var(--ink)">Find a person</label><div style="display:flex;align-items:center;gap:8px;height:${ph ? 44 : 38}px;border-radius:9px;border:1px solid var(--line2);background:var(--card);padding:0 12px;max-width:${ph ? 'none' : '460px'};box-sizing:border-box;color:var(--mut)">${ICO.search}<span id="team-q" style="font-size:13px;color:${q ? 'var(--ink)' : 'var(--faint)'}">${q || 'Name or email · filters HQ, asks branches'}</span></div><p role="status" aria-live="polite" style="margin:0;font-size:11.5px;color:var(--mut)">${st || ''}</p></div>`;
+
+    /* ---------- HQ-held roster ---------- */
+    const ROSTER = [
+      { n: '[Tom Becker]', e: 'tom@example.com', lic: ['[AXL-DE-002]', 'active', '[Axal Germany]', 'admin'], rung: 'notified', det: 'answer due in 3 days · 1 open notice', act: '2026-11-26' },
+      { n: '[Ana Lopes]', e: 'ana@example.com', lic: ['[AXL-FR-001]', 'active', '[Axal France]', 'admin'], rung: 'clear', act: '2026-11-25' },
+      { n: '[Iris Chen]', e: 'iris@example.com', sa: 1, lic: null, rung: 'clear', act: '2026-11-27' }
+    ];
+    const RUNG = (r) => r === 'notified' ? `<span style="${STC}color:var(--vdeep);background:var(--lav);border:1px solid var(--lavE)">${GL.clock}Under notice</span>` : `<span style="${STC}color:var(--body);background:var(--raised);border:1px solid var(--line2)">${GL.ok}Clear</span>`;
+    const LICC = (l) => l ? `<span style="display:flex;flex-direction:column;gap:1px"><span style="${M};font-size:12px;color:var(--pos)">${l[0]} · ${l[1]}</span><span style="font-size:11.5px;color:var(--mut)">${l[2]} · ${l[3]}</span></span>` : ST.nr('No licence');
+    const SOBTN = (r, f) => bA('Sign out', SM + (f ? FOC : ''), `Sign out ${r.n} everywhere`);
+    const RTABLE = (o) => {
+      o = o || {};
+      const cols = 'minmax(0,1.5fr) 84px minmax(0,1.25fr) minmax(0,1.2fr) 70px 96px 104px';
+      const rows = ROSTER.map(r => [
+        `<span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-size:13px;color:var(--ink)">${r.n}</b>${r.sa ? SUPB : ''}</span><span style="font-size:11.5px;color:var(--mut)">${r.e}</span></span>`,
+        `<span style="font-size:12px">HQ-held</span>`,
+        LICC(r.lic),
+        `<span style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">${RUNG(r.rung)}${r.det ? `<span style="font-size:11.5px;color:var(--mut)">${r.det}</span>` : ''}</span>`,
+        `<span style="font-size:12px">Active</span>`,
+        `<span style="${M};font-size:11.5px">${r.act}</span>`,
+        o.soOpen && r.n === '[Tom Becker]' ? `<span style="font-size:11.5px;color:var(--mut)">Open below ↓</span>` : SOBTN(r, o.focusSO && r.n === '[Tom Becker]')
+      ]);
+      if (o.q) return `<section aria-labelledby="hq-held" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:baseline;gap:10px"><h2 id="hq-held" style="margin:0;font-size:16px;font-weight:800">Axal VC HQ</h2><span style="font-size:12px;color:var(--mut)">HQ-held · 3 administrators, 3 active · showing 0</span></div><p style="margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12.5px;color:var(--body)">No HQ-held administrator matches “weber”. Clear the search to see all 3.</p></section>`;
+      let t = TBL(cols, ['Person', 'Where', 'Licence', 'Compliance', 'Status', 'Last active', 'Action'], rows, { al: 'HQ-held administrators', py: 9 });
+      if (o.soOpen) t = t.replace(/(<div role="row" style="[^"]*border-top:1px solid var\(--line\);">)/, `${SIGNOUT()}$1`);
+      return `<section aria-labelledby="hq-held" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:baseline;gap:10px"><h2 id="hq-held" style="margin:0;font-size:16px;font-weight:800">Axal VC HQ</h2><span style="font-size:12px;color:var(--mut)">HQ-held · 3 administrators, 3 active</span></div>${t}</section>`;
+    };
+    const SIGNOUT = () => `<div role="region" aria-label="Sign out [Tom Becker] everywhere" style="margin:0 14px 12px;border:1px solid var(--line2);border-radius:12px;background:var(--raised);padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px"><div style="grid-column:1/-1;display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:15px;font-weight:700">Sign out [Tom Becker] everywhere</h3><span style="margin-left:auto">${bG(ICO.x, 'min-height:32px;padding:0 8px')}</span></div>${PRES([['met', 'You hold the Super Admin elevation'], ['met', 'His account is HQ-held, on HQ’s own database'], ['todo', 'A reason of at least 8 characters, and tick that you understand'], ['ask', 'A session signed in with your authenticator']])}${CONS('What it does', ['Ends every session [Tom Becker] has. He signs in again to continue.', 'Changes nothing else: his role, licence and access stay as they are.'])}<div style="grid-column:1/-1;display:flex;gap:10px;align-items:center">${bP('Sign out everywhere', SM)}${bG('Cancel', SM)}</div></div>`;
+
+    /* ---------- branch groups (scenario B) ---------- */
+    const HITS = {
+      fr: { who: '[Dr. Jonas Weber]', e: 'jonas@example.com', role: 'advisor', st: 'KYC approved', acts: ['support', 'move'] },
+      de: { who: '[Paul Weber]', e: 'paul@example.com', role: 'admin', st: 'KYC approved', acts: ['support', 'unbind'] }
+    };
+    const ACTBTN = (k, h, b, f) => {
+      const lab = { support: `Support ${h.who} on ${b}`, move: `Move ${h.who} from ${b}`, unbind: `Unbind ${h.who} from ${b}` }[k];
+      const t = { support: 'Support', move: 'Move', unbind: 'Unbind' }[k];
+      const x = SM + (f === k ? FOC : '');
+      return k === 'unbind' ? bNo(t, x, lab) : bA(t, x, lab);
+    };
+    const HITROW = (b, o) => {
+      o = o || {}; const h = HITS[b];
+      if (o.unbound) return `<div role="status" tabindex="-1" style="padding:12px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--body);${o.focusOut ? FOC : ''}border-radius:6px">[Paul Weber] is no longer an administrator of de: the role is removed and the account deactivated there.</div>`;
+      if (o.moved) return `<div style="padding:10px 14px;border-top:1px solid var(--line)">${OUTCOME({ who: '[Dr. Jonas Weber]', from: 'fr', to: 'ib', sent: true, focus: o.focusOut })}</div>`;
+      return `<div role="row" style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.9fr) minmax(0,1fr) 250px;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);${o.open ? 'background:var(--raised);' : ''}"><span role="cell" style="display:flex;flex-direction:column;gap:1px;min-width:0"><b style="font-size:13px;color:var(--ink)">${h.who}</b><span style="font-size:11.5px;color:var(--mut)">${h.e}</span></span><span role="cell" style="font-size:12.5px;color:var(--body)">${h.role} · active</span><span role="cell" style="font-size:12px;color:var(--mut)">${h.st}</span><span role="cell" style="display:flex;gap:6px;justify-content:flex-end;position:relative">${h.acts.map(k => o.open === k ? `<span style="${BTN}${SM}${k === 'unbind' ? 'border:1px solid var(--neg);background:var(--negT);color:var(--neg)' : 'border:1px solid var(--vio);background:var(--lav);color:var(--vdeep)'}" aria-expanded="true">${{ support: 'Support', move: 'Move', unbind: 'Unbind' }[k]} ▴</span>` : ACTBTN(k, h, b, o.focus)).join('')}${o.steps ? o.steps : ''}</span></div>${o.panel || ''}`;
+    };
+    const GROUP = (b, name, body, meta) => `<section aria-labelledby="g-${b}" style="border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden"><div style="display:flex;align-items:baseline;gap:10px;padding:9px 14px;background:var(--raised)"><h3 id="g-${b}" style="margin:0;font-size:13.5px;font-weight:700">${name}</h3>${BR(b)}<span style="margin-left:auto;${M};font-size:11.5px;color:var(--mut)">${meta}</span></div>${body}</section>`;
+    const BRANCHES = (o) => {
+      o = o || {};
+      const MK = (g, n) => n ? `<div style="position:relative"><span style="position:absolute;left:-34px;top:52px">${STEP(n)}</span>${g}</div>` : g;
+      const fr = MK(GROUP('fr', '[Axal France]', HITROW('fr', o.fr), '1 matched · as of 2026-11-27 09:14'), o.fr && o.fr.n);
+      const de = MK(GROUP('de', '[Axal Germany]', HITROW('de', o.de), '1 matched · as of 2026-11-27 09:14'), o.de && o.de.n);
+      const none = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12.5px;color:var(--body)"><span>Nothing matched on</span>${BR('nd')}${BR('ib')}${BR('bx')}</div>`;
+      const ng = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1.5px dashed var(--line2);border-radius:12px;background:var(--card)">${ST.un('Unavailable')}<span style="font-size:12.5px;color:var(--body)">${BR('ng')} [Northgate Ventures] did not answer. This is not a claim that nobody there matched.</span><span style="margin-left:auto">${bS(ICO.refresh + 'Ask again', SM)}</span></div>`;
+      return `<section aria-labelledby="br-h" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:baseline;gap:10px"><h2 id="br-h" style="margin:0;font-size:16px;font-weight:800">On branches</h2><span style="font-size:12px;color:var(--mut)">Answers to “weber” · of 6 asked, 5 answered</span></div>${fr}${de}${none}${ng}</section>`;
+    };
+
+    /* ---------- detail surfaces (one open at a time, inline under the row) ---------- */
+    const DETAIL = (o) => `<div role="region" aria-labelledby="d-h" style="margin:0 14px 14px;border:${o.tone === 'neg' ? '1.5px solid var(--negE)' : '1px solid var(--lavE)'};border-radius:12px;background:var(--card);padding:16px 18px;display:flex;flex-direction:column;gap:14px"><div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h3 id="d-h" style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.01em">${o.title}</h3>${o.chip || ''}</div><span style="font-size:12.5px;color:var(--mut)">${o.sub}</span></div><button type="button" aria-label="Close, back to ${o.back}" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.x}</button></div><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:22px">${o.pre}${o.cons}</div>${o.extra || ''}${o.form || ''}${o.msg || ''}<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${o.btns}</div></div>`;
+    const CHIP = (t, k) => k === 'neg' ? `<span style="${STC}color:var(--neg);background:var(--negT);border:1px solid var(--negE)">${GL.tri}${t}</span>` : `<span style="${STC}color:var(--vdeep);background:var(--lav);border:1px solid var(--lavE)">${GL.ok}${t}</span>`;
+
+    const MOVE_PRE = [['met', 'You hold the Super Admin elevation'], ['met', 'The account is active on ' + 'fr'], ['met', 'It is not an administrator. Administrators are unbound, not moved'], ['met', 'The destination answered this search'], ['todo', 'A reason of at least 10 characters'], ['ask', 'Your authenticator code and a fresh step-up']];
+    const MOVE_CONS = ['<b style="color:var(--ink)">Closes the account on fr.</b> [Dr. Jonas Weber] can no longer sign in there.', '<b style="color:var(--ink)">Invites jonas@example.com on the destination, as advisor.</b> He accepts the invitation to sign in there.', 'Records stay on fr. Nothing is copied.', 'Revenue share on this account moves to the destination’s subsidiary.', 'If the invitation does not land, the account is closed on fr and not yet open on the destination. The move waits under Moves to finish for Retry invitation.'];
+    const DEST = (ph) => `<fieldset style="margin:0;padding:0;border:none;display:flex;flex-direction:column;gap:6px"><legend style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px">Destination</legend><div style="display:${ph ? 'flex;flex-direction:column' : 'grid;grid-template-columns:repeat(5,minmax(0,1fr))'};gap:6px">${[['de', '[Axal Germany]'], ['nd', '[Axal Nordics]'], ['ib', '[Axal Iberia]', 1], ['bx', '[Axal Benelux]'], ['ng', '[Northgate Ventures]', 0, 1]].map(([c, n, on, off]) => `<label style="display:flex;align-items:center;gap:8px;min-height:${ph ? 44 : 38}px;padding:4px 10px;border-radius:9px;border:1px solid ${on ? 'var(--vio)' : 'var(--line2)'};background:${on ? 'var(--lav)' : off ? 'var(--raised)' : 'var(--card)'};font-size:12.5px;color:${off ? 'var(--mut)' : 'var(--ink)'};box-sizing:border-box"><span aria-hidden="true" style="width:14px;height:14px;flex:none;border-radius:999px;border:${on ? '4px solid var(--vio)' : '1.5px solid var(--line2)'};box-sizing:border-box"></span><span style="display:flex;flex-direction:column;line-height:1.3"><span>${BR(c)} ${n}</span>${off ? `<span style="font-size:11px">Did not answer this search</span>` : ''}</span></label>`).join('')}</div></fieldset>`;
+    const MOVEP = (o) => { o = o || {}; return DETAIL({ title: 'Move [Dr. Jonas Weber] to another branch', sub: `From ${'fr'} [Axal France] · advisor · active`, back: '[Dr. Jonas Weber]', pre: PRES(MOVE_PRE.map((r, i) => i === 4 && o.reason ? ['met', r[1]] : r)), cons: CONS('What the move does', MOVE_CONS), form: `<div style="display:flex;flex-direction:column;gap:12px">${DEST()}${FIELD('Reason (at least 10 characters)', o.reason ? 'Relocated to Madrid; joins the [Iberia] advisor bench' : '', { focus: !o.reason, ph: 'Why this account moves', hint: 'Recorded at HQ with the move.' })}</div>`, msg: o.msg, btns: `${bP('Review move', SM + (o.reason ? '' : 'opacity:.5;cursor:not-allowed'))}${bG('Cancel', SM)}${o.reason ? '' : `<span style="font-size:12px;color:var(--mut)">Review opens once the reason is long enough.</span>`}` }); };
+
+    const SUP_PRE = [['met', 'You hold the Super Admin elevation'], ['met', 'The account is active on fr'], ['todo', 'A reason of at least 10 characters'], ['ask', 'Your authenticator code and a fresh step-up']];
+    const SUP_CONS = ['<b style="color:var(--ink)">Opens his account on fr’s own site, in a new tab.</b> The link works once, within five minutes.', 'The session lasts 30 minutes once it is opened.', '<b style="color:var(--ink)">fr sends him a security notice</b>, in the app and by email, with your name, your reason and the 30 minutes. This form then shows whether fr stored it.', '<b style="color:var(--ink)">Changes nothing on the account.</b> His role, access and records stay as they are.'];
+    const SUPP = (o) => { o = o || {}; const who = o.admin ? '[Paul Weber]' : '[Dr. Jonas Weber]'; const b = o.admin ? 'de' : 'fr'; return DETAIL({ title: `Open a support session for ${who}`, chip: CHIP('Changes nothing on the account'), sub: `On ${b} ${o.admin ? '[Axal Germany] · admin' : '[Axal France] · advisor'} · active`, back: who, pre: PRES(SUP_PRE.map(r => [r[0], r[1].replace('fr', b)])), cons: CONS('What happens', SUP_CONS.map(t => o.admin ? t.replace(/his account on fr/g, 'his account on de').replace(/fr’s/g, 'de’s').replace(/>fr sends/, '>de sends').replace('whether fr', 'whether de') : t)), form: FIELD('Reason (at least 10 characters)', 'Checking why his weekly digest settings will not save', { hint: 'Recorded here and on the branch, and shown to him in the notice.' }), btns: `${bP('Begin support session', SM)}${bG('Cancel', SM)}` }); };
+
+    const UNB_PRE = [['met', 'You hold the Super Admin elevation'], ['met', 'He is an active administrator of de'], ['met', 'A reason of at least 10 characters'], ['ask', 'Your authenticator code and a fresh step-up']];
+    const UNB_CONS = ['<b style="color:var(--ink)">Removes the admin role.</b> His role on de becomes Exploring.', '<b style="color:var(--ink)">Deactivates his account on de.</b> Any session he has stops at its next request.', 'His records stay with de.', 'de writes it to his activity log. No security notice is sent.', 'Nothing on this page undoes it.'];
+    const UNBP = (o) => { o = o || {}; return DETAIL({ tone: 'neg', title: 'Unbind [Paul Weber] from de', chip: CHIP('Removes access', 'neg'), sub: 'Administrator of de [Axal Germany] · active', back: '[Paul Weber]', pre: PRES(UNB_PRE), cons: CONS('This removes access', UNB_CONS, 'neg'), extra: `<p style="margin:0;padding:9px 12px;border-radius:9px;background:var(--raised);border:1px solid var(--line);font-size:12.5px;line-height:1.5;color:var(--body)">Need to look at his account instead? <b style="color:var(--ink)">Support</b> opens a session and changes nothing. ${LNK('Open Support instead', 'font-size:12.5px')}</p>`, form: FIELD('Reason (at least 10 characters)', 'Left [Axal Germany] on 20 Nov; licence owner asked HQ to remove his access', { hint: 'Recorded here and on de.' }), msg: o.msg, btns: o.btns || `${bNo('Review unbind', SM + (o.focus ? FOC : ''))}${bG('Cancel', SM)}` }); };
+
+    /* move outcome (the existing MoveOutcome lines) */
+    const OUTCOME = (o) => `<div ${o.focus ? 'tabindex="-1" ' : ''}style="display:flex;flex-direction:column;gap:5px;border:1px solid var(--line2);border-radius:10px;background:var(--raised);padding:11px 13px;font-size:12.5px;${o.focus ? FOC : ''}"><b style="color:var(--ink)">${o.who}: ${o.from} → ${o.to}</b><span style="color:var(--mut)">Closed on ${o.from}. Moving them out again would be refused, correctly.</span>${o.fail ? `<span role="status" style="color:var(--neg);display:flex;gap:6px;align-items:flex-start">${GL.tri}<span>${o.fail}</span></span>` : `<ul style="margin:0;padding:0;display:flex;flex-direction:column;gap:3px"><li style="list-style:none;color:var(--ink);display:flex;gap:6px;align-items:center">${GL.ok}Invitation created on ${o.to}.</li>${o.sent ? `<li style="list-style:none;color:var(--body)">Email sent: ${o.to} reports that its mailer sent the invitation. Whether it was read is not known.</li>` : `<li style="list-style:none;color:var(--ambT);display:flex;gap:6px;align-items:flex-start">${GL.tri}<span>Email not sent: ${o.to} reports that its mailer did not send the invitation.</span></li><li style="list-style:none;color:var(--ink)">Next: pass this invitation link to maya@example.com yourself. It is shown only in this answer.<span style="display:block;margin-top:3px;${M};font-size:11.5px;word-break:break-all;color:var(--ink)">[https://ib.example/invite/k7q2-9fd1-0b3e]</span></li>`}</ul>`}<span style="font-size:11.5px;color:var(--faint)">Records stay on ${o.from}.</span>${o.retry || ''}</div>`;
+
+    /* ---------- dialogs ---------- */
+    const SCRIM = (inner) => `<div style="position:absolute;inset:0;background:rgba(15,23,42,.45);display:grid;place-items:center;z-index:5">${inner}</div>`;
+    const DLG = (o) => `<div role="${o.alert ? 'alertdialog' : 'dialog'}" aria-modal="true" aria-labelledby="dl-h" style="width:${o.w || 520}px;background:var(--card);border:1px solid ${o.tone === 'neg' ? 'var(--negE)' : 'var(--line)'};border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 24px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box"><div style="display:flex;flex-direction:column;gap:4px">${EB(o.eb, o.tone === 'neg' ? 'var(--neg)' : '')}<h2 id="dl-h" style="margin:0;font-size:19px;font-weight:800;letter-spacing:-0.01em">${o.title}</h2></div>${o.body}<div style="display:flex;gap:10px;justify-content:flex-end">${o.btns}</div></div>`;
+    const SUMM = (rows) => `<dl style="margin:0;display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;font-size:13px">${rows.map(([k, v]) => `<dt style="color:var(--mut)">${k}</dt><dd style="margin:0;color:var(--ink)">${v}</dd>`).join('')}</dl>`;
+    const MOVE_REVIEW = (ph) => DLG({ w: ph ? 358 : 540, eb: 'Step 2 of 3 · Review', title: 'Move [Dr. Jonas Weber] from fr to ib?', body: SUMM([['Person', '[Dr. Jonas Weber] · advisor'], ['From', 'fr [Axal France] — closed there'], ['To', 'ib [Axal Iberia] — invited there'], ['Reason', 'Relocated to Madrid; joins the [Iberia] advisor bench']]) + `<ul style="margin:0;padding:10px 12px 10px 28px;border-radius:9px;background:var(--raised);font-size:12.5px;line-height:1.55;color:var(--body)"><li>Records stay on fr. Revenue share moves to ib’s subsidiary.</li><li>If the invitation does not land, the move waits under Moves to finish.</li><li>Next you will be asked for your authenticator code.</li></ul>`, btns: `${bS('Back', SM + FOC)}${bP('Move to ib', SM)}` });
+    const UNB_REVIEW = (ph) => DLG({ alert: 1, tone: 'neg', w: ph ? 358 : 540, eb: 'Step 2 of 3 · Review', title: 'Unbind [Paul Weber] from de?', body: SUMM([['Administrator', '[Paul Weber] · paul@example.com'], ['Branch', 'de [Axal Germany]'], ['Reason', 'Left [Axal Germany] on 20 Nov; licence owner asked HQ to remove his access']]) + `<ul style="margin:0;padding:10px 12px 10px 28px;border-radius:9px;background:var(--negT);border:1px solid var(--negE);font-size:12.5px;line-height:1.55;color:var(--body)"><li><b style="color:var(--ink)">The admin role is removed</b> and his role becomes Exploring.</li><li><b style="color:var(--ink)">His account on de is deactivated</b>; any session stops at its next request.</li><li>No security notice is sent. Nothing on this page undoes it.</li></ul><p style="margin:0;font-size:12px;color:var(--mut)">Next you will be asked for your authenticator code.</p>`, btns: `${bS('Back', SM + FOC)}${bN('Unbind from de', SM)}` });
+    const STEPUP = (ph) => `<div role="dialog" aria-modal="true" aria-label="Confirm it’s you" style="width:${ph ? 390 : 384}px;background:var(--card);border:1px solid var(--line);border-radius:${ph ? '16px 16px 0 0' : '16px'};box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box"><div style="display:flex;align-items:center;gap:10px"><span aria-hidden="true" style="width:36px;height:36px;border-radius:9px;background:var(--lav);color:var(--vdeep);display:grid;place-items:center;font-weight:800">✓</span><div style="flex:1"><h3 style="margin:0;font-size:14px;font-weight:800">Confirm it’s you</h3><span style="font-size:11.5px;color:var(--mut)">Sensitive action — re-enter your code</span></div>${ICO.x}</div><p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--body)">This action requires a recent authenticator check. Enter the current 6-digit code from your authenticator app to continue.</p><span style="display:block;height:48px;border-radius:9px;border:1px solid var(--vio);box-shadow:0 0 0 3px var(--lav);background:var(--raised);${M};font-size:24px;letter-spacing:.5em;text-align:center;line-height:48px;color:var(--ink)">48 21··</span><div style="display:flex;gap:8px">${bS('Cancel', 'flex:1;' + (ph ? 'min-height:44px' : ''))}${bP('Confirm', 'flex:1;opacity:.5;' + (ph ? 'min-height:44px' : ''))}</div><span style="font-size:10.5px;color:var(--faint);text-align:center">Keeps you signed in — only confirms this one action.</span></div>`;
+
+    /* ---------- moves to finish (scenario C) ---------- */
+    const MTF = (o) => {
+      o = o || {};
+      const fail = 'ib could not be reached, so nothing was done there. Try again in a moment.';
+      let body;
+      if (o.result === 'created') body = OUTCOME({ who: '[Maya Ruiz]', from: 'fr', to: 'ib', sent: false, focus: 1 });
+      else if (o.result === 'unknown') body = OUTCOME({ who: '[Maya Ruiz]', from: 'fr', to: 'ib', fail: 'The answer did not arrive, so whether the invitation was created is not known. Read the moves again before retrying; a retry cannot create a second invitation for this move.', retry: `<span>${bS(ICO.refresh + 'Read the moves again', SM)}</span>` });
+      else body = `<div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) auto;gap:14px;align-items:center"><span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:13px;color:var(--ink)">[Maya Ruiz] · founder</b><span style="font-size:11.5px;color:var(--mut)">maya@example.com · ${BR('fr')} → ${BR('ib')} · started 26 Nov 16:40</span></span><span style="display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--neg)">${GL.tri}<span>Invitation did not land. ${fail}</span></span>${o.open ? `<span style="${BTN}${SM}border:1px solid var(--vio);background:var(--lav);color:var(--vdeep)" aria-expanded="true">Retry invitation ▴</span>` : bP('Retry invitation', SM + (o.focus ? FOC : ''))}</div>${o.open ? RETRYP() : ''}`;
+      return `<section aria-labelledby="mtf-h" style="border:1.5px solid var(--ambE);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:baseline;gap:10px"><h2 id="mtf-h" style="margin:0;font-size:15px;font-weight:800">Moves to finish</h2><span style="${M};font-size:12px;color:var(--ambT);font-weight:600">1 open</span><span style="font-size:12px;color:var(--mut)">Closed on its branch; the invitation on the destination did not land.</span></div>${body}</section>`;
+    };
+    const RETRYP = () => `<div role="region" aria-labelledby="r-h" style="border:1px solid var(--lavE);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1"><h3 id="r-h" style="margin:0;font-size:15px;font-weight:800">Retry the invitation for [Maya Ruiz] on ib</h3><span style="font-size:12.5px;color:var(--mut)">Move from fr [Axal France] to ib [Axal Iberia] · attempt 2</span></div><button type="button" aria-label="Close, back to [Maya Ruiz]" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--body);display:grid;place-items:center;padding:0">${ICO.x}</button></div><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:22px">${PRES([['met', 'You hold the Super Admin elevation'], ['met', 'HQ recorded that fr closed the account'], ['met', 'No other retry is running for this move'], ['ask', 'Your authenticator code and a fresh step-up']])}${CONS('What the retry does', ['<b style="color:var(--ink)">Asks ib to invite maya@example.com as founder</b>, as fr recorded her when it closed the account. Nothing typed here reaches the invitation.', 'If ib already stored an invitation for this move, that one is used. A retry cannot create a second.', 'ib reports whether its mailer sent the email. If it did not, the link is shown to you once, to pass on yourself.', 'Until she accepts on ib, she has no active account on either branch.'])}</div><div style="display:flex;gap:10px">${bP('Retry invitation', SM)}${bG('Cancel', SM)}</div></div>`;
+
+    /* ---------- lower page: what used to lead ---------- */
+    const LOWER = () => `<section aria-labelledby="lw-h" style="display:flex;flex-direction:column;gap:10px"><h2 id="lw-h" style="margin:0;font-size:16px;font-weight:800">HQ’s powers and every account</h2><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">${[['Super Admin elevation', 'Held by [Iris Chen] · transfer it here', 'Transfer…'], ['What each power needs', 'HQ-only actions and every admin’s, with what Security records', 'Show'], ['All accounts on HQ’s database', '64 accounts · the Users table, as under Accounts', 'Open']].map(([t, n, a]) => `<div style="border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:4px"><b style="font-size:13.5px">${t}</b><span style="font-size:12px;color:var(--mut)">${n}</span><span>${LNK(a, 'font-size:12.5px')}</span></div>`).join('')}</div></section>`;
+
+    /* ---------- desktop page ---------- */
+    const PAGE = (o) => {
+      o = o || {};
+      const sc = o.sc || 'A';
+      const parts = [RBAR(sc), HEAD()];
+      parts.push(SCOPESUM(sc, { searched: o.q, open: o.disc, focusDisc: o.focusDisc }));
+      if (o.annTop) parts.push(o.annTop);
+      if (sc === 'C') parts.push(MTF(o.mtf));
+      parts.push(SEARCH(o.q, 0, o.q ? 'HQ: 0 of 3 administrators match. Branches: 2 accounts on 2 branches; 1 branch did not answer.' : (sc === 'A' ? '' : 'Type at least two characters to ask the branches.')));
+      if (o.q) parts.push(BRANCHES(o.br));
+      if (o.annMid) parts.push(o.annMid);
+      parts.push(RTABLE(Object.assign({ q: o.q }, o.rt || {})));
+      if (o.after) parts.push(o.after);
+      parts.push(LOWER());
+      return `<div style="flex:1;min-height:0;overflow:hidden;padding:${o.ann ? '18px 28px 24px 62px' : '18px 28px 24px'}"><div style="display:flex;flex-direction:column;gap:16px;${o.scroll ? `margin-top:-${o.scroll}px` : ''}">${parts.join('')}</div></div>`;
+    };
+    const DESK = (o, extra) => SHELL(PAGE(o) + (extra || ''), { h: o.h || 900, cur: 'Team', rail: 'Ask about Team' });
+
+    /* ---------- phone 390 ---------- */
+    const PCARD = (r) => `<li style="list-style:none;border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:6px"><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-size:14px">${r.n}</b>${r.sa ? SUPB : ''}<span style="margin-left:auto">${RUNG(r.rung)}</span></span><span style="font-size:12px;color:var(--mut)">${r.e} · HQ-held · active</span><span style="font-size:12px;color:var(--body)">${r.lic ? `${r.lic[0]} · ${r.lic[2]}` : 'No licence'}</span>${bA('Sign out', 'min-height:44px;align-self:flex-start', `Sign out ${r.n} everywhere`)}</li>`;
+    const PHIT = (b, o) => {
+      o = o || {}; const h = HITS[b];
+      const btn = (k) => { const t = { support: 'Support', move: 'Move', unbind: 'Unbind' }[k]; const al = { support: `Support ${h.who} on ${b}`, move: `Move ${h.who} from ${b}`, unbind: `Unbind ${h.who} from ${b}` }[k]; const x = 'min-height:44px;flex:1;' + (o.focus === k ? FOC : ''); return k === 'unbind' ? bNo(t, x, al) : bA(t, x, al); };
+      return `<div style="border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:8px"><span style="display:flex;align-items:center;gap:8px">${BR(b)}<span style="font-size:12px;color:var(--mut)">${b === 'fr' ? '[Axal France]' : '[Axal Germany]'}</span></span><span style="display:flex;flex-direction:column;gap:1px"><b style="font-size:14px">${h.who}</b><span style="font-size:12px;color:var(--mut)">${h.e} · ${h.role} · active · ${h.st}</span></span><span style="display:flex;gap:8px">${h.acts.map(btn).join('')}</span></div>`;
+    };
+    const PPAGE = (o) => {
+      o = o || {}; const sc = o.sc || 'A';
+      const parts = [HEAD(1), SCOPESUM(sc, { ph: 1, searched: o.q, open: o.disc })];
+      if (sc === 'C') parts.push(`<section aria-labelledby="mtf-p" style="border:1.5px solid var(--ambE);border-radius:12px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:baseline;gap:8px"><h2 id="mtf-p" style="margin:0;font-size:15px;font-weight:800">Moves to finish</h2><span style="${M};font-size:12px;color:var(--ambT);font-weight:600">1 open</span></div><b style="font-size:14px">[Maya Ruiz] · founder</b><span style="font-size:12px;color:var(--mut)">${BR('fr')} → ${BR('ib')} · started 26 Nov 16:40</span><span style="display:flex;gap:6px;font-size:12.5px;color:var(--neg)">${GL.tri}<span>Invitation did not land. ib could not be reached.</span></span>${bP('Retry invitation', 'min-height:44px;' + (o.focusRetry ? FOC : ''))}</section>`);
+      parts.push(SEARCH(o.q, 1, o.q ? '2 accounts on 2 branches; 1 branch did not answer.' : ''));
+      if (o.q) parts.push(`<section aria-labelledby="br-p" style="display:flex;flex-direction:column;gap:8px"><h2 id="br-p" style="margin:0;font-size:15px;font-weight:800">On branches</h2>${PHIT('fr', o.fr)}${PHIT('de', o.de)}<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1.5px dashed var(--line2);border-radius:12px;background:var(--card)">${ST.un('Unavailable')}<span style="font-size:12px">${BR('ng')} did not answer</span><span style="margin-left:auto">${bS('Ask again', 'min-height:44px')}</span></div></section>`);
+      parts.push(`<section aria-labelledby="hq-p" style="display:flex;flex-direction:column;gap:2px"><div style="display:flex;align-items:baseline;gap:8px"><h2 id="hq-p" style="margin:0;font-size:15px;font-weight:800">Axal VC HQ</h2><span style="font-size:12px;color:var(--mut)">3 administrators${o.q ? ' · showing 0' : ''}</span></div>${o.q ? `<p style="margin:4px 0 0;font-size:12.5px;color:var(--body)">No HQ-held administrator matches “weber”.</p>` : `<ul style="margin:0;padding:0">${ROSTER.map(PCARD).join('')}</ul>`}</section>`);
+      return `<div style="display:flex;flex-direction:column;height:844px;background:var(--bg);position:relative">${PTOP()}<div style="flex:1;overflow:hidden;padding:12px 16px"><div style="display:flex;flex-direction:column;gap:14px;${o.scroll ? `margin-top:-${o.scroll}px` : ''}">${RBAR(sc, 1)}${parts.join('')}</div></div>${o.over || ''}</div>`;
+    };
+    /* full-screen sheet at 390: header with a 44px close, scrolling body, sticky footer */
+    const SHEET = (o) => `<div role="dialog" aria-modal="true" aria-labelledby="sh-h" style="position:absolute;inset:0;background:var(--card);display:flex;flex-direction:column;z-index:6"><div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 16px;border-bottom:1px solid var(--line);min-height:56px;box-sizing:border-box"><div style="flex:1;min-width:0"><h2 id="sh-h" style="margin:0;font-size:16px;font-weight:800;line-height:1.25">${o.title}</h2><span style="font-size:12px;color:var(--mut)">${o.sub}</span></div><button type="button" aria-label="Close, back to ${o.back}" style="width:44px;height:44px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;padding:0">${ICO.x}</button></div><div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:14px">${o.chip ? `<span>${o.chip}</span>` : ''}${o.body}</div><div style="border-top:1px solid var(--line);padding:10px 16px 14px;display:flex;flex-direction:column;gap:8px;background:var(--card)">${o.foot}</div></div>`;
+    const PPRES = (rows) => `<section style="display:flex;flex-direction:column;gap:2px"><h3 style="margin:0;font-size:11.5px;${M};letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Before you confirm</h3><ul style="margin:0;padding:0">${rows.map(r => PRE(r[0], r[1]).replace('grid-template-columns:124px', 'grid-template-columns:112px')).join('')}</ul></section>`;
+    const PCONS = (t, rows, tone) => CONS(t, rows, tone);
+
+    /* ---------- annotation docs ---------- */
+    const HSEC = (t, h) => `<section style="display:flex;flex-direction:column;gap:8px"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.01em">${t}</h2>${h}</section>`;
+    const HT = (heads, rows, cols) => TBL(cols, heads, rows.map(r => r.map(c => `<span style="display:block">${c}</span>`)), { py: 8 });
+    const DOC = (eb, title, inner) => `<div style="padding:32px 36px;display:flex;flex-direction:column;gap:22px;background:var(--bg)"><div style="display:flex;flex-direction:column;gap:6px">${EB(eb)}<h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">${title}</h1></div>${inner}<p style="margin:0;font-size:12px;color:var(--mut)">Sample content only: [Iris Chen], [Tom Becker], [Ana Lopes], [Dr. Jonas Weber], [Paul Weber], [Maya Ruiz], their addresses, the six branches and their codes, and every figure (3 administrators, 6 branches, 64 accounts) are bracketed and fictional. Design only.</p></div>`;
+
+    /* ================= boards ================= */
+    let w = 1440, h = 900, inner = '';
+    const S1 = `<span style="position:absolute;left:-36px;top:6px">${STEP('1')}</span>`;
+    if (B === 'HTM00') {
+      w = 1100; h = 460;
+      inner = `<div style="padding:22px 26px;display:flex;flex-direction:column;gap:12px;height:640px;box-sizing:border-box">${EB('Today on main · HqTeamTable.jsx, no branch provisioned · for reference')}<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px">${EB('Team')}<p style="margin:0;font-size:12.5px;color:var(--mut);max-width:700px">Every administrator, the licence each holds, and where each stands on the compliance ladder. Grouped by branch: there is no global accounts table, so HQ holds its own and asks each branch over its private link.</p><div style="${M};font-size:11px;letter-spacing:.08em;color:var(--ink);font-weight:700">AXAL VC HQ <span style="color:var(--mut);font-weight:400;letter-spacing:0">HQ-held · 3 administrators, 3 active</span></div>${SK('100%', 12)}${SK('100%', 12)}${SK('100%', 12)}<p style="margin:0;font-size:11px;line-height:1.6;color:var(--faint)">No branch is provisioned, so every account on the platform is HQ-held and this is the whole team. Moving an account between branches closes it where it lives and re-invites it where it is going — records stay put. Move appears on a branch hit only when another branch code exists. It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch, so they are not movable from this table. When the invitation on the destination does not land, the move stays under Moves to finish with Retry invitation, which invites the address the source recorded and nothing typed here. Support opens a session on an active branch account, on that branch’s own site, with the same step-up and a reason; the branch sends the person a security notice when the session is authorised, and the Support form shows whether it was stored. An administrator’s hit shows Unbind instead of Move: an administrator is unbound, not moved, and Unbind removes the role and deactivates the account on that branch, with the same step-up and a reason.</p></div>${ANN('The paragraph is printed after the “whole team” sentence on every render. With no branch provisioned none of Move, Support, Unbind or Retry invitation can appear, yet all four are explained here, after the list, in 11 px faint text. Above this card sit the holder console and, below it, the two action cards (nine rows of rules) before the 64-account directory.')}</div>`;
+    }
+    else if (B === 'HTM01') { h = 900; inner = DESK({ sc: 'A', h }); }
+    else if (B === 'HTM01B') { inner = DESK({ sc: 'A', disc: 1, focusDisc: 1, annTop: SAY('Nothing announced: a disclosure states its own expanded state.', 'Screen reader') }); }
+    else if (B === 'HTM01C') { inner = DESK({ sc: 'A', rt: { soOpen: 1 }, scroll: 150 }); }
+    else if (B === 'HTM02') {
+      h = 1000;
+      inner = DESK({ sc: 'B', q: 'weber', h, ann: 1, br: { fr: { n: '1' }, de: { n: '2' } }, annTop: ANN('Row actions are buttons with full accessible names: “Support [Dr. Jonas Weber] on fr”, “Move [Dr. Jonas Weber] from fr”, “Support [Paul Weber] on de”, “Unbind [Paul Weber] from de”. Only the actions that apply are drawn: no Move on an administrator, no Unbind on anyone else, nothing on a branch that did not answer. ① a member’s row: Support and Move. ② an administrator’s row: Support and Unbind, in the destructive style.') });
+    }
+    else if (B === 'HTM03') { h = 1100; inner = DESK({ sc: 'B', q: 'weber', h, scroll: 330, br: { fr: { open: 'move', panel: MOVEP({ reason: 0 }) } } }); }
+    else if (B === 'HTM03B') { inner = DESK({ sc: 'B', q: 'weber', scroll: 330, br: { fr: { open: 'move', panel: MOVEP({ reason: 1 }) } } }, SCRIM(MOVE_REVIEW())); }
+    else if (B === 'HTM03C') { inner = DESK({ sc: 'B', q: 'weber', scroll: 330, br: { fr: { open: 'move', panel: MOVEP({ reason: 1 }) } } }, SCRIM(STEPUP())); }
+    else if (B === 'HTM03D') { inner = DESK({ sc: 'B', q: 'weber', scroll: 330, br: { fr: { moved: 1, focusOut: 1 } }, annMid: SAY('Moved. [Dr. Jonas Weber] is closed on fr and invited on ib. ib reports the email was sent.') }); }
+    else if (B === 'HTM04') { h = 1000; inner = DESK({ sc: 'B', q: 'weber', h, scroll: 330, br: { fr: { open: 'support', panel: SUPP() } } }); }
+    else if (B === 'HTM04B') {
+      const res = `<div role="region" aria-labelledby="d-h" style="margin:0 14px 14px;border:1px solid var(--lavE);border-radius:12px;background:var(--card);padding:16px 18px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center;gap:10px"><h3 id="d-h" style="margin:0;font-size:16px;font-weight:800">Support session authorised for [Dr. Jonas Weber]</h3>${CHIP('Changes nothing on the account')}<span style="margin-left:auto">${bG('Close', SM)}</span></div><p tabindex="-1" style="margin:0;font-size:13px;color:var(--body);${FOC}border-radius:4px">Opened in a new tab. The link works once, within five minutes. If no tab opened, ${LNK('open the session')}.</p><p style="margin:0;display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--body)">${GL.ok}<span><b style="color:var(--ink)">Told:</b> fr reports that its security notice was stored in his inbox there. Whether the email copy arrived is not reported.</span></p><p style="margin:0;font-size:12px;color:var(--mut)">The other two answers this line can give: “Not told: fr reports that its security notice could not be stored, so it sent him nothing. The session is authorised all the same.” · “Not recorded: fr did not report whether its security notice was stored.”</p></div>`;
+      inner = DESK({ sc: 'B', q: 'weber', scroll: 330, br: { fr: { open: 'support', panel: res } }, annMid: SAY('Support session authorised. Opened in a new tab.') });
+    }
+    else if (B === 'HTM05') { h = 1040; inner = DESK({ sc: 'B', q: 'weber', h, scroll: 420, br: { de: { open: 'unbind', panel: UNBP() } } }); }
+    else if (B === 'HTM05B') { inner = DESK({ sc: 'B', q: 'weber', scroll: 420, br: { de: { open: 'unbind', panel: UNBP() } } }, SCRIM(UNB_REVIEW())); }
+    else if (B === 'HTM05C') { inner = DESK({ sc: 'B', q: 'weber', scroll: 330, br: { de: { unbound: 1, focusOut: 1 } }, annMid: SAY('[Paul Weber] is no longer an administrator of de.') }); }
+    else if (B === 'HTM06') {
+      w = 1100; h = 700;
+      const p = MOVEP({ reason: 1, msg: `<p role="alert" tabindex="-1" style="margin:0;display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--neg);${FOC}border-radius:4px">${GL.tri}<span>This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again. Nothing was moved.</span></p>` });
+      inner = `<div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">${EB('Refused · the route answered and did nothing')}${GROUP('fr', '[Axal France]', HITROW('fr', { open: 'move', panel: p }), '1 matched')}</div>`;
+    }
+    else if (B === 'HTM06B') {
+      w = 1100; h = 720;
+      const p = UNBP({ msg: `<p role="status" tabindex="-1" style="margin:0;display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--ambT);${FOC}border-radius:4px">${GL.clock}<span><b>Outcome unknown.</b> No answer arrived, so whether this happened is not known. Search de for [Paul Weber] before trying again.</span></p>`, btns: `<button type="button" disabled aria-disabled="true" style="${NEG}border:1px solid var(--negE);background:var(--card);color:var(--neg);opacity:.45;${SM}">Unbind from de</button>${bS('Search de again', SM)}${bG('Close', SM)}` });
+      inner = `<div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">${EB('Outcome unknown · never drawn as done or as refused')}${GROUP('de', '[Axal Germany]', HITROW('de', { open: 'unbind', panel: p }), '1 matched')}</div>`;
+    }
+    else if (B === 'HTM06C') {
+      w = 1100; h = 360;
+      inner = `<div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">${EB('Closed with Cancel, Escape or × · focus returns to the button that opened it')}${GROUP('fr', '[Axal France]', HITROW('fr', { focus: 'move' }), '1 matched')}${SAY('Move closed. Nothing was changed.')}${ANN('Focus lands on “Move [Dr. Jonas Weber] from fr”, the button in the initiating row. Escape does nothing while a request is in flight (the answer still has to be shown). After a result, focus goes to the line that replaced the row instead (HTM03D, HTM05C).')}</div>`;
+    }
+    else if (B === 'HTM07') { inner = DESK({ sc: 'C', mtf: {} }); }
+    else if (B === 'HTM07B') { h = 1000; inner = DESK({ sc: 'C', h, mtf: { open: 1 } }); }
+    else if (B === 'HTM07C') { inner = DESK({ sc: 'C', mtf: { result: 'created' }, annTop: SAY('Invitation created on ib. Email not sent; the link is shown once.') }); }
+    else if (B === 'HTM07D') { inner = DESK({ sc: 'C', mtf: { result: 'unknown' }, annTop: SAY('No answer arrived. Whether the invitation was created is not known.') }); }
+    /* phone */
+    else if (B === 'HTM10') { w = 390; h = 844; inner = PPAGE({ sc: 'A' }); }
+    else if (B === 'HTM10B') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', scroll: 160 }); }
+    else if (B === 'HTM10C') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', over: SHEET({ title: 'Move [Dr. Jonas Weber]', sub: 'From fr [Axal France] · advisor · step 1 of 3', back: '[Dr. Jonas Weber]', body: PPRES(MOVE_PRE.map((r, i) => i === 4 ? ['met', r[1]] : r).slice(0, 4).concat([['ask', 'Your authenticator code and a fresh step-up']])) + PCONS('What the move does', MOVE_CONS.slice(0, 4)), foot: `<span style="font-size:12px;color:var(--mut)">Below: destination ib [Axal Iberia] and your reason</span>${bP('Review move', 'min-height:44px;width:100%')}` }) }); }
+    else if (B === 'HTM10D') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', over: `<div style="position:absolute;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:6">${MOVE_REVIEW(1).replace(`${bS('Back', SM + FOC)}${bP('Move to ib', SM)}`, `${bS('Back', 'min-height:44px;flex:1;' + FOC)}${bP('Move to ib', 'min-height:44px;flex:1')}`)}</div>` }); }
+    else if (B === 'HTM10E') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', over: SHEET({ title: 'Support [Dr. Jonas Weber]', sub: 'On fr [Axal France] · advisor', back: '[Dr. Jonas Weber]', chip: CHIP('Changes nothing on the account'), body: PPRES([['met', 'The account is active on fr'], ['ask', 'Your authenticator code and a fresh step-up']]) + PCONS('What happens', SUP_CONS) + FIELD('Reason (at least 10 characters)', 'Checking why his weekly digest settings will not save', { h: 44 }), foot: `<span style="font-size:12px;color:var(--mut)">Asks for your authenticator code when you begin.</span>${bP('Begin support session', 'min-height:44px;width:100%')}` }) }); }
+    else if (B === 'HTM10F') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', over: SHEET({ title: 'Unbind [Paul Weber] from de', sub: 'Administrator of de [Axal Germany] · step 1 of 3', back: '[Paul Weber]', chip: CHIP('Removes access', 'neg'), body: PPRES([['met', 'He is an active administrator of de'], ['ask', 'Your authenticator code and a fresh step-up']]) + PCONS('This removes access', UNB_CONS, 'neg') + `<p style="margin:0;padding:4px 12px;border-radius:9px;background:var(--raised);font-size:12.5px;color:var(--body)">Need to look instead? Support changes nothing. ${LNK('Open Support instead', 'font-size:12.5px;display:inline-flex;min-height:44px;align-items:center')}</p>` + FIELD('Reason (at least 10 characters)', 'Left [Axal Germany] on 20 Nov; licence owner asked HQ to remove his access', { h: 44 }), foot: `<span style="font-size:12px;color:var(--mut)">Review comes next, then your authenticator code.</span>${bNo('Review unbind', 'min-height:44px;width:100%')}` }) }); }
+    else if (B === 'HTM10G') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', over: `<div style="position:absolute;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:6">${UNB_REVIEW(1).replace(`${bS('Back', SM + FOC)}${bN('Unbind from de', SM)}`, `${bS('Back', 'min-height:44px;flex:1;' + FOC)}${bN('Unbind from de', 'min-height:44px;flex:1')}`)}</div>` }); }
+    else if (B === 'HTM10H') { w = 390; h = 844; inner = PPAGE({ sc: 'C', over: SHEET({ title: 'Retry the invitation', sub: '[Maya Ruiz] · fr → ib · attempt 2', back: '[Maya Ruiz]', body: PPRES([['met', 'HQ recorded that fr closed the account'], ['met', 'No other retry is running'], ['ask', 'Your authenticator code and a fresh step-up']]) + PCONS('What the retry does', ['Asks ib to invite maya@example.com as founder, as fr recorded her.', 'A retry cannot create a second invitation for this move.', 'If ib’s mailer does not send it, the link is shown to you once.']), foot: bP('Retry invitation', 'min-height:44px;width:100%') }) }); }
+    else if (B === 'HTM10J') { w = 390; h = 844; inner = PPAGE({ sc: 'B', q: 'weber', scroll: 160, fr: { focus: 'move' }, over: `<div style="position:absolute;left:16px;right:16px;bottom:16px;z-index:6">${SAY('Move closed. Nothing was changed.')}</div>` }); }
+    else if (B === 'HTM10K') { w = 390; h = 844; inner = PPAGE({ sc: 'A', disc: 1, scroll: 0 }); }
+    else if (B === 'HTM12') { h = 1040; inner = DESK({ sc: 'B', q: 'weber', h, scroll: 420, br: { de: { open: 'unbind', panel: UNBP() } } }); }
+    else if (B === 'HTM20') {
+      w = 1200; h = 1880;
+      inner = DOC('HTM20 · Headings, row action names, focus and announcements · #8678', 'HQ Team: what a keyboard and a screen reader meet',
+        HSEC('Heading outline', HT(['Level', 'Heading', 'Note'], [
+          [code('h1'), '<b style="color:var(--ink)">Team</b>', 'Breadcrumb “HQ › Team” above it. One sentence under it; no operating instructions.'],
+          [code('—'), 'Scope (a labelled region, no heading)', 'HQ-held count, branches, read time. With no branch: one sentence and the closed “How branch actions work” disclosure.'],
+          [code('h2'), 'Moves to finish', 'Only when HQ’s record holds an open move. Above the list, because it is unfinished work.'],
+          [code('h2'), 'On branches', 'Only after a search. One h3 per branch that answered with a match (“[Axal France] fr”).'],
+          [code('h3'), 'The open detail surface', '“Move [Dr. Jonas Weber] to another branch”, “Open a support session for …”, “Unbind [Paul Weber] from de”, “Retry the invitation for …”. h4: Before you confirm · What it does.'],
+          [code('h2'), 'Axal VC HQ', 'The HQ-held administrators table.'],
+          [code('h2'), 'HQ’s powers and every account', 'Super Admin elevation, What each power needs, All accounts (⚑ Q1).']
+        ], '70px minmax(0,1fr) minmax(0,1.4fr)')) +
+        HSEC('Row action accessible names', HT(['Visible', 'Accessible name', 'Drawn when'], [
+          ['Sign out', '“Sign out [Tom Becker] everywhere”', 'Every HQ-held row.'],
+          ['Support', '“Support [Dr. Jonas Weber] on fr”', 'An active account on a branch that answered.'],
+          ['Move', '“Move [Dr. Jonas Weber] from fr”', 'An active account that is not an administrator, and at least one other branch answered.'],
+          ['Unbind', '“Unbind [Paul Weber] from de”', 'An active administrator on a branch that answered. Destructive style; never beside Move.'],
+          ['Retry invitation', '“Retry invitation for [Maya Ruiz] on ib”', 'An open move whose source closing HQ recorded and no retry is running.'],
+          ['× (detail)', '“Close, back to [Dr. Jonas Weber]”', 'Every open detail surface and sheet.']
+        ], '150px minmax(0,1fr) minmax(0,1.2fr)')) +
+        HSEC('Focus: where it goes', HT(['Event', 'Focus moves to'], [
+          ['A detail surface opens (desktop inline, phone sheet)', 'Its h3 (tabindex −1), so the prerequisites are read first; then the first field.'],
+          ['Cancel, Escape or × on a detail surface or sheet', 'The action button in the initiating row that opened it (HTM06C, HTM10J). Escape is ignored while a request is in flight.'],
+          ['Review dialog opens', '“Back” (the safe choice). Tab cycles inside the dialog.'],
+          ['Back in the Review dialog', 'The detail surface’s primary button (Review move / Review unbind), with the form as it was.'],
+          ['Step-up Cancel', 'The detail surface’s primary button; nothing was sent.'],
+          ['Confirmed result', 'The line that replaces the row (HTM03D, HTM05C) or the outcome block (HTM04B, HTM07C).'],
+          ['Refused or unknown', 'The detail surface stays open; focus moves to the message (role alert for refused, status for unknown).']
+        ], 'minmax(0,1fr) minmax(0,1.5fr)')) +
+        HSEC('Announcements (literal; one polite region plus the alerts marked)', HT(['When', 'Announced', 'How'], [
+          ['Search answered', '“HQ: 0 of 3 administrators match. Branches: 2 accounts on 2 branches; 1 branch did not answer.”', 'polite'],
+          ['A detail surface closes without acting', '“Move closed. Nothing was changed.” (Support, Unbind, Retry alike)', 'polite'],
+          ['Move confirmed', '“Moved. [Dr. Jonas Weber] is closed on fr and invited on ib. ib reports the email was sent.”', 'polite'],
+          ['Support authorised', '“Support session authorised. Opened in a new tab.”', 'polite'],
+          ['Unbind confirmed', '“[Paul Weber] is no longer an administrator of de.”', 'polite'],
+          ['Retry answered', '“Invitation created on ib. Email not sent; the link is shown once.”', 'polite'],
+          ['Refused', 'The route’s sentence, then “Nothing was moved.” / “Nothing was changed.”', 'alert'],
+          ['No answer', '“No answer arrived. Whether this happened is not known.”', 'polite']
+        ], 'minmax(0,.9fr) minmax(0,1.6fr) 80px')) +
+        HSEC('Copy rules', `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--body)"><li>Each action explains itself where it opens: prerequisites, then consequences, then the fields. Nothing about an action is printed where that action cannot appear.</li><li>Support always says it changes nothing on the account; Unbind always says it removes access. They never share a colour or a button style.</li><li>No decision numbers, table names or environment variables in what a person reads.</li><li>Prerequisites have a word and a glyph: Met, To do, When you confirm, Not met.</li></ul>`));
+    }
+    else if (B === 'HTMH') {
+      w = 1200; h = 2300;
+      inner = DOC('HTM-H · Handoff · #8678 · main ee23155ff6', 'HQ Team: instructions inside the actions — handoff',
+        HSEC('Checked on main (ee23155ff6)', HT(['Where', 'What it showed'], [
+          [code('pages/hq/HqTeamTable.jsx'), 'The cause. After the roster and branch groups, one <span style="' + M + '">&lt;p&gt;</span> prints the “whole team” sentence and then, unconditionally, the instructions for Move, Retry invitation, Support and Unbind (about 170 words, 11 px faint). It renders with no branch provisioned, when none of those four can appear.'],
+          [code('pages/hq/AccountsPage.jsx'), 'Order: header (a long subtitle on the tenant column) → SuperAdminHolders → HqTeamTable → HqTeamActions (two cards, nine rows of rules) → a caption → UsersConsole (All accounts).'],
+          [code('team/BranchAccountSearch.jsx'), 'MoveHit draws Support (active, not under the overlay), Move (active, not an admin, another code exists) and Unbind (active admin). Destinations are every other branch code, including one that is not deployed or did not answer. Buttons have no row-specific accessible name.'],
+          [code('team/MoveAccountAction.jsx'), 'One form: destination select, reason (says only “changes which subsidiary earns revenue share”), Move to X. Closing the source, the re-invite and the records rule are not in the form.'],
+          [code('team/SupportSessionAction.jsx'), 'Already explains itself before Begin: new tab on the branch’s site, authenticator and step-up, the branch’s security notice with name, reason and 30 minutes; after it, Told / Not told / Not recorded.'],
+          [code('team/UnbindAdminAction.jsx'), 'One sentence: takes the role off, deactivates, records stay. Rose button. No review step.'],
+          [code('AccountMoveRecovery.jsx · accountMoveModel.js'), 'Moves to finish from HQ’s record (GET /api/admin/account-moves); Retry invitation explains itself; three facts kept apart (created, email sent, next step). No review: one press sends.'],
+          [code('team/actionFocus.js · governedAction.js'), 'Focus on the first field when a form opens; Escape closes unless submitting; cancel returns focus to the opener; a result moves it to the outcome line. States idle, open, submitting, confirmed, refused, unknown. Only Sign out translates the bare “TOTP required” refusal.'],
+          [code('routes/admin_support_sessions.ts'), 'Support, Move, Unbind and Retry each require TOTP, a recent step-up and requireSuperAdmin, in that order; reasons of at least 10 characters (Retry uses the move’s). Kept as they are.'],
+          [code('rpc/branchOps.ts · unbindAdmin'), 'Sets role exploring and is_active 0, guarded on role admin; two activity rows (operator and person). No notice is sent. Support (openSupportSession) does send one.'],
+          [code('routes/admin_hq.ts · GET /admins'), 'The roster, registry_available, no_branches and branches_coverage that the scope summary reads.'],
+          [code('components/StepUpModal.jsx'), '“Confirm it’s you”, raised mid-request by request(); drawn in HTM03C as shipped.']
+        ], '300px minmax(0,1fr)')) +
+        HSEC('Preserved', `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--body)"><li>Every gate: TOTP, recent step-up, Super Admin, reason minimums, the branch’s own checks. The Review step is added in front of them; nothing is relaxed or reordered.</li><li>Which action appears on which row (D262: an administrator is unbound, not moved; no Sign out on a branch hit).</li><li>The governed-action states and their copy (refused, outcome unknown), Told / Not told / Not recorded, the move outcome’s three facts.</li><li>The view-as overlay rule: under it nothing is acted on and no control is drawn.</li><li>The holder console, the action reference rows and the All accounts directory: moved, not removed (⚑ Q1).</li></ul>`) +
+        HSEC('Requires engineering (◇)', HT(['Tag', 'What'], [
+          [BE('proposed · #8678'), 'Tell the page before Send whether this session was signed in with an authenticator, so “Your authenticator code” can read Met or Not met instead of “When you confirm”. Today the Worker answers 403 “TOTP required” only after the press. Until then the prerequisite reads “When you confirm” and the refusal is translated (HTM06).']
+        ], '190px minmax(0,1fr)')) +
+        HSEC('Pending the owner (⚑)', HT(['Question', 'Drawn'], [
+          [OQ('Q1 · What leads the page'), 'A (drawn): scope, search and the people list first; the holder console, the two action reference cards (closed, “What each power needs”) and All accounts follow under “HQ’s powers and every account”. B: keep H20’s order (holder console first, both cards open) and only remove the paragraph.'],
+          [OQ('Q2 · A branch that did not answer'), 'A (drawn): not offered as a move destination until it answers (HTM03). B: offered, with a warning that the account may close on the source while the invitation cannot land.']
+        ], '240px minmax(0,1fr)')) +
+        HSEC('Frontend only', `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--body)"><li>Remove the footer paragraph from HqTeamTable; print “No branch is provisioned…” plus one sentence on branch actions in a scope summary above the list, with a closed disclosure (HTM01, HTM01B). With branches and no search: one “6 ready to search” line, not six idle groups.</li><li>Each action’s detail surface: Before you confirm (prerequisites with a word and a glyph) and What it does (consequences), from copy already on main plus the route and branchOps facts above.</li><li>Move and Unbind: Scope → Review (dialog) → step-up → Result. Support and Retry keep one press after their explanation (not destructive).</li><li>Row-specific aria-labels; at 390 a full-screen sheet with a 44 px close; focus returns to the opener on close (actionFocus.js already does this inline; extend it to the sheet and the dialog).</li><li>Destinations limited to branches that answered (⚑ Q2). Reuse Sign out’s “TOTP required” translation for the other four.</li></ul>`) +
+        HSEC('Acceptance → boards', HT(['Criterion', 'Boards'], [
+          ['HQ-held only: people list, scope, search and relevant actions lead; one short explanation of unavailable branch actions', 'HTM01, HTM01B, HTM01C · phone HTM10, HTM10K · today HTM00'],
+          ['Move, retry invitation, support and unbind explained at their entry points', 'HTM03, HTM07B, HTM04, HTM05 · phone HTM10C, HTM10H, HTM10E, HTM10F'],
+          ['Prerequisites and consequences before confirmation', 'HTM03 → HTM03B → HTM03C, HTM05 → HTM05B, HTM04, HTM07B · phone HTM10C → HTM10D, HTM10F → HTM10G'],
+          ['Support and unbind clearly differentiated', 'HTM02 ②, HTM04 vs HTM05, HTM05 “Open Support instead”, HTM12 · phone HTM10E vs HTM10F'],
+          ['Authorization, reason and step-up preserved', 'HTM03C, HTM06 (refused), HTM06B (unknown), handoff Preserved'],
+          ['HQ-only, eligible branch, interrupted invitation · desktop and mobile', 'HTM01 / HTM02 / HTM07 · HTM10 / HTM10B / HTM10H'],
+          ['Focus returns to the initiating row', 'HTM06C, HTM10J, HTM20 focus table'],
+          ['Prompt: accessible row action names, small scope summary, optional detail', 'HTM02, HTM20, HTM01B']
+        ], '440px minmax(0,1fr)')) +
+        HSEC('Tests the acceptance asks for', `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--body)"><li>With registry_available and no_branches: no Move, Support, Unbind or Retry copy anywhere on the page; one sentence and a closed disclosure (extend hq_team_branch_truth_5041).</li><li>Each of Move, Support, Unbind and Retry renders “Before you confirm” and “What it does” before any request is made; Move and Unbind send nothing until Review is confirmed (extend hq_team_split_5044, hq_team_move_recovery_5043).</li><li>Support and Unbind panels carry different styles and the “changes nothing” / “removes access” lines; route gate tests unchanged (hq_support_session_d259, hq_unbind_admin_d262).</li><li>Cancel, Escape and × return focus to the opener inline and from the 390 sheet; a result moves it to the outcome (extend hq_team_behaviour_5045).</li><li>Playwright at 1440 and 390 for HQ-only, a branch search with a member and an administrator, and an open move.</li></ul>`));
+    }
+    return { html: { __html: ROOT(w, h, inner) } };
+  }
+}
+
+</script>
+</body>
+</html>

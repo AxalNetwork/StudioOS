@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor LP and Own Fund Navigation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · navigation · #8683 · role audit 25 Nov · companion to #6127 and #6229, look of Studio Home Investor (SIV)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor navigation: Axal VC Fund is your LP seat in Axal’s fund, My fund is the fund you run</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Two adjacent sidebar rows for a member holding the Investor licence. Today they read “Axal VC Fund” and “Fund” (collapsed “AVF” and “F”), carry no standing, and open headings that do not repeat them (“Axal VC Fund”, “Run my fund”, “Fund ‹ LPs”). Proposed, wayfinding and entry copy only: “Axal VC Fund” with a standing tag (LP, Applied, or none for a visitor) and “My fund” with a GP or Institutional tag, a sub-line saying whose fund each is (tooltip on desktop, second line in the 390 menu), short words in the collapsed rail, and destination headers with a crumb, an ownership line and a line to the other row. Drawn for a visitor, an applicant, an LP only, a GP only and a member with both, with numbered routes, Back, keyboard and touch, loading, unavailable, locked, no fund, administrator preview and dark. Routes, guards, the Institutional tier and the row order (Deals and Diligence included) are unchanged. Platform States words and glyphs (D5129); Eadwyn stays the one rail. A violet dashed ◇ marks backend work and an amber ⚑ an owner decision, drawn as option A; neither is product copy, nor are the step and fixture tags.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main ee23155ff6 · [Lena Sato], [Sato Ventures], [Sato Ventures Fund I], the [LP · …] names and every bracketed figure are fictional; Axal Fund I and its $250,000 commitment match Studio Home Investor</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor LP and Own Fund Navigation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LPV-0', 'Routes, relationships and the label table', 'Both rows today and proposed, what each relationship sees before opening either row, where each opens, and the six numbered routes the boards follow.', [W('LPV00')]],
+      ['LPV-1', 'Before · source-confirmed on main', 'The sidebar and collapsed rail as shipped, and the four headings the rows open: Axal VC Fund with no crumb, Run my fund, Fund ‹ LPs / LP registry, and the locked Overview surface.', [C('LPV01', false, 1200, 1065)]],
+      ['LPV-2', 'The two rows · every relationship', 'Visitor, applicant, LP only, GP only, LP and GP, Institutional with no fund, a failed read and loading. Tags pair a glyph and a word. Expanded with the tooltip, collapsed with short words and corner glyphs. ⚑ Q1 label options; ◇ a light standing read.', [C('LPV02', false, 1200, 1282)]],
+      ['LPV-3', 'Destination headers', 'Axal VC Fund for an LP, a visitor or GP, an applicant and an unavailable position; My fund for a GP, its zones (My fund ‹ LPs), no fund recorded, records unavailable, and the locked surface renamed for the row.', [C('LPV03', false, 1200, 2080)]],
+      ['LPV-4', 'LP only · desktop', 'R1: the LP tag and sub-line before opening, then Axal VC Fund › My commitment with the h1 focused. R2: My fund is locked and says so; it opens the locked page (⚑ Q2 A), with a line back to the LP seat.', [F('LPV04', '1–3 · Axal VC Fund', 730), F('LPV05', '1–3 · My fund, locked', 938)]],
+      ['LPV-5', 'GP only · desktop', 'R3: My fund · GP opens the fund they run, with Eadwyn as today. R4: Axal VC Fund has no tag and says “You are not an LP in it”.', [F('LPV06', '1–3 · My fund', 599), F('LPV07', '1–3 · Axal VC Fund', 762)]],
+      ['LPV-6', 'LP and GP · desktop', 'R5: both tags, Axal VC Fund with its line to My fund, then My fund ‹ LPs with the LP registry, its crumb and Back.', [F('LPV08', '1–3 · Axal VC Fund', 722), F('LPV09', '4–5 · My fund ‹ LPs', 609)]],
+      ['LPV-7', 'Collapsed sidebar', 'R6: the 64 px rail with short words, the tag as a corner glyph and the tooltip on keyboard focus, which is also the row’s accessible description.', [F('LPV10', false, 640)]],
+      ['LPV-8', 'States around the rows', 'Loading, unavailable, no Investor licence, administrator preview (⚑ Q3 A), the locked row as a link (⚑ Q2 A) and an approved applicant with no holding.', [C('LPV11', false, 1200, 574)]],
+      ['LPV-9', 'Phone 390 × 844', 'The menu sheet for LP and GP and for LP only, each fund row with its tag and sub-line; Axal VC Fund › My commitment; My fund › Overview; My fund locked; and both reads unavailable.', [P('LPV12', '1 · Menu · LP and GP'), P('LPV13', '1 · Menu · LP only'), P('LPV14', '2 · Axal VC Fund'), P('LPV15', '2 · My fund'), P('LPV16', '2 · My fund, locked'), P('LPV17', 'Unavailable')]],
+      ['LPV-10', 'Dark', 'The row specimens and Axal VC Fund for a member with both relationships, on the dark tokens; words and glyphs unchanged.', [C('LPV18', 'Rows', 1200, 1058), F('LPV18D', 'Axal VC Fund', 680)]],
+      ['LPV-11', 'Keyboard, touch, headings, announcements and Back', 'Focus order in the expanded and collapsed sidebar and the 390 sheet, the h1 focused on arrival, the crumb and its aria-current, what is announced, and how Back behaves on sections and zones.', [C('LPV19', false, 1200, 494)]],
+      ['LPV-12', 'Engineering handoff', 'Checked on main with files and the cause, frontend-only work, ◇ the standing read, ⚑ Q1 to Q3 with option A drawn, acceptance mapped to boards, and the tests to update and add.', [W('LPV20')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

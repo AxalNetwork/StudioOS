@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operating Partner First Delivery · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* IHS · Investor Studio Home v2 (#6126) — continues Studio Modularity (SM16 to SM27). Every class is ihs- prefixed. */
+.ihs-cv{--bg:#f4f3f7;--card:#fff;--raised:#faf9fc;--ink:#18181b;--body:#3f3a47;--mut:#6b6577;--line:#ececf1;--line2:#e2dfe8;--vi:#7c3aed;--vtx:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--chip:#f4f3f7;--pos:#047857;--posT:#ecfdf5;--posE:#a7f3d0;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--err:#b91c1c;--skel:#ececf1;--scrim:rgba(24,24,27,.42);
+  --sg:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--mo:'Roboto Mono',ui-monospace,Menlo,Consolas,monospace;
+  font-family:var(--sg);font-size:13px;line-height:1.45;color:var(--ink);background:var(--bg);position:relative;overflow:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.ihs-cv.ihs-dark{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--body:#d1d5db;--mut:#9ca3af;--line:#374151;--line2:#4b5563;--vi:#a78bfa;--vtx:#c4b5fd;--lav:rgba(167,139,250,.14);--lavE:rgba(167,139,250,.42);--chip:#1f2937;--pos:#34d399;--posT:rgba(52,211,153,.12);--posE:rgba(52,211,153,.4);--amT:#fcd34d;--amBg:rgba(252,211,77,.1);--amE:rgba(252,211,77,.5);--err:#f87171;--skel:#1f2937;--scrim:rgba(0,0,0,.6)}
+.ihs-cv *{box-sizing:border-box}
+.ihs-cv h1,.ihs-cv h2,.ihs-cv h3,.ihs-cv p,.ihs-cv ul,.ihs-cv ol{margin:0;padding:0}
+.ihs-cv ul,.ihs-cv ol{list-style:none}
+.ihs-cv a{color:var(--vtx);text-decoration:none}
+.ihs-cv button{font-family:var(--sg);cursor:pointer}
+.ihs-mo{font-family:var(--mo)}
+.ihs-mu{color:var(--mut)}
+.ihs-ey{font:700 10.5px var(--mo);letter-spacing:.11em;text-transform:uppercase;color:var(--mut)}
+/* shell */
+.ihs-shell{display:flex;flex-direction:column;background:var(--bg)}
+.ihs-top{height:56px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-brand{display:flex;align-items:center;gap:9px;width:214px;flex:none;font-size:15px;font-weight:800;letter-spacing:-.02em}
+.ihs-mark{width:28px;height:28px;border-radius:7px;background:var(--ink);display:grid;place-items:center;color:var(--card);font:800 12px var(--sg)}
+.ihs-search{width:340px;min-height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:var(--bg);color:var(--mut);font-size:13px}
+.ihs-ib{width:38px;height:38px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--body);display:grid;place-items:center}
+.ihs-avt{width:34px;height:34px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--vtx)}
+.ihs-hq{font:700 11.5px var(--mo);letter-spacing:.07em;padding:3px 10px;border-radius:999px;background:#18181b;color:#fff;border:1px solid #4b5563}
+.ihs-row{flex:1;display:flex;min-height:0}
+.ihs-side{width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:2px}
+.ihs-side.ihs-nar{width:64px;align-items:center}
+.ihs-sw{width:100%;min-height:52px;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);text-align:left;margin-bottom:10px}
+.ihs-sw b{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ihs-sq{width:30px;height:30px;flex:none;border-radius:7px;background:var(--lav);border:1px solid var(--lavE);color:var(--vtx);display:grid;place-items:center;font-size:11px;font-weight:800}
+.ihs-nav{display:flex;align-items:center;min-height:36px;padding:0 12px;border-radius:9px;font-size:13.5px;color:var(--body)!important;font-weight:500}
+.ihs-nav[aria-current]{background:var(--lav);color:var(--vtx)!important;font-weight:700}
+.ihs-side.ihs-nar .ihs-nav{width:40px;height:40px;padding:0;justify-content:center;font-size:11.5px;font-weight:700}
+.ihs-sep{height:1px;background:var(--line);margin:8px 4px}
+.ihs-main{flex:1;min-width:0;padding:24px 28px 32px;display:flex;flex-direction:column;gap:16px;position:relative}
+.ihs-foot{height:38px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;border-top:1px solid var(--line);background:var(--card);font-size:12px;color:var(--mut)}
+/* header */
+.ihs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.ihs-ttl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ihs-ttl h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.ihs-badge{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(14,165,233,.14);color:var(--ink)}
+.ihs-badge i{width:7px;height:7px;border-radius:999px;background:#0ea5e9}
+.ihs-purp{font-size:13.5px;color:var(--mut);margin-top:4px;max-width:640px}
+.ihs-hr{display:flex;align-items:center;gap:12px;flex:none}
+.ihs-date{font:500 12.5px var(--mo);color:var(--mut)}
+/* buttons */
+.ihs-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 14px;border-radius:9px;font-size:13.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--ink)}
+.ihs-btn.ihs-p{border-color:#7c3aed;background:#7c3aed;color:#fff}
+.ihs-btn.ihs-v{border-color:var(--vi);color:var(--vtx);background:var(--card)}
+.ihs-btn.ihs-t{border-color:transparent;background:transparent;color:var(--body)}
+.ihs-btn.ihs-sm{min-height:32px;padding:0 11px;font-size:12.5px;border-radius:8px}
+.ihs-btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.ihs-lnk{display:inline-flex;align-items:center;min-height:28px;font-size:12.5px;font-weight:600;color:var(--vtx);white-space:nowrap}
+/* annotation tags (not product copy) */
+.ihs-be{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px dashed var(--vi);border-radius:6px;background:var(--lav);color:var(--vtx);font:700 11px var(--mo);white-space:nowrap}
+.ihs-pol{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px solid var(--amE);border-radius:6px;background:var(--amBg);color:var(--amT);font:700 11px var(--mo);white-space:nowrap}
+.ihs-note{font-size:12px;color:var(--mut);line-height:1.45}
+/* bands */
+.ihs-thesis{position:relative;background:var(--lav);border:1px solid var(--lavE);border-radius:12px;padding:12px 16px;display:flex;gap:16px;align-items:flex-start}
+.ihs-thesis .ihs-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.ihs-thesis .ihs-ey{color:var(--vtx)}
+.ihs-thq{font-size:13px;line-height:1.5}
+.ihs-crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ihs-cg{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ihs-cgl{font:600 10.5px var(--mo);color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.ihs-chip{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line2);font-size:11.5px;font-weight:600;color:var(--body);white-space:nowrap}
+.ihs-chip.ihs-x{text-decoration:line-through;color:var(--mut);background:transparent;border-style:dashed}
+.ihs-band{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 40px 12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ihs-av{width:40px;height:40px;flex:none;border-radius:999px;background:var(--chip);border:2px solid #0ea5e9;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--body)}
+.ihs-pill{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--chip);color:var(--body);border:1px solid var(--line2)}
+.ihs-pill.ihs-lv{background:var(--lav);color:var(--vtx);border-color:var(--lavE)}
+.ihs-pill.ihs-ps{background:var(--posT);color:var(--pos);border-color:var(--posE)}
+.ihs-pill.ihs-am{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.ihs-lock{position:absolute;top:12px;right:12px;color:var(--mut);display:flex}
+/* Eadwyn chat */
+.ihs-chat{background:var(--card);border:1px solid var(--lavE);border-radius:14px;overflow:hidden}
+.ihs-chh{display:flex;align-items:center;gap:12px;padding:14px 18px 14px 22px;background:var(--lav);border-bottom:1px solid var(--line)}
+.ihs-ead{width:36px;height:36px;flex:none;border-radius:10px;background:#7c3aed;color:#fff;display:grid;place-items:center;font:800 15px var(--sg)}
+.ihs-chg{display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.ihs-chl{display:flex;flex-direction:column;min-height:300px}
+.ihs-thr{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:10px}
+.ihs-bub{align-self:flex-start;max-width:78%;padding:10px 13px;border-radius:12px 12px 12px 4px;background:var(--chip);border:1px solid var(--line);font-size:13.5px;line-height:1.5}
+.ihs-bub.ihs-u{align-self:flex-end;border-radius:12px 12px 4px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed}
+.ihs-comp{border-top:1px solid var(--line);padding:12px 20px 14px;display:flex;align-items:center;gap:6px}
+.ihs-inp{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden}
+.ihs-send{width:42px;height:42px;flex:none;border-radius:10px;border:none;background:#7c3aed;color:#fff;display:grid;place-items:center}
+.ihs-chr{background:var(--raised);border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.ihs-tabs{display:flex;gap:16px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ihs-tabs a{display:inline-flex;align-items:center;min-height:46px;font-size:13.5px;font-weight:600;color:var(--body);border-bottom:2px solid transparent;white-space:nowrap}
+.ihs-tabs a[aria-current]{color:var(--vtx);font-weight:700;border-bottom-color:var(--vi)}
+.ihs-prop{border:1.5px dashed var(--vi);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:9px;max-width:560px}
+/* module grid + tile */
+.ihs-mh{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ihs-mh h2{font-size:16px;font-weight:800;letter-spacing:-.02em}
+.ihs-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:stretch}
+.ihs-grid.ihs-g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ihs-grid.ihs-g1{grid-template-columns:minmax(0,1fr)}
+.ihs-tile{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ihs-th{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ihs-th h3{flex:1;min-width:0;font-size:14px;font-weight:800;letter-spacing:-.01em}
+.ihs-tn{font-size:12px;color:var(--mut);text-align:right}
+.ihs-tf{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ihs-sub{font-size:12px;color:var(--mut);line-height:1.45}
+/* Needs you rows */
+.ihs-nr{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-nr.ihs-half{grid-template-columns:30px minmax(0,1fr) auto}
+.ihs-gl{width:32px;height:32px;border-radius:9px;background:var(--chip);border:1px solid var(--line);display:grid;place-items:center;color:var(--body)}
+.ihs-nr.ihs-top .ihs-gl{background:var(--lav);border-color:var(--lavE);color:var(--vtx)}
+.ihs-ns{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ihs-ns b{font-size:13.5px;font-weight:700;line-height:1.35}
+.ihs-ns span{font-size:12px;color:var(--mut);line-height:1.4}
+.ihs-nd{font:500 12px var(--mo);color:var(--body);white-space:nowrap;text-align:right}
+.ihs-od{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ihs-od svg{color:var(--err)}
+/* state words (D5129): glyph + word, never colour alone */
+.ihs-st{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--body)}
+.ihs-st.ihs-ok{background:var(--posT);border-color:var(--posE);color:var(--pos)}
+.ihs-st.ihs-out{border-style:solid;border-color:var(--ink);color:var(--ink)}
+.ihs-st.ihs-nst{border-style:dashed;color:var(--mut);background:transparent}
+.ihs-st.ihs-nrc{border-style:dotted;color:var(--mut);background:var(--chip)}
+.ihs-st.ihs-un{border-color:var(--line2);color:var(--ink);background:var(--raised)}
+.ihs-st.ihs-wh{color:var(--mut);background:var(--chip)}
+.ihs-nrec{font-size:12.5px;font-weight:600;color:var(--mut)}
+.ihs-unr{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--body)}
+.ihs-unr svg{color:var(--err);flex:none;margin-top:2px}
+/* funds */
+.ihs-tb{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.ihs-tb td,.ihs-tb th{color:inherit}
+.ihs-tb thead th{color:var(--mut)}
+.ihs-tb th{font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;text-align:right;padding:0 10px 8px;white-space:nowrap}
+.ihs-tb th:first-child,.ihs-tb td:first-child{text-align:left;padding-left:0}
+.ihs-tb td{padding:11px 10px;border-top:1px solid var(--line);text-align:right;font-family:var(--mo);font-size:12.5px;white-space:nowrap;vertical-align:middle}
+.ihs-tb td:first-child{font-family:var(--sg);font-size:13.5px;font-weight:700}
+.ihs-tb tfoot td{font-weight:700;border-top:1.5px solid var(--line2)}
+.ihs-bar{position:relative;height:8px;border-radius:999px;background:var(--chip);border:1px solid var(--line2);overflow:hidden;min-width:120px}
+.ihs-bar i{position:absolute;left:0;top:0;bottom:0;background:var(--lavE);border-right:2px solid var(--vi)}
+.ihs-bar b{position:absolute;left:0;top:0;bottom:0;background:var(--vi)}
+.ihs-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut)}
+.ihs-lg i{width:12px;height:8px;border-radius:2px;display:inline-block}
+/* figures */
+.ihs-figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ihs-fig{padding:10px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ihs-fig .ihs-l{font-size:11.5px;color:var(--mut)}
+.ihs-fig .ihs-v{font:600 20px var(--mo);line-height:28px}
+.ihs-fig .ihs-r{font-size:12px;font-weight:600;color:var(--mut);line-height:1.35}
+.ihs-kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.ihs-kv span:last-child{font:600 12.5px var(--mo)}
+/* fit */
+.ihs-fr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-fr .ihs-co{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ihs-fr .ihs-co b{font-size:13.5px}
+.ihs-fchips{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}
+.ihs-tip{position:absolute;z-index:4;width:250px;padding:8px 11px;border-radius:8px;background:#18181b;border:1px solid #374151;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 8px 20px rgba(24,24,27,.25)}
+/* arrivals */
+.ihs-ar{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ihs-ar .ihs-gl{width:28px;height:28px;border-radius:8px}
+/* skeleton */
+.ihs-sk{display:block;height:12px;border-radius:6px;background:var(--skel)}
+/* module map */
+.ihs-scrim{position:absolute;inset:0;background:var(--scrim);z-index:6}
+.ihs-modal{position:absolute;z-index:7;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.3);display:flex;flex-direction:column;overflow:hidden}
+.ihs-mc{border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.ihs-mc b{font-size:13px}
+.ihs-pv{height:40px;border-radius:8px;background:var(--lav);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.ihs-pv i{height:4px;border-radius:3px;background:var(--vi);opacity:.55;display:block}
+.ihs-added{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:0 10px;border-radius:8px;background:var(--posT);color:var(--pos);font-size:12.5px;font-weight:700;align-self:flex-start}
+/* phone */
+.ihs-ph{width:390px;height:844px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.ihs-pht{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 4px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-t44{width:44px;height:44px;display:grid;place-items:center;border:none;background:transparent;color:var(--body);border-radius:10px;flex:none}
+.ihs-phb{flex:1;padding:14px 14px 20px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ihs-card44{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;align-items:center;gap:10px}
+.ihs-sheet{position:absolute;left:0;right:0;bottom:0;z-index:7;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 32px rgba(24,24,27,.22)}
+.ihs-grab{width:40px;height:4px;border-radius:999px;background:var(--line2);align-self:center}
+/* docs */
+.ihs-doc{width:1200px;padding:36px 44px;display:flex;flex-direction:column;gap:20px;background:var(--card)}
+.ihs-doc h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.ihs-doc h3{font-size:13.5px;font-weight:800}
+.ihs-dl{display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+.ihs-dl ul{display:flex;flex-direction:column;gap:6px}
+.ihs-dl li{font-size:12.5px;line-height:1.5;color:var(--body);padding-left:12px;position:relative}
+.ihs-dl li:before{content:'·';position:absolute;left:2px;color:var(--mut)}
+.ihs-code{font:500 11.5px var(--mo);background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ihs-crop{padding:24px;display:flex;flex-direction:column;gap:14px}
+.ihs-lab{font:700 10.5px var(--mo);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.ihs-ebar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 14px 36px rgba(24,24,27,.14)}
+.ihs-phb>*{flex:none}
+/* SOP · Studio Home Operating Partner (#8733) — firm feed alerts and engagements. Builds on ihs_extra.css; every new class is sop- prefixed. */
+.sop-badge{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(13,148,136,.13);color:var(--ink)}
+.sop-badge i{width:7px;height:7px;border-radius:999px;background:#0d9488}
+.sop-hello{font-size:13px;color:var(--mut)}
+.sop-ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.sop-ctx>span{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:2px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--line);color:var(--body);font-size:12px;font-weight:600}
+.sop-ctx>a{margin-left:auto}
+/* firm tiles */
+.sop-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.sop-tl{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:11px 13px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.sop-tl .sop-tk{font:700 10px var(--mo);letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.sop-tl .sop-tv{font:600 21px var(--mo);letter-spacing:-.01em}
+.sop-tl .sop-tn{font-size:11.5px;color:var(--mut);line-height:1.35}
+/* operating brief (ZoneDraft) */
+.sop-brief{border:1px dashed var(--lavE);border-radius:11px;background:var(--raised);padding:12px 14px;display:flex;align-items:center;gap:14px}
+.sop-brief p{flex:1;min-width:0;font-size:12.5px;color:var(--body);line-height:1.5}
+/* category word chips: glyph + word, never colour alone */
+.sop-cat{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:1px 9px;border-radius:6px;font-size:11.5px;font-weight:700;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--ink)}
+.sop-cat svg{flex:none}
+.sop-fr>.sop-cat{justify-self:start}
+.sop-cat.sop-blk{border:1.5px solid var(--ink)}
+.sop-cat.sop-risk{border:1.5px dashed var(--ink)}
+.sop-cat.sop-due{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.sop-cat.sop-cap{background:var(--chip)}
+.sop-cat.sop-ren{background:var(--lav);border-color:var(--lavE);color:var(--vtx)}
+.sop-cat.sop-una{border-style:dotted;color:var(--mut);background:var(--raised)}
+/* feed rows */
+.sop-feed{display:flex;flex-direction:column;gap:8px}
+.sop-fr{display:grid;grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);border-left-width:3px;border-radius:0 10px 10px 0;background:var(--card);position:relative}
+.sop-fr.sop-t-blk,.sop-fr.sop-t-risk{border-left-color:#dc2626}
+.sop-fr.sop-t-due,.sop-fr.sop-t-cap{border-left-color:#f59e0b}
+.sop-fr.sop-t-ren,.sop-fr.sop-t-seat{border-left-color:#d1d5db}
+.sop-fb{min-width:0;display:flex;flex-direction:column;gap:2px}
+.sop-who{font-size:13.5px;font-weight:700;line-height:1.35}
+.sop-wh{font-size:12.5px;color:var(--body);line-height:1.4}
+.sop-rc{font-size:11px;color:var(--mut)}
+.sop-act{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--vtx)!important;font-size:12.5px;font-weight:700;white-space:nowrap}
+.sop-act.sop-fcs,.sop-fcs{outline:2.5px solid var(--vi);outline-offset:3px}
+.sop-dim{opacity:.55}
+/* today-on-main row (as built) */
+.sop-old{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:12px;border:1px solid var(--line);border-left:3px solid #ef4444;border-radius:0 10px 10px 0;background:var(--card)}
+.sop-old a{font-size:12px;font-weight:600;color:#b45309!important;text-decoration:underline;white-space:nowrap}
+.sop-old b{font-size:13px}
+/* category filter chips (toggle buttons) */
+.sop-cats{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sop-fc{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--body);font:600 12.5px var(--sg);white-space:nowrap}
+.sop-fc b{font:600 12px var(--mo)}
+.sop-fc[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.sop-fc[aria-disabled=true]{border-style:dotted;color:var(--mut);background:var(--raised)}
+.sop-zero{font-size:12px;color:var(--mut)}
+/* disclosure */
+.sop-more{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px dashed var(--line2);border-radius:10px;background:var(--raised)}
+.sop-more p{flex:1;min-width:0;font-size:12.5px;color:var(--body)}
+.sop-grp{display:flex;align-items:baseline;gap:8px;margin-top:6px}
+.sop-grp h4{margin:0;font-size:12.5px;font-weight:800}
+/* annotations (not product copy) */
+.sop-n{display:inline-grid;place-items:center;width:20px;height:20px;flex:none;border-radius:999px;background:#18181b;color:#fff;font:700 10.5px var(--mo)}
+.sop-k{position:absolute;display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px var(--mo);box-shadow:0 0 0 2px #fff;z-index:3}
+.sop-fe{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px dashed #94a3b8;border-radius:6px;background:var(--card);color:#475569;font:700 11px var(--mo);white-space:nowrap}
+.sop-annb{border:1px solid #e4e4e7;border-radius:10px;background:#fafafa;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:#3f3f46;line-height:1.5}
+.sop-annb li{display:flex;gap:8px;align-items:flex-start}
+.sop-route{font:600 11.5px var(--mo);color:var(--mut);word-break:break-all}
+/* back link / source context */
+.sop-src{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--body)}
+.sop-src a{font-weight:700}
+.sop-bar{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--lav);font-size:13.5px}
+.sop-bar a,.sop-bar button{font-weight:700;color:var(--vtx);background:none;border:none;padding:0;font-size:13.5px}
+.sop-live{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--posE);border-radius:9px;background:var(--posT);color:var(--ink);font-size:12.5px;font-weight:600}
+.sop-warn{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--line2);border-radius:10px;background:var(--raised);font-size:13px;line-height:1.5}
+/* delivery board behind a sheet */
+.sop-tb{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card)}
+.sop-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:9px 12px;border-bottom:1px solid var(--line)}
+.sop-tb td{padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.sop-scrim{position:absolute;inset:0;background:rgba(24,24,27,.32);z-index:4}
+.sop-sheet{position:absolute;top:0;right:0;bottom:0;width:560px;background:var(--card);border-left:1px solid var(--line);z-index:5;display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(24,24,27,.12)}
+.sop-sh{padding:14px 20px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.sop-x{width:44px;height:44px;border-radius:9px;border:1px solid transparent;background:transparent;display:grid;place-items:center;color:var(--ink)}
+.sop-next{border:1px solid var(--amE);background:var(--amBg);border-radius:11px;padding:11px 14px;display:flex;flex-direction:column;gap:3px}
+.sop-sec{display:grid;grid-template-columns:110px minmax(0,1fr) auto;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:10px}
+.sop-sec h3{font-size:13px;font-weight:700}
+.sop-hp{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border-radius:999px;border:1.5px solid var(--ink);font-size:11.5px;font-weight:700}
+/* zone header */
+.sop-zh{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.sop-zh h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.sop-ztabs{display:flex;gap:18px;border-bottom:1px solid var(--line)}
+.sop-ztabs a{display:inline-flex;align-items:center;min-height:40px;font-size:13px;font-weight:600;color:var(--body)!important;border-bottom:2px solid transparent}
+.sop-ztabs a[aria-current]{color:var(--vtx)!important;border-bottom-color:var(--vi);font-weight:700}
+/* handoff */
+.sop-doc{background:#fff;padding:28px 32px;display:flex;flex-direction:column;gap:18px;color:#18181b}
+.sop-doc h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.sop-doc h3{font-size:14px;font-weight:800;margin-bottom:6px}
+.sop-dl{display:grid;grid-template-columns:1fr 1fr;gap:18px 26px}
+.sop-dl ul{display:flex;flex-direction:column;gap:5px}
+.sop-dl li{font-size:12.5px;line-height:1.5;padding-left:12px;position:relative;color:#3f3a47}
+.sop-dl li:before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:999px;background:#a1a1aa}
+.sop-code{font:600 11.5px var(--mo);background:#f4f3f7;border:1px solid #ececf1;border-radius:5px;padding:0 4px}
+.sop-ac{width:100%;border-collapse:collapse;font-size:12.5px}
+.sop-ac td,.sop-ac th{border-top:1px solid #ececf1;padding:7px 8px;text-align:left;vertical-align:top}
+.sop-ac th{font:700 10px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+/* phone */
+.sop-jump{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px 12px;border:1px solid var(--line2);border-radius:11px;background:var(--card)}
+.sop-pc{border:1px solid var(--line);border-left-width:3px;border-radius:0 11px 11px 0;background:var(--card);padding:11px 12px;display:flex;flex-direction:column;gap:6px}
+.sop-pc.sop-t-blk,.sop-pc.sop-t-risk{border-left-color:#dc2626}
+.sop-pc.sop-t-due,.sop-pc.sop-t-cap{border-left-color:#f59e0b}
+.sop-pc.sop-t-ren{border-left-color:#d1d5db}
+.sop-pa{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 12px;border-radius:9px;border:1px solid var(--line2);color:var(--vtx)!important;font-size:13px;font-weight:700}
+.sop-hs{display:flex;gap:6px;overflow:hidden;white-space:nowrap}
+/* OPO · Operating Partner first delivery (#8684). Builds on ihs_extra.css and sop_extra.css; every new class is opo- prefixed. */
+.opo-rail{width:272px;flex:none;background:var(--card);border-left:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px}
+.opo-rh{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.ihs-btn.opo-amb{border-color:#b45309;background:#b45309;color:#fff}
+.opo-empty{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:18px}
+.opo-empty h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.opo-lead{font-size:14px;color:var(--body);line-height:1.55}
+.opo-eg{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+.opo-act{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--lavE);background:var(--lav);border-radius:12px}
+.opo-path{display:flex;flex-direction:column;gap:10px}
+.opo-steps{display:flex;flex-direction:column;gap:0}
+.opo-step{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
+.opo-step:first-child{border-top:none;padding-top:2px}
+.opo-sm{width:26px;height:26px;flex:none;border-radius:999px;display:grid;place-items:center;font:700 12px var(--mo);border:1.5px solid var(--line2);color:var(--mut);background:var(--card)}
+.opo-sm-done{background:var(--pos);border-color:var(--pos);color:#fff}
+.opo-sm-now{border:2px solid var(--vi);color:var(--vtx);background:var(--lav)}
+.opo-sw{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:999px;font-size:11px;font-weight:700}
+.opo-sw-done{background:var(--posT);color:var(--pos);border:1px solid var(--posE)}
+.opo-sw-now{background:var(--lav);color:var(--vtx);border:1px solid var(--lavE)}
+.opo-later b{color:var(--body);font-weight:600}
+.opo-who{font-size:12px;color:var(--mut)}
+.opo-det{font-size:12.5px;color:var(--body);line-height:1.45}
+.ihs-cv .opo-cond{font-size:13px;color:var(--body);line-height:1.5;padding:10px 12px;border-left:3px solid var(--vi);background:var(--raised);border-radius:0 8px 8px 0}
+.opo-disc{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0;border:none;background:none;color:var(--vtx);font-size:13px;font-weight:600}
+.opo-rc{font:500 11.5px var(--mo);color:var(--mut)}
+.opo-pbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.opo-tool{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.opo-tw{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.opo-tb td{white-space:normal;vertical-align:top}
+.opo-tb tbody tr:last-child td,.opo-tb tbody tr:last-child th{border-bottom:none}
+.opo-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.opo-why{display:block;font-size:12px;color:var(--amT);font-weight:500}
+.opo-nrt{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border-radius:999px;border:1.5px dashed var(--line2);font-size:11.5px;font-weight:600;color:var(--body);white-space:nowrap}
+.opo-lcr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+.opo-note{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--raised);font-size:13px;max-width:760px}
+.opo-f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink)}
+.opo-f i{font-style:normal;font-weight:500;color:var(--mut)}
+.opo-f em{font-style:normal;font-weight:400;font-size:12px;color:var(--mut)}
+.opo-in{display:flex;align-items:center;min-height:42px;padding:8px 12px;border:1px solid var(--line2);border-radius:9px;background:var(--card);font-size:13.5px;font-weight:500;color:var(--ink)}
+.opo-ta{min-height:76px;align-items:flex-start;line-height:1.5}
+.opo-rad{display:inline-flex;align-items:center;min-height:42px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;font-size:13px;font-weight:600;background:var(--card)}
+.opo-rad[aria-checked=true]{border:2px solid #b45309;color:#92400e;background:#fffbeb}
+.opo-review{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line2);border-radius:11px;background:var(--raised)}
+.opo-flow{display:flex;align-items:stretch;gap:8px}
+.opo-node{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;padding:12px;border:1.5px solid var(--ink);border-radius:11px;background:var(--card);font-size:13px}
+.opo-node-them{border-style:dashed}
+.opo-node-auto{border-color:var(--vi);background:var(--lav)}
+.opo-ar{display:grid;place-items:center;color:var(--mut)}
+.opo-key{display:inline-flex;align-items:center;gap:6px}
+.opo-kk{display:inline-block;width:18px;height:12px;border:1.5px solid var(--ink);border-radius:3px}
+.opo-kt{border-style:dashed}
+.opo-ka{border-color:var(--vi);background:var(--lav)}
+.opo-notd{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--raised)}
+.opo-lb{display:flex;flex-direction:column;gap:4px;padding:6px;border:1px solid var(--line2);border-radius:10px;background:var(--card)}
+.opo-opt{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 8px;border-radius:8px;font-size:13px}
+.opo-opt b{flex:1}
+.opo-on{background:var(--lav);color:var(--vtx)}
+.opo-fab{position:absolute;right:16px;bottom:20px;width:52px;height:52px;border-radius:16px;border:none;background:#7c3aed;color:#fff;font:800 18px var(--sg);box-shadow:0 6px 18px rgba(24,24,27,.22);display:grid;place-items:center}
+.opo-pst .opo-step{padding:8px 0}
+.ihs-dark .opo-rad[aria-checked=true]{background:rgba(252,211,77,.1);color:#fcd34d}
+.ihs-dark .opo-sm-done{color:#0b1220}
+.opo-rail .ihs-inp{flex:none}
+.opo-act .sop-fe,.opo-act .ihs-pol{white-space:normal;max-width:100%}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "OPO01", "options": ["OPO00", "OPO01", "OPO02", "OPO03", "OPO04", "OPO05", "OPO06", "OPO07", "OPO08", "OPO09", "OPO10", "OPO11", "OPO12A", "OPO12B", "OPO12C", "OPO12D", "OPO12E", "OPO12F", "OPO12G", "OPO13", "OPO14"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'OPO01';
+    const J = a => a.join('');
+
+    /* ---------- icons (monochrome, aria-hidden) — copied from sop.js ---------- */
+    const SV = (d, z, sw) => '<svg aria-hidden="true" width="' + (z || 16) + '" height="' + (z || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 1.8) + '" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none">' + d + '</svg>';
+    const I = {
+      bell: SV('<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>'),
+      search: SV('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 14),
+      menu: SV('<path d="M4 7h16M4 12h16M4 17h16"/>', 20),
+      chev: SV('<path d="M9 6l6 6-6 6"/>', 14),
+      back: SV('<path d="M15 6l-6 6 6 6"/>', 14),
+      down: SV('<path d="M6 9l6 6 6-6"/>', 14),
+      x: SV('<path d="M6 6l12 12M18 6L6 18"/>', 18),
+      ok: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 14, 2.4),
+      info: SV('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.1"/>', 15, 2),
+      arr: SV('<path d="M5 12h14M13 6l6 6-6 6"/>', 16, 2),
+      off: SV('<path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19h.01"/><path d="M3 3l18 18"/>', 15, 2),
+      send: SV('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>', 15)
+    };
+    const CG = {
+      una: SV('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 20L20 4"/>', 12, 2),
+      nr: SV('<circle cx="12" cy="12" r="8"/><path d="M8.5 12h7"/>', 12, 2),
+      lk: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 12, 2),
+      ref: SV('<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>', 12, 2),
+      stale: SV('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', 12, 2.2),
+      part: SV('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>', 12, 1.8),
+      own: SV('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>', 12, 2)
+    };
+    const BE = t => '<span class="ihs-be" title="Annotation: backend required (not product copy)">◇ ' + t + '</span>';
+    const POL = t => '<span class="ihs-pol" title="Annotation: owner decision (not product copy)">⚑ ' + t + '</span>';
+    const FE = t => '<span class="sop-fe" title="Annotation: frontend only (not product copy)">▹ ' + t + '</span>';
+    const N = n => '<span class="sop-n" aria-hidden="true">' + n + '</span>';
+    const KI = n => '<span class="sop-k" aria-hidden="true" style="position:static;margin-right:4px">' + n + '</span>';
+    const btn = (t, k, ex) => '<button type="button" class="ihs-btn' + (k ? ' ' + k.split(' ').map(x => (x === 'amb' ? 'opo-amb' : 'ihs-' + x)).join(' ') : '') + '"' + (ex || '') + '>' + t + '</button>';
+    const lnk = (t, ex) => '<a href="#" class="ihs-lnk"' + (ex || '') + '>' + t + '</a>';
+    const pill = (t, k) => '<span class="ihs-pill' + (k ? ' ihs-' + k : '') + '">' + t + '</span>';
+    const mo = t => '<span class="ihs-mo">' + t + '</span>';
+    const SK = (w, h) => '<span style="display:block;border-radius:6px;background:var(--skel);width:' + w + ';height:' + (h || 12) + 'px"></span>';
+    const LAB = t => '<span class="ihs-ey" style="text-transform:none;letter-spacing:.03em;color:#3f3a47">' + t + '</span>';
+    const C = t => '<span class="sop-code">' + t + '</span>';
+    const ANN = (items, w) => '<aside class="sop-annb"' + (w ? ' style="width:' + w + 'px;flex:none"' : '') + '><b style="font-size:12px;color:#18181b">Annotations · not product copy</b><ul style="display:flex;flex-direction:column;gap:7px">' + J(items.map((x, i) => '<li>' + N(i + 1) + '<span>' + x + '</span></li>')) + '</ul></aside>';
+    const SIDEBYSIDE = (a, b) => '<div style="display:flex;gap:18px;align-items:flex-start"><div style="flex:1;min-width:0">' + a + '</div>' + b + '</div>';
+
+    /* ---------- sample data (fictional; one set, used on every board) ---------- */
+    const FIRM = '[Holm Sprint Partners]';
+    const FIRM2 = '[Holm &amp; Vale Partners]';
+    const OFFER = '[Four-week onboarding sprint]';
+    const PRICE = '$12,000';
+    const CL = '[Atlas Orchard]';
+    const FD = '[Maya Ruiz]';
+    const NEED = '[Customer onboarding redesign]';
+    const ENG = '[ENG-A7O4]';
+    const QT = '[Q-7H2K]';
+    /* the four moments, in the order they happen */
+    const T1 = 'Fri 20 Nov 2026 · 09:10';
+    const T2 = 'Fri 20 Nov 2026 · 09:16';
+    const T3 = 'Wed 25 Nov 2026 · 11:02';
+    const T4 = 'Fri 27 Nov 2026 · 09:14';
+    const SENT = 'Mon 23 Nov 2026';
+    const ACC = 'Thu 26 Nov 2026';
+    const SAVED = 'Fri 20 Nov 2026';
+
+    /* ---------- shell (#3704: company switcher top-left, union sidebar, Portfolio/Companies/Licences in the Account menu) ---------- */
+    const NAV = ['Studio', 'Offers', 'Pipeline', 'Delivery', 'Earnings', 'Network', 'Research'];
+    const side = (cur) => '<nav class="ihs-side" aria-label="Main"><button type="button" class="ihs-sw" aria-haspopup="listbox" aria-label="Switch company, current ' + FIRM.replace(/[\[\]]/g, '') + '"><span class="ihs-sq">HS</span><b>' + FIRM + '</b><span aria-hidden="true" class="ihs-mu">▾</span></button>'
+      + J(NAV.map(t => (t === 'Network' ? '<div class="ihs-sep"></div>' : '') + '<a href="#" class="ihs-nav"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const top = () => '<header class="ihs-top"><div class="ihs-brand"><span class="ihs-mark" aria-hidden="true">A</span>Axal VC</div><div class="ihs-search">' + I.search + 'Search Axal VC</div><div style="flex:1"></div><button type="button" class="ihs-ib" aria-label="Notifications">' + I.bell + '</button><span role="button" tabindex="0" class="ihs-avt" aria-haspopup="menu" aria-label="Account menu: Portfolio, Companies, Licences, Settings">SH</span></header>';
+    /* Eadwyn: the one shared rail (#5130), WorkerRail as shipped beside each partner bucket (PartnerBucketRoutes RAIL) */
+    const RAILS = {
+      Delivery: ['Manual delivery record', 'Every rating, milestone, blocker, seat and hour here is one a person entered. Nothing messages a client, marks a milestone, or moves an engagement between states on its own.'],
+      Offers: ['Manual storefront record', 'What the firm publishes is what the firm typed. No listing, perk description, case study or fit rule is written here.'],
+      Pipeline: ['Manual pipeline record', 'No proposal is drafted, no price is suggested, no stage moves and no lead is passed or pursued except on your click.']
+    };
+    const RAIL = ws => '<aside class="opo-rail" aria-label="Eadwyn AI · ' + ws + '"><div class="opo-rh"><span class="ihs-ead" style="width:30px;height:30px;font-size:13px" aria-hidden="true">E</span><div style="display:flex;flex-direction:column"><b style="font-size:14px">Eadwyn AI</b><span class="ihs-sub">' + ws + '</span></div></div><span class="ihs-ey">' + RAILS[ws][0] + '</span><p style="font-size:12.5px;color:var(--body);line-height:1.5">' + RAILS[ws][1] + '</p><div style="flex:1"></div><div class="ihs-inp" style="min-height:40px;font-size:12.5px">Ask about ' + ws + '…</div></aside>';
+    const page = (body, o) => {
+      o = o || {};
+      return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:1440px"><div class="ihs-shell"' + (o.h ? ' style="min-height:' + o.h + 'px"' : '') + '>' + top() + '<div class="ihs-row">' + side(o.cur) + '<main class="ihs-main">' + body + '</main>' + (o.rail === false ? '' : RAIL(o.cur)) + '</div><footer class="ihs-foot"><span>© 2026 Axal VC</span><a href="#" class="ihs-mu">Terms</a><a href="#" class="ihs-mu">Privacy</a><a href="#" class="ihs-mu">Status</a></footer></div>' + (o.over || '') + '</div>';
+    };
+    const crop = (inner, w, o) => { o = o || {}; return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:' + w + 'px"><div style="padding:24px 28px;display:flex;flex-direction:column;gap:16px;position:relative">' + inner + '</div></div>'; };
+
+    /* ---------- bucket headers, as shipped (WorkspaceShell title, intro, zone pills) ---------- */
+    const TABS = {
+      Delivery: ['Board', 'Health', 'Deliverables', 'Status reports', 'Capacity'],
+      Offers: ['Overview', 'Catalog', 'Perk deals', 'Proof', 'Visibility', 'Audience fit', 'Product testing'],
+      Pipeline: ['Overview', 'Leads', 'Proposals', 'Negotiations', 'Retainers', 'Analytics']
+    };
+    const INTRO = {
+      Delivery: 'Ship the work. Run active client engagements, deliverables, capacity and reporting in one place.',
+      Offers: 'Package what your firm sells, prove it works, and tell Axal which opportunities fit.',
+      Pipeline: 'From first-fit opportunity to recurring engagement.'
+    };
+    const ZH = (bucket, cur, o) => {
+      o = o || {};
+      return '<div class="sop-zh"><div><span class="ihs-ey">' + bucket + (cur && cur !== 'Board' && cur !== 'Overview' ? ' · ' + cur : '') + '</span><h1 style="margin-top:4px">' + (o.h1 || bucket) + '</h1><p class="ihs-purp">' + INTRO[bucket] + '</p></div>' + (o.right || '') + '</div><nav class="sop-ztabs" aria-label="' + bucket + ' zones">' + J(TABS[bucket].map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    };
+    const SRC = (to, why, tag) => '<div class="sop-src"><a href="#" class="ihs-lnk" style="gap:4px">' + I.back + 'Back to ' + to + '</a><span class="ihs-mu">' + why + '</span>' + (tag || '') + '</div>';
+
+    /* ---------- the path to a first delivery (one list, three moments) ---------- */
+    const STEPS = [
+      ['Describe what you sell', 'You · Offers › Catalog', 'A service with its scope and price. Founders and HQ see it, and leads are scored against it.'],
+      ['Send a proposal on a founder need', 'You · Pipeline › Leads', 'Price, timeline and deliverables, on a need a founder posted.'],
+      ['The founder accepts', 'The founder · in their own workspace', 'Their click. Nobody can accept on their behalf.'],
+      ['The engagement opens here', 'Axal · in the same step as the acceptance', 'Created with the acceptance. Nothing to copy across.']
+    ];
+    const DONE = {
+      0: OFFER + ' · ' + mo(PRICE) + ' fixed · saved ' + mo(SAVED),
+      1: 'Sent ' + mo(SENT) + ' to ' + FD + ' · ' + mo(PRICE) + ' · 4 weeks'
+    };
+    const NOW = {
+      0: 'Your catalogue has no service yet.',
+      1: '1 open need fits: ' + CL + ' · ' + NEED + '.',
+      2: 'Waiting on ' + FD + '. No decision recorded yet; follow up with her directly.'
+    };
+    const PATH = (cur, o) => {
+      o = o || {};
+      return '<div class="opo-path"><h3 id="opo-path-h" style="font-size:13.5px;font-weight:800">Your path to a first delivery</h3><ol class="opo-steps" aria-labelledby="opo-path-h">' + J(STEPS.map((s, i) => {
+        const st = i < cur ? 'done' : (i === cur ? 'now' : 'later');
+        const mark = st === 'done' ? '<span class="opo-sm opo-sm-done">' + I.ok + '</span>' : '<span class="opo-sm opo-sm-' + st + '">' + (i + 1) + '</span>';
+        const word = st === 'done' ? '<span class="opo-sw opo-sw-done">Done</span>' : (st === 'now' ? '<span class="opo-sw opo-sw-now">Next</span>' : '');
+        const detail = st === 'done' ? DONE[i] : (st === 'now' ? (NOW[i] || s[2]) : s[2]);
+        return '<li class="opo-step opo-' + st + '"' + (st === 'now' ? ' aria-current="step"' : '') + '>' + mark + '<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>' + s[0] + '</b>' + word + '</div><span class="opo-who">' + s[1] + '</span><span class="opo-det">' + detail + '</span></div></li>';
+      })) + '</ol></div>';
+    };
+    const COND = '<p class="opo-cond"><b>What creates a delivery:</b> a founder accepting a proposal from your firm. Axal opens the engagement on this board in the same step. A saved draft, a request on your catalogue and a sent proposal do not.</p>';
+    const MORE = '<button type="button" class="opo-disc" aria-expanded="false">What appears here once work starts ' + I.down + '</button>';
+    const RC = t => '<p class="opo-rc">' + t + '</p>';
+    const EMPTY = (st, o) => {
+      o = o || {};
+      const cfg = {
+        A: ['Delivery starts when a founder accepts a proposal from your firm. ' + FIRM + ' has no service in its catalogue yet, so the first step is to describe what you sell.', 'Add your first service', 'Opens Offers › Catalog. Back to Delivery returns here.', 'Read ' + T1 + ' · catalogue: none · proposals: none sent', 0],
+        B: ['Your offer is in the catalogue. Delivery starts when a founder accepts a proposal, so the next step is to send one on a need it fits.', 'Review matching leads', 'Opens Pipeline › Leads. Back to Delivery returns here.', 'Read ' + T2 + ' · catalogue: 1 service · proposals: none sent · leads: 1 matching', 1],
+        B2: ['Your proposal to ' + FD + ' at ' + CL + ' is waiting for her decision. When she accepts it, the engagement appears on this board by itself.', 'Open the proposal', 'Opens Pipeline › Proposals on ' + QT + '. Back to Delivery returns here.', 'Read ' + T3 + ' · catalogue: 1 service · proposals: 1 sent, no decision', 2]
+      }[st];
+      return '<section class="opo-empty" aria-labelledby="opo-empty-h"><div class="opo-eh"><div style="display:flex;flex-direction:column;gap:6px;max-width:620px"><h2 id="opo-empty-h">No active client work yet</h2><p class="opo-lead">' + cfg[0] + '</p></div></div>'
+        + '<div class="opo-eg"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + PATH(cfg[4]) + '</div><div class="opo-act"><span class="ihs-ey">Your next step</span><div style="display:flex;align-items:center;gap:4px">' + (o.keys ? KI(o.keys[0]) : '') + btn(cfg[1] + ' ' + I.arr, 'p', ' style="min-height:44px;font-size:14px"') + '</div>' + '<span class="ihs-sub">' + cfg[2] + '</span>' + (o.tags ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' + o.tags + '</div>' : '') + '</div></div>'
+        + COND + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="display:flex;align-items:center">' + (o.keys ? KI(o.keys[1]) : '') + MORE + '</span>' + RC(cfg[3]) + '</div></section>';
+    };
+    const DELIVERY_EMPTY = (st, o) => { o = o || {}; return (o.src || '') + ZH('Delivery', 'Board') + (o.live || '') + EMPTY(st, o); };
+
+    /* ---------- first active delivery (Board as shipped, one row) ---------- */
+    const ROW = (o) => {
+      o = o || {};
+      return '<tr' + (o.sel ? ' style="background:var(--lav)"' : '') + '><td class="opo-rh1"><a href="#" style="color:var(--ink)!important;font-weight:700;font-size:13.5px">' + CL + '</a></td><td><b style="font-weight:600">Assign an owner</b><span class="opo-why">Owner unassigned</span></td><td><span class="opo-nrt">' + CG.nr + 'Not rated</span></td><td><span class="ihs-mu">— Not recorded</span></td><td><span class="ihs-mu">— Not recorded</span></td><td class="ihs-mu">Project · ' + mo(PRICE) + '</td></tr>';
+    };
+    const BOARD = (o) => {
+      o = o || {};
+      return '<div class="opo-pbar"><p style="font-size:13.5px;color:var(--mut)">1 of 1 engagements need attention.</p>' + (o.keys ? KI(o.keys[0]) : '') + btn('Review attention', 'p') + '</div>'
+        + '<div class="opo-tool"><div class="sop-cats" role="group" aria-label="Show engagements"><button type="button" class="sop-fc" aria-pressed="true">Attention · 1</button><button type="button" class="sop-fc" aria-pressed="false">All · 1</button><button type="button" class="sop-fc" aria-pressed="false">Projects · 1</button><button type="button" class="sop-fc" aria-pressed="false">Embedded · 0</button></div><div style="flex:1"></div><div class="ihs-inp" style="max-width:220px;min-height:38px">Find a client</div><span class="ihs-sub" aria-live="polite">Read 09:14 · ' + lnk('Refresh') + '</span></div>'
+        + '<div class="opo-tw"><table class="sop-tb opo-tb"><caption class="opo-sr">Engagements that need attention</caption><thead><tr><th>Client</th><th>Next action · why</th><th>Health</th><th>Progress</th><th>Owner</th><th>Mode · value</th></tr></thead><tbody>' + ROW(o) + '</tbody></table></div>'
+        + '<p class="ihs-sub">Not rated is not On track: an engagement with nothing recorded against it has no health yet. Rows open the engagement sheet.</p>'
+        + '<section class="ihs-tile" aria-labelledby="opo-lc"><div class="ihs-th"><h3 id="opo-lc">Engagement lifecycle</h3><span class="ihs-tn ihs-sub">1 engagement</span></div><div class="opo-lcr"><b>' + CL + '</b><span class="ihs-mu">' + NEED + '</span>' + pill('Accepted', 'lv') + '<span class="ihs-mu">accepted by ' + FD + ' · ' + mo(ACC) + '</span><div style="flex:1"></div><span style="display:flex;gap:6px">' + btn('Start work', 'sm') + btn('Cancel', 'sm t') + '</span></div><p class="ihs-sub">Start work moves it from Accepted to In progress. It is your click; nothing starts it for you.</p></section>';
+    };
+    const SHEET = (o) => {
+      o = o || {};
+      const secs = [['Progress', 'No milestones recorded yet', 'Health'], ['Deliverables', 'None sent yet', 'Deliverables'], ['Status report', 'November · not started', 'Status reports'], ['Health', 'Not rated · nothing recorded against it yet', 'Health'], ['Capacity', 'No embedded seat on this engagement', 'Capacity']];
+      return '<div class="sop-scrim"></div><aside class="sop-sheet" role="dialog" aria-modal="true" aria-labelledby="opo-sh-k"><div class="sop-sh"><div style="display:flex;align-items:center;justify-content:space-between"><span class="ihs-ey">Engagement</span><button type="button" class="sop-x" aria-label="Close engagement">' + I.x + '</button></div>'
+        + (o.from ? '<div class="sop-src" style="font-size:12px"><a href="#" class="ihs-lnk" style="gap:4px;font-size:12.5px">' + I.back + 'Back to Pipeline · Proposals</a>' + FE('from=pipeline · #8684') + '</div>' : '')
+        + '<h2 id="opo-sh-k" style="font-size:20px;font-weight:800">' + CL + '</h2><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--mut)"><span class="opo-nrt">' + CG.nr + 'Not rated</span><span>Project · ' + mo(PRICE) + '</span><span>· owner not assigned</span></div><span class="ihs-sub">' + mo(ENG) + ' · ' + NEED + ' · from proposal ' + mo(QT) + ', accepted by ' + FD + ' ' + mo(ACC) + '</span></div>'
+        + '<div style="padding:14px 20px;display:flex;flex-direction:column;gap:11px"><section class="sop-next"><h3 style="font-size:13px;font-weight:700">Next action</h3><p style="font-size:14px">Assign an owner</p><p style="font-size:12.5px;color:var(--amT)">Owner unassigned. The engagement is Accepted; Start work is on the lifecycle below the board.</p></section>'
+        + J(secs.map(s => '<section class="sop-sec"><h3>' + s[0] + '</h3><span style="font-size:13.5px">' + s[1] + '</span><a href="#" class="ihs-lnk" style="min-height:44px">' + s[2] + ' →</a></section>')) + '</div></aside>';
+    };
+
+    /* ---------- phone ---------- */
+    const PHZ = t => '<div style="display:flex;align-items:center;gap:8px;height:56px;padding:0 8px 0 4px;background:var(--card);border-bottom:1px solid var(--line)"><button type="button" class="ihs-btn ihs-t" aria-label="Menu" style="width:44px;height:44px;padding:0">' + I.menu + '</button><span class="ihs-mark" aria-hidden="true">A</span><b style="font-size:16px;flex:1">' + t + '</b><button type="button" class="ihs-btn ihs-t" aria-label="Notifications" style="width:44px;height:44px;padding:0">' + I.bell + '</button></div>';
+    const FAB = ws => '<button type="button" class="opo-fab" aria-label="Open Eadwyn AI · ' + ws + '"><span aria-hidden="true">E</span></button>';
+    const phone = (inner, o) => { o = o || {}; return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:390px"><div style="height:844px;overflow:hidden;position:relative;background:var(--bg)">' + PHZ(o.bar || 'Delivery') + '<div style="padding:14px 14px 90px;display:flex;flex-direction:column;gap:12px">' + inner + '</div>' + (o.fab === false ? '' : FAB(o.ws || 'Delivery')) + (o.over || '') + '</div></div>'; };
+    const STEP = (n, t) => '<div style="display:flex;align-items:center;gap:8px">' + N(n) + '<span class="ihs-ey" style="color:var(--ink)">Step ' + n + ' · ' + t + '</span></div>';
+    const PSTEPS = cur => '<ol class="opo-steps opo-pst" aria-label="Your path to a first delivery">' + J(STEPS.map((s, i) => {
+      const st = i < cur ? 'done' : (i === cur ? 'now' : 'later');
+      return '<li class="opo-step opo-' + st + '"' + (st === 'now' ? ' aria-current="step"' : '') + '>' + (st === 'done' ? '<span class="opo-sm opo-sm-done">' + I.ok + '</span>' : '<span class="opo-sm opo-sm-' + st + '">' + (i + 1) + '</span>') + '<div style="display:flex;flex-direction:column;gap:1px"><b style="font-size:13px">' + s[0] + (st === 'done' ? ' · Done' : st === 'now' ? ' · Next' : '') + '</b><span class="opo-who">' + s[1] + '</span></div></li>';
+    })) + '</ol>';
+    const PEMPTY = (st) => {
+      const cfg = {
+        A: ['Delivery starts when a founder accepts a proposal from your firm. Your catalogue has no service yet.', 'Add your first service', 0],
+        B: ['Your offer is in the catalogue. Next, send a proposal on a need it fits.', 'Review matching leads', 1],
+        B2: ['Your proposal to ' + FD + ' is waiting for her decision. When she accepts, the engagement appears here by itself.', 'Open the proposal', 2]
+      }[st];
+      return '<span class="ihs-ey">Delivery</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em">Delivery</h1><section class="opo-empty" style="padding:16px;gap:12px"><h2 style="font-size:18px">No active client work yet</h2><p class="opo-lead" style="font-size:13.5px">' + cfg[0] + '</p>' + btn(cfg[1] + ' ' + I.arr, 'p', ' style="min-height:44px;width:100%"') + PSTEPS(cfg[2]) + '<p class="opo-cond" style="font-size:12px"><b>What creates a delivery:</b> a founder accepting your proposal. Drafts, catalogue requests and sent proposals do not.</p></section>';
+    };
+
+    /* ================= boards ================= */
+    let html;
+    if (B === 'OPO00') {
+      const mini = (lab, inner) => '<div style="display:flex;flex-direction:column;gap:8px;min-width:0">' + LAB(lab) + '<div class="ihs-tile" style="gap:10px">' + inner + '</div></div>';
+      const of = mini('A · /offers · OfferReadiness.jsx', '<span class="ihs-ey">Offers</span><h2 style="font-size:17px;font-weight:800">Start with what you sell</h2><p style="font-size:12.5px;color:var(--body)">Add your first service so founders and HQ can see what your firm offers. Proof, fit and testing build on it.</p>' + btn('Add your first service', 'amb sm', ' style="align-self:flex-start"') + '<p class="ihs-sub">Shown when the firm’s own catalogue read answers with no service (isNewFirm).</p>');
+      const pp = mini('B · /pipeline · PipelineCommandCentre.jsx', '<span class="ihs-ey">Pipeline</span><h2 style="font-size:17px;font-weight:800">Set up your pipeline</h2><ol style="display:flex;flex-direction:column;gap:4px;font-size:12.5px"><li>✓ Company profile exists</li><li><b>2 · Add services</b></li><li>3 · Set fit rules</li><li>4 · Review matching leads</li><li>5 · Draft the first proposal</li></ol><div style="display:flex;gap:8px">' + btn('Add services', 'amb sm') + btn('Set fit rules', 'sm') + '</div><p class="ihs-sub">First run: nothing to score leads against and nothing ever sent (isFirstRun).</p>');
+      const dl = mini('C · /delivery · BoardZone.jsx', '<div class="opo-pbar" style="padding:0"><p style="font-size:12px;color:var(--mut)">Delivery starts when work is won in Pipeline.</p>' + btn('Open Pipeline →', 'p sm') + '</div><div style="border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px"><h2 style="font-size:16px;font-weight:800">No active client work yet</h2><p style="font-size:12.5px;color:var(--body)">Delivery begins when a proposal is accepted and becomes an engagement.</p><p style="font-size:12px;font-weight:600">Pipeline → Proposal → Engagement → Delivery</p>' + btn('Open Pipeline →', 'p sm', ' style="align-self:flex-start"') + '</div><p class="ihs-sub">The same card for every firm with no engagement, whatever its catalogue holds.</p>');
+      html = crop('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">' + of + pp + dl + '</div>' + ANN([
+        'Three first-run screens, three different starting points. Offers asks for a service, Pipeline asks for services and fit rules, Delivery sends everyone to ' + C('/pipeline/proposals') + '. None reads what the other two know.',
+        'Delivery draws “Open Pipeline →” twice when empty: the ' + C('delivery-primary') + ' bar (' + C('primaryAction()') + ' in boardAttention.js) and ' + C('DeliveryEmpty') + '. It never reads the catalogue, so a firm with no offer is sent to Proposals, which then says “No proposal sent yet”.',
+        'Below 1024 px the Eadwyn rail leaves its column and becomes a floating “Open Eadwyn AI · Delivery” button over the main area (RailFrame, D405). The 25 Nov browser sample reported it as the empty page’s main-area button.',
+        'No partner screen can send a proposal. Leads saves a draft that is “never sent from here” (#5936, LeadProposalDraft.jsx). Proposals says “Accept a lead and quote it”. The only caller of ' + C('api.submitQuote') + ' is NeedDetailModal, mounted on ' + C('/build/marketplace') + ', which is guarded to founder and admin. The Worker route ' + C('POST /api/needs/:id/quotes') + ' accepts partners.',
+        'What creates a delivery is real and automatic: a founder’s ' + C('POST /api/quotes/:id/accept') + ' inserts the engagement in the same D1 batch (' + C('ENGAGEMENT_FOR_ACCEPTED') + ', needs.ts, D4677), status Accepted. Start work (Accepted → In progress) is the partner’s click. A catalogue request (' + C('service_engagements') + ', always pending) never becomes one.',
+        'A won proposal links “Open Delivery” to the whole board (proposalsFollowUp.js). Its row carries ' + C('engagement_id') + ' only; the board keys a deep link by ' + C('engagement_uid') + '.',
+        'Catalogue and Proposals are read for the active company; the Delivery board is read for the partner record only (' + C('actingPartner') + ', partner_delivery.ts), so it is not narrowed by the company switcher.'
+      ]), 1200);
+    }
+    else if (B === 'OPO01') {
+      html = page(DELIVERY_EMPTY('A', { tags: FE('branch on listServiceOfferings({mine:1}) · #8684') }), { cur: 'Delivery' });
+    }
+    else if (B === 'OPO02') {
+      const f = (l, v, o) => { o = o || {}; return '<label class="opo-f"><span>' + l + (o.opt ? ' <i>optional</i>' : '') + '</span><span class="opo-in' + (o.ta ? ' opo-ta' : '') + '">' + v + '</span>' + (o.hint ? '<em>' + o.hint + '</em>' : '') + '</label>'; };
+      const form = '<section class="ihs-tile" aria-labelledby="opo-add" style="max-width:760px;gap:14px"><div class="ihs-th"><h2 id="opo-add" style="font-size:16px;font-weight:800;flex:1">Add a service</h2><span class="ihs-sub">' + FIRM + '</span></div>'
+        + f('Title', OFFER)
+        + f('Summary', '[A fixed four-week sprint: map the first-week journey, rebuild the onboarding emails and in-app checklist, and hand over a measured activation baseline.]', { ta: true, hint: 'Founders read this first. It is your words; nothing here writes it.' })
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">' + f('Category', '[Customer onboarding]', { opt: true }) + '<div class="opo-f"><span>How it is sold</span><div role="radiogroup" aria-label="How it is sold" style="display:flex;gap:6px">' + J([['Fixed', true], ['Retainer'], ['Seat']].map(r => '<span role="radio" aria-checked="' + Boolean(r[1]) + '" class="opo-rad">' + r[0] + '</span>')) + '</div></div>' + f('Price (USD)', mo('12,000'), { opt: true }) + '</div>'
+        + '<div style="display:flex;align-items:center;gap:10px">' + btn('Save service', 'amb', ' style="min-height:44px"') + btn('Cancel', 't') + '<div style="flex:1"></div>' + FE('fields as POST /api/services/offerings takes them') + '</div></section>';
+      html = page(SRC('Delivery', 'You opened this from Delivery’s next step.', FE('from=delivery · #8684')) + ZH('Offers', 'Catalog') + '<div role="status" class="opo-note">' + I.info + '<span>Your catalogue has no service yet. Add one to continue.</span></div>' + form, { cur: 'Offers' });
+    }
+    else if (B === 'OPO03') {
+      html = page(DELIVERY_EMPTY('B', { src: '', live: '<div role="status" class="sop-live">' + I.ok + 'Back from Offers. ' + OFFER + ' is in your catalogue. Next step: review matching leads.</div>', tags: FE('reads catalogue and proposals · #8684') }), { cur: 'Delivery' });
+    }
+    else if (B === 'OPO04') {
+      const lead = '<article class="ihs-tile" style="max-width:520px;gap:8px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="font-size:15px">' + CL + '</b>' + pill('Fit [82]', 'ps') + '</div><span class="ihs-sub">Founder ' + FD + ' · posted ' + mo('Thu 19 Nov 2026') + '</span><div class="ihs-kv"><span class="ihs-mu">Budget</span><span>$10,000–$15,000</span></div><div class="ihs-kv"><span class="ihs-mu">Need</span><span style="font-family:var(--sg);font-weight:600">' + NEED + ' · [within 6 weeks]</span></div><div style="display:flex;gap:8px">' + btn('Draft proposal', 'sm') + btn('Pass', 'sm t') + '</div></article>';
+      const rv = J([['To', FD + ' · ' + CL], ['On their need', NEED], ['Price', mo('$12,000') + ' · fixed'], ['Timeline', mo('4') + ' weeks'], ['Deliverables', '[Journey map, onboarding email set, in-app checklist, activation baseline]']].map(k => '<div class="ihs-kv"><span class="ihs-mu" style="font-family:var(--sg);font-weight:500">' + k[0] + '</span><span style="font-family:var(--sg);font-weight:600;text-align:right">' + k[1] + '</span></div>'));
+      const sheet = '<div class="sop-scrim"></div><aside class="sop-sheet" role="dialog" aria-modal="true" aria-labelledby="opo-op"><div class="sop-sh"><div style="display:flex;align-items:center;justify-content:space-between"><span class="ihs-ey">Opportunity · Lead</span><button type="button" class="sop-x" aria-label="Close opportunity">' + I.x + '</button></div><h2 id="opo-op" style="font-size:20px;font-weight:800">' + CL + '</h2><span class="ihs-sub">' + NEED + ' · from ' + FD + '</span><div class="sop-ztabs" role="tablist" style="margin-top:6px">' + J(['Overview', 'Activity', 'Fit', 'Proposal'].map(t => '<a href="#" role="tab"' + (t === 'Proposal' ? ' aria-current="page" aria-selected="true"' : ' aria-selected="false"') + '>' + t + '</a>')) + '</div></div>'
+        + '<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:8px">' + N(1) + '<span class="ihs-sub">Draft saved ' + mo('Mon 23 Nov 2026 10:31') + ' · Draft proposal · not sent</span></div>'
+        + '<section class="opo-review" aria-labelledby="opo-rv"><div style="display:flex;align-items:center;gap:8px">' + N(2) + '<h3 id="opo-rv" style="font-size:14px;font-weight:800">Review before sending</h3></div>' + rv + '<p style="font-size:12.5px;color:var(--body);line-height:1.5"><b>What sending does:</b> it records your bid on her need. ' + FD + ' sees it in her marketplace and decides there. No email is sent.</p></section>'
+        + '<div style="display:flex;align-items:center;gap:10px">' + N(3) + btn(I.send + 'Send proposal', 'amb', ' style="min-height:44px"') + btn('Back to the draft', 't') + '</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + POL('Q1 · option A: send from the saved draft') + FE('POST /api/needs/:id/quotes exists · #8684') + '</div></div></aside>';
+      html = page(SRC('Delivery', 'You opened this from Delivery’s next step.', FE('from=delivery · #8684')) + ZH('Pipeline', 'Leads') + '<p class="ihs-sub">1 lead matches your services · scored against ' + OFFER + '</p>' + lead, { cur: 'Pipeline', over: sheet, h: 900 });
+    }
+    else if (B === 'OPO05') {
+      html = page(DELIVERY_EMPTY('B2', { tags: POL('Q3 · option A: only the founder’s acceptance creates it') }), { cur: 'Delivery' });
+    }
+    else if (B === 'OPO06') {
+      const node = (n, t, who, cls) => '<div class="opo-node' + (cls ? ' ' + cls : '') + '">' + N(n) + '<b>' + t + '</b><span class="opo-who">' + who + '</span></div>';
+      const ar = '<span class="opo-ar" aria-hidden="true">' + I.arr + '</span>';
+      const flow = '<div class="opo-flow" role="list" aria-label="How a delivery starts">' + node(1, 'Service in your catalogue', 'You · Offers › Catalog') + ar + node(2, 'Proposal sent on a founder need', 'You · Pipeline · Send proposal, not on a partner screen yet (⚑ Q1)') + ar + node(3, 'Founder accepts', 'The founder · their marketplace', 'opo-node-them') + ar + node(4, 'Engagement created · Accepted', 'Axal · automatic, same step', 'opo-node-auto') + ar + node(5, 'Start work · In progress', 'You · Delivery lifecycle') + '</div>';
+      const rows = [
+        ['1 · Add a service', 'A partner on this firm (' + C('POST /api/services/offerings') + ', partner or admin)', 'Title. Summary, category, how it is sold and price are optional.', '403 for any other role; 400 without a title', 'Manual'],
+        ['2 · Send a proposal', 'A partner with a partner profile (' + C('POST /api/needs/:id/quotes') + ')', 'Price above 0 and deliverables; timeline optional. The need must be Open or In review.', '403 Partner role required · 400 No partner profile · 409 the need is not accepting quotes, or you already sent one', 'Manual'],
+        ['3 · Accept', 'Only the founder who owns the need, or an admin (' + C('POST /api/quotes/:id/accept') + ')', 'Nothing from you. Another firm’s quote may be accepted instead.', '409 need already decided', 'Manual, the founder’s'],
+        ['4 · Engagement created', 'Axal, inside the same transaction as step 3 (' + C('ENGAGEMENT_FOR_ACCEPTED') + ')', 'Founder, project, price and firm copied from the accepted quote', 'If the insert fails, the acceptance rolls back', 'Automatic'],
+        ['5 · Start work', 'A partner on the engagement (' + C('POST /api/engagements/:id/start') + ')', 'The engagement is Accepted', '409 from any other status · 403 founder side', 'Manual']
+      ];
+      const tbl = '<table class="sop-ac"><thead><tr><th style="width:16%">Transition</th><th style="width:24%">Who may</th><th style="width:24%">Data required</th><th style="width:24%">Refused when</th><th>Kind</th></tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map((c, i) => '<td' + (i === 4 ? ' style="font-weight:700"' : '') + '>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+      const not = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">' + J([
+        ['A saved draft', 'Leads › Draft proposal. Stays a draft until you send it (#5936).'],
+        ['A request on your catalogue', 'A founder asked about ' + OFFER + '. It stays a request (' + C('service_engagements') + ', pending). Nothing converts it.'],
+        ['A sent proposal', 'Waits for the founder. You can follow up or withdraw it; you cannot accept it.'],
+        ['A deal agreed outside Axal', 'Not recorded. Ask the founder to accept on Axal. ⚑ Q3']
+      ].map(x => '<div class="opo-notd"><span class="opo-nrt" style="align-self:flex-start">' + CG.ref + 'Not a delivery</span><b style="font-size:13px">' + x[0] + '</b><span class="ihs-sub" style="color:var(--body)">' + x[1] + '</span></div>')) + '</div>';
+      html = crop('<div style="display:flex;flex-direction:column;gap:4px"><span class="ihs-ey">The condition, as main records it</span><h2 style="font-size:20px;font-weight:800">A delivery starts when a founder accepts your proposal</h2><p class="ihs-sub" style="font-size:12.5px">Three hand-offs are people’s clicks. One step is automatic, and only that one. This explainer is the copy behind “What creates a delivery” on each empty state.</p></div>' + flow + '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--body)"><span class="opo-key"><i class="opo-kk"></i>Your click</span><span class="opo-key"><i class="opo-kk opo-kt"></i>The founder’s click</span><span class="opo-key"><i class="opo-kk opo-ka"></i>Automatic</span></div>' + tbl + '<h3 style="font-size:14px;font-weight:800">These do not create a delivery</h3>' + not + '<div style="display:flex;gap:6px;flex-wrap:wrap">' + POL('Q1 · where Send proposal lives') + POL('Q3 · record an outside acceptance') + '</div>', 1200);
+    }
+    else if (B === 'OPO07') {
+      html = page(ZH('Delivery', 'Board') + BOARD(), { cur: 'Delivery' });
+    }
+    else if (B === 'OPO08') {
+      html = page(SRC('Pipeline · Proposals', 'You opened this from a won proposal.') + ZH('Delivery', 'Board') + '<div style="display:flex;gap:6px;flex-wrap:wrap">' + BE('engagement_uid on proposal rows · #8684') + FE('?engagement= opens the sheet, as on main') + '</div>' + BOARD({ sel: true }), { cur: 'Delivery', over: SHEET({ from: true }), h: 900 });
+    }
+    else if (B === 'OPO09') {
+      const a = '<div class="ihs-tile" style="gap:10px">' + SRC('Delivery', 'You opened this from Delivery’s next step.') + '<span class="ihs-ey">Offers · Catalog</span><div role="status" class="sop-live">' + I.ok + 'Service saved: ' + OFFER + '. Back to Delivery shows your next step.</div><div class="ihs-kv"><span style="font-family:var(--sg);font-weight:700">' + OFFER + '</span><span>' + PRICE + ' · fixed · live</span></div><a href="#" class="sop-pa sop-fcs" style="align-self:flex-start;gap:6px">' + I.back + 'Back to Delivery</a><p class="ihs-sub">Focus moves to Back to Delivery after the save. The browser’s Back does the same.</p></div>';
+      const b = '<div class="ihs-tile" style="gap:10px"><span class="ihs-ey">Delivery · Board</span><div role="status" class="sop-live">' + I.ok + 'Back from Offers. ' + OFFER + ' is in your catalogue. Next step: review matching leads.</div><h2 style="font-size:17px;font-weight:800">No active client work yet</h2>' + btn('Review matching leads ' + I.arr, 'p', ' style="align-self:flex-start;min-height:44px;outline:2.5px solid var(--vi);outline-offset:3px"') + '<p class="ihs-sub">Delivery reads the catalogue again on return and focuses the new primary. The status line is polite and spoken once.</p></div>';
+      const c = '<div class="ihs-tile" style="gap:10px"><span class="ihs-ey">Firm context</span><div class="opo-lb" role="listbox" aria-label="Switch company"><div role="option" aria-selected="true" class="opo-opt opo-on"><span class="ihs-sq">HS</span><b>' + FIRM + '</b>' + I.ok + '</div><div role="option" aria-selected="false" class="opo-opt"><span class="ihs-sq">HV</span><b>' + FIRM2 + '</b></div></div><p style="font-size:12.5px;color:var(--body);line-height:1.5">Every hop on this route (Delivery → Offers → Delivery → Pipeline → Delivery) keeps the company chosen top-left; the client sends it on every read. The return links add only ' + C('from=delivery') + '.</p><p style="font-size:12.5px;color:var(--body);line-height:1.5">On main the Delivery board is the one read that ignores it: a partner acting for ' + FIRM + ' also sees ' + FIRM2 + '’s engagements there, while its catalogue and proposals are this firm’s. The empty-state branch reads the same scope as the board.</p><div style="display:flex;gap:6px;flex-wrap:wrap">' + POL('Q2 · option A: Delivery follows the switcher') + BE('board scoped to the active company · #8684') + '</div></div>';
+      html = crop('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px"><div style="display:flex;flex-direction:column;gap:8px">' + LAB('A · Offers after the save') + a + '</div><div style="display:flex;flex-direction:column;gap:8px">' + LAB('B · Back on Delivery') + b + '</div><div style="display:flex;flex-direction:column;gap:8px">' + LAB('C · The firm stays the same') + c + '</div></div>' + ANN([
+        'Each next step links with ' + C('?from=delivery') + ' and the destination shows “Back to Delivery”, the same pattern as ' + C('FromStudioBack') + ' (D8733) generalised to a second source. Opened any other way, no back link.',
+        'Delivery decides the next step from its own reads each time it loads; nothing is remembered between pages, so the return never shows a stale step.',
+        'Pipeline › Leads and Proposals carry the same back link (OPO04, OPO12D).'
+      ]), 1200);
+    }
+    else if (B === 'OPO10') {
+      const box = (l, t) => '<div style="display:flex;flex-direction:column;gap:8px;min-width:0">' + LAB(l) + '<div class="ihs-tile" style="gap:9px">' + t + '</div></div>';
+      const h = '<h2 style="font-size:15px;font-weight:800">No active client work yet</h2>';
+      const st = (g, w) => '<span class="opo-nrt" style="align-self:flex-start">' + g + w + '</span>';
+      const s1 = '<div aria-busy="true" style="display:flex;flex-direction:column;gap:9px">' + SK('55%', 16) + SK('92%', 12) + SK('70%', 12) + SK('40%', 40) + '<span class="ihs-sub">Reading your catalogue and proposals…</span></div>';
+      const s2 = h + st(CG.una, 'Unavailable') + '<p style="font-size:12.5px">Your catalogue could not be read, so the next step is not chosen for you. This is not a claim that it is empty.</p><div style="display:flex;gap:8px;align-items:center">' + btn('Try again', 'p sm') + lnk('Open Pipeline') + '</div>';
+      const s3 = h + st(CG.part, 'Partial · 1 of 2 reads') + '<p style="font-size:12.5px">' + OFFER + ' is in your catalogue. Your proposals could not be read, so whether one is waiting is unknown.</p><div style="display:flex;gap:8px;align-items:center">' + btn('Open Pipeline', 'p sm') + lnk('Try again') + '</div>';
+      const s4 = st(CG.nr, 'Not recorded') + '<p style="font-size:12.5px">No partner profile is attached to this sign-in, so there is no firm record to read.</p>' + lnk('Partner settings ›');
+      const s5 = st(CG.lk, 'Refused · role preview') + '<p style="font-size:12.5px">Withheld in role preview. The firm’s records are not read, and no next step is offered.</p>';
+      const s6 = h + st(CG.stale, 'Stale · read 2 h ago') + '<p style="font-size:12.5px">You are offline. This is the last read, ' + mo('Fri 20 Nov 2026 07:10') + '. The next step opens when you are back online.</p>' + btn('Add your first service', 'p sm', ' aria-disabled="true" style="align-self:flex-start"');
+      const s7 = '<span class="ihs-ey">Pipeline · Send proposal</span>' + st(CG.ref, 'Refused · 409') + '<p style="font-size:12.5px"><b>' + CL + ' is no longer taking proposals.</b> The founder accepted another quote or closed the need. Nothing was sent; your draft is kept.</p>' + lnk('Back to Leads');
+      const s8 = '<span class="ihs-ey">Pipeline · Send proposal</span>' + st(CG.ref, 'Refused · 403') + '<p style="font-size:12.5px">Only a partner on this firm can send proposals. Your sign-in holds a different role here. Nothing was sent.</p>';
+      html = crop('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">' + box('A · Loading', s1) + box('B · Catalogue unavailable', s2) + box('C · Proposals unavailable', s3) + box('D · No partner profile', s4) + box('E · Administrator role preview', s5) + box('F · Offline, stale', s6) + box('G · Conflict on send', s7) + box('H · Permission on send', s8) + '</div>' + ANN([
+        'The next step needs both reads. If either fails, Delivery names the failure and falls back to the shipped “Open Pipeline”, never to a guessed branch. Unavailable is never drawn as an empty catalogue.',
+        'D and E are the shipped notices (' + C('NoPartnerProfile') + ', role preview withholding every read); they replace the next step instead of sitting under it.',
+        'G and H are the Worker’s answers to ' + C('POST /api/needs/:id/quotes') + ' (409 need not open or already quoted, 403 role). The sheet keeps the draft and says nothing was sent.',
+        'Stale shows the read’s age; a step that needs the network is disabled with its reason beside it.'
+      ]), 1200);
+    }
+    else if (B === 'OPO11') {
+      html = page(DELIVERY_EMPTY('B'), { cur: 'Delivery', dark: true });
+    }
+    else if (B === 'OPO12A') {
+      html = phone(STEP(1, 'Delivery, no offer') + PEMPTY('A') + '<p class="ihs-sub">The floating Eadwyn button stays bottom-right and secondary; the main area’s one action is the next step.</p>');
+    }
+    else if (B === 'OPO12B') {
+      html = phone(STEP(2, 'Add a service') + '<a href="#" class="ihs-lnk" style="gap:4px;min-height:44px">' + I.back + 'Back to Delivery</a><span class="ihs-ey">Offers · Catalog</span><h1 style="font-size:22px;font-weight:800">Add a service</h1>' + J([['Title', OFFER], ['How it is sold', 'Fixed'], ['Price (USD)', mo('12,000')]].map(k => '<label class="opo-f"><span>' + k[0] + '</span><span class="opo-in">' + k[1] + '</span></label>')) + btn('Save service', 'amb', ' style="min-height:44px;width:100%"') + '<div role="status" class="sop-live" style="font-size:12px">' + I.ok + 'Service saved: ' + OFFER + '. Back to Delivery shows your next step.</div>', { bar: 'Offers', ws: 'Offers' });
+    }
+    else if (B === 'OPO12C') {
+      html = phone(STEP(3, 'Delivery, offer, no proposal') + PEMPTY('B'));
+    }
+    else if (B === 'OPO12D') {
+      html = phone(STEP(4, 'Send the proposal') + '<div style="display:flex;align-items:center;justify-content:space-between"><a href="#" class="ihs-lnk" style="gap:4px;min-height:44px">' + I.back + 'Back to Delivery</a><button type="button" class="sop-x" aria-label="Close opportunity">' + I.x + '</button></div><span class="ihs-ey">Opportunity · Lead</span><h1 style="font-size:20px;font-weight:800">' + CL + '</h1><span class="ihs-sub">' + NEED + ' · from ' + FD + '</span><section class="opo-review" aria-label="Review before sending"><b style="font-size:13.5px">Review before sending</b>' + J([['To', FD], ['Price', mo('$12,000') + ' · fixed'], ['Timeline', mo('4') + ' weeks']].map(k => '<div class="ihs-kv"><span class="ihs-mu" style="font-family:var(--sg)">' + k[0] + '</span><span style="font-family:var(--sg);font-weight:600">' + k[1] + '</span></div>')) + '<p style="font-size:12px;color:var(--body)">Sending records your bid on her need. She decides in her marketplace. No email is sent.</p></section>' + btn(I.send + 'Send proposal', 'amb', ' style="min-height:44px;width:100%"') + btn('Back to the draft', '', ' style="min-height:44px;width:100%"'), { bar: 'Pipeline', ws: 'Pipeline' });
+    }
+    else if (B === 'OPO12E') {
+      html = phone(STEP(5, 'Waiting on the founder') + PEMPTY('B2'));
+    }
+    else if (B === 'OPO12F') {
+      html = phone(STEP(6, 'First engagement on Delivery') + '<span class="ihs-ey">Delivery</span><h1 style="font-size:22px;font-weight:800">Delivery</h1><p style="font-size:13px;color:var(--mut)">1 of 1 engagements need attention.</p>' + btn('Review attention', 'p', ' style="min-height:44px;width:100%"') + '<article class="ihs-tile" style="padding:14px;gap:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h3 style="font-size:16px;font-weight:800">' + CL + '</h3><span class="opo-nrt">' + CG.nr + 'Not rated</span></div><span class="ihs-sub">Project · ' + mo(PRICE) + ' · Accepted ' + mo(ACC) + '</span><span class="ihs-sub">Progress not recorded</span><p style="font-size:13.5px"><b style="font-weight:600">Assign an owner</b><span class="opo-why">Owner unassigned</span></p>' + btn('Open engagement', '', ' style="min-height:44px;width:100%"') + '</article>');
+    }
+    else if (B === 'OPO12G') {
+      const secs = [['Progress', 'Not recorded'], ['Deliverables', 'None sent'], ['Status report', 'November · not started'], ['Capacity', 'No embedded seat']];
+      html = phone(STEP(7, 'The engagement') + '<div style="display:flex;align-items:center;justify-content:space-between"><span class="ihs-ey">Engagement</span><button type="button" class="sop-x" aria-label="Close engagement">' + I.x + '</button></div><h2 style="font-size:20px;font-weight:800">' + CL + '</h2><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--mut)"><span class="opo-nrt">' + CG.nr + 'Not rated</span><span>Project · ' + mo(PRICE) + '</span></div><section class="sop-next"><h3 style="font-size:13px">Next action</h3><p style="font-size:14px">Assign an owner</p><p style="font-size:12px;color:var(--amT)">Owner unassigned. Accepted by ' + FD + ' ' + mo(ACC) + '.</p></section>' + J(secs.map(s => '<div style="display:flex;justify-content:space-between;align-items:center;min-height:44px;border-top:1px solid var(--line);font-size:13px"><b>' + s[0] + '</b><span style="text-align:right">' + s[1] + ' ›</span></div>')), { fab: false });
+    }
+    else if (B === 'OPO13') {
+      const kb = '<div class="ihs-tile" style="gap:14px">' + ZH('Delivery', 'Board').replace('<nav class="sop-ztabs" aria-label="Delivery zones">', '<nav class="sop-ztabs" aria-label="Delivery zones" style="align-items:center">' + KI(1)) + EMPTY('B', { keys: [2, 3] }) + '</div>';
+      html = crop(SIDEBYSIDE(kb, '<div style="width:400px;flex:none;display:flex;flex-direction:column;gap:12px">' + ANN([
+        'Headings: h1 Delivery › h2 No active client work yet › h3 Your path to a first delivery. The empty state is a region named by its h2.',
+        'Tab order after the shell (skip link, company switcher, main nav): (1) the zone pills, (2) the next-step button, (3) “What appears here once work starts”, then the Eadwyn rail. The path list has no tab stops: it is information, and its current item carries aria-current="step".',
+        'One primary per moment: Add your first service, Review matching leads, Open the proposal, Review attention. The shipped “Open Pipeline →” bar above the card is removed when empty.',
+        'Live regions: on return from Offers or Pipeline, a polite status (“Back from Offers. … Next step: review matching leads.”) spoken once; focus goes to the new primary. A failed read is role="alert" only on retry.',
+        'The opportunity sheet (OPO04) traps focus; Escape and Close return to the lead’s Draft proposal button. Send proposal announces “Proposal sent to Maya Ruiz” or the refusal (OPO10 G, H).',
+        'Desktop targets 40 px, phone 44 px. Done, Next and Not rated are a glyph plus a word, never colour alone.',
+        'Test the three states at 1440 (OPO01, OPO03, OPO07), 390 (OPO12A, C, F) and by keyboard alone (this board).'
+      ]) + '</div>'), 1200);
+    }
+    else if (B === 'OPO14') {
+      const L = a => '<ul>' + J(a.map(x => '<li>' + x + '</li>')) + '</ul>';
+      const AC = [
+        ['From empty Delivery, an eligible next action for a firm with no offer', 'OPO01 (Add your first service → Offers › Catalog), OPO12A'],
+        ['… and for one with an offer but no active work', 'OPO03 (Review matching leads), OPO05 (Open the proposal, while one waits), OPO12C, OPO12E'],
+        ['Reuse current destinations', 'Offers › Catalog, Pipeline › Leads, Pipeline › Proposals and Delivery › Board: no new page (OPO02, OPO04, OPO08)'],
+        ['Preserve firm context when returning', 'OPO09 A–C: Back to Delivery, focus on the new primary, the company switcher unchanged; Q2 for the board’s scope'],
+        ['Explain the condition that creates a delivery', 'OPO06; the “What creates a delivery” line on OPO01, OPO03, OPO05, OPO12A'],
+        ['Show any manual handoff explicitly; imply no automatic conversion the code lacks', 'OPO06 table (three manual steps, one automatic) and “These do not create a delivery”; OPO05; OPO07 Start work'],
+        ['A partner with active work reaches its existing engagement directly', 'OPO07 (Board lands on the row), OPO08 (a won proposal opens the engagement sheet), OPO12F, OPO12G'],
+        ['Test the three states on mobile, keyboard and desktop', 'Desktop OPO01, OPO03, OPO07; phone OPO12A, OPO12C, OPO12F; keyboard OPO13; tests listed below']
+      ];
+      html = '<div class="ihs-cv" style="width:1200px"><div class="sop-doc"><div><span class="ihs-ey">Operating Partner · Offers, Pipeline, Delivery · #8684 · role audit 25 Nov 2026</span><h2 style="margin-top:6px">Handoff: offer, pipeline and first delivery</h2><p class="ihs-sub" style="margin-top:6px">Checked on main ee23155ff6 (Fri 27 Nov 2026). [Sara Holm], ' + FIRM + ', ' + FIRM2 + ', ' + FD + ', ' + CL + ', the need, uids and amounts are fictional sample data.</p></div>'
+        + '<div class="sop-dl"><div><h3>Checked on main</h3>' + L([
+          C('pages/partner/delivery/BoardZone.jsx') + ': ' + C('DeliveryEmpty') + ' “No active client work yet” → ' + C('/pipeline/proposals') + ', plus the ' + C('delivery-primary') + ' bar with a second “Open Pipeline”. No catalogue or proposal read. ' + C('boardAttention.js') + ' ' + C('primaryAction') + ', ' + C('nextAction') + ' (“Assign an owner” when no owner).',
+          C('workspaces/partner/OfferReadiness.jsx') + ': “Start with what you sell” when ' + C('isNewFirm') + '; “Add your first service” → Catalog. ' + C('pipeline/PipelineCommandCentre.jsx') + ' + ' + C('commandCentre.js') + ': “Set up your pipeline”, ' + C('setupSteps') + ', ' + C('isFirstRun') + '.',
+          C('pipeline/LeadsZone.jsx') + ', ' + C('LeadProposalDraft.jsx') + ': Draft proposal saves a draft, “not sent”, no Send (#5936). ' + C('ProposalsZone.jsx') + ': empty “Accept a lead and quote it”; Won → “The engagement is on Delivery” → ' + C('/delivery/board') + '.',
+          C('pages/NeedsBoardPage.jsx') + ' ' + C('QuoteFormModal') + ' is the only caller of ' + C('api.submitQuote') + '; mounted by ' + C('FounderMarketplacePage') + ' on ' + C('/build/marketplace') + ', guarded to founder and admin (App.jsx).',
+          C('routes/needs.ts') + ': ' + C('POST /needs/:id/quotes') + ' (partner, profile, open need, price, deliverables); accept is founder-owner only and inserts the engagement in the same batch (' + C('ENGAGEMENT_FOR_ACCEPTED') + ', D4677); ' + C('/engagements/:id/start') + ' Accepted → In progress, partner side.',
+          C('routes/partner_delivery.ts') + ' ' + C('GET /board') + ': ' + C('WHERE e.partner_id = ?') + ', no company filter. ' + C('routes/partner_pipeline.ts') + ' ' + C('readProposals') + ': company-scoped, returns ' + C('engagement_id') + ' only. ' + C('services/serviceMeasures.ts') + ': a catalogue request is not an engagement.',
+          C('ui/RailFrame.jsx') + ': below 1024 px the rail is a floating button. ' + C('PartnerBucketRoutes.jsx') + ': the rail notes and bucket intros used here. ' + C('FromStudioBack.jsx') + ': the ' + C('from=studio') + ' back link.'
+        ]) + '<h3 style="margin-top:14px">Preserved</h3>' + L(['The Partner shell, bucket titles, intros, zone pills and the Eadwyn rail as shipped; the Offers and Pipeline primaries keep their shipped amber, Delivery its violet.', 'Offers’ “Start with what you sell” and Pipeline’s “Set up your pipeline” unchanged; Delivery’s heading “No active client work yet” kept.', 'Board, its chips, health words, the engagement sheet and the lifecycle with Start work, unchanged.']) + '</div>'
+        + '<div><h3>Requires engineering ◇</h3>' + L([
+          'Proposal rows carry ' + C('engagement_uid') + ' (one column in ' + C('readProposals') + '), so a won proposal opens ' + C('/delivery/board?engagement=&lt;uid&gt;') + '. ' + BE('#8684'),
+          'If ⚑ Q2 is A: ' + C('GET /partner/delivery/board') + ' narrows to the active company as ' + C('readProposals') + ' does (' + C('e.company_id IS NULL OR = ?') + '). ' + BE('#8684')
+        ]) + '<h3 style="margin-top:14px">Frontend only</h3>' + L([
+          'Delivery’s empty state reads ' + C('listServiceOfferings({mine:1})') + ' and ' + C('listPartnerProposals()') + ' (both exist) and picks one of three next steps; on a failed read it says so and keeps “Open Pipeline”. Remove the duplicate ' + C('delivery-primary') + ' bar when empty.',
+          'The path list, the “What creates a delivery” line and the explainer copy.',
+          C('?from=delivery') + ' and “Back to Delivery” on Catalog, Leads and Proposals (generalise ' + C('FromStudioBack') + '); focus and a polite status on return.',
+          'Send proposal (if ⚑ Q1 is A): from the saved draft in the opportunity sheet, Review then Send, calling the existing ' + C('POST /api/needs/:id/quotes') + '.',
+          'Proposals: ' + C('?proposal=&lt;uid&gt;') + ' opens that proposal’s sheet (Open the proposal).'
+        ]) + '<h3 style="margin-top:14px">Owner decisions ⚑ (option A drawn)</h3>' + L([
+          'Q1 · Where a partner sends a proposal. A: Send from the saved draft in the opportunity sheet, after a Review step (drawn). B: “New proposal” on Proposals, choosing an open lead. Today neither exists.',
+          'Q2 · Delivery and the company switcher. A: Delivery follows the switcher like Offers and Pipeline (drawn, ◇). B: keep every firm’s engagements and label each row with its firm.',
+          'Q3 · Work agreed outside Axal. A: only the founder’s acceptance creates an engagement; the waiting state says so (drawn). B: let a partner record an outside acceptance, which needs a new audited Worker route.'
+        ]) + '</div></div>'
+        + '<div><h3>Acceptance criteria → boards</h3><table class="sop-ac"><thead><tr><th style="width:44%">Criterion</th><th>Answered on</th></tr></thead><tbody>' + J(AC.map(a => '<tr><td>' + a[0] + '</td><td>' + a[1] + '</td></tr>')) + '</tbody></table></div>'
+        + '<div class="sop-dl" style="grid-template-columns:1fr"><div><h3>Tests the acceptance asks for</h3>' + L([
+          'Unit, ' + C('deliveryNextStep(reads)') + ': no service → Add your first service; a service and no proposal → Review matching leads; a proposal with no decision → Open the proposal; an engagement → the board; either read unreadable → Open Pipeline with the failure named. Mutation-check each branch.',
+          'Render: the empty Delivery draws exactly one primary button in each state, at 1440 and at 390 (the floating Eadwyn button is not in the main region).',
+          'Route: each next step carries ' + C('from=delivery') + '; the destination shows Back to Delivery; returning focuses the primary and keeps the active company header.',
+          'Worker (if ◇ lands): proposals carry ' + C('engagement_uid') + '; the board answers only the active company’s rows. Accept still creates exactly one engagement (D4677 test unchanged).',
+          'Keyboard: tab through each state in OPO13’s order; Escape from the opportunity sheet returns focus to Draft proposal.'
+        ]) + '</div></div></div></div>';
+    }
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
