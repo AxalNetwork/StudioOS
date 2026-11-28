@@ -19,6 +19,7 @@
 import { STEPS, daysLeft } from './closingModel.js';
 import { lineStatus, moneyCents, routeWord } from './deskModel.js';
 import { closingPaperLifecycle } from '../../lib/contractLifecycle.js';
+import { parseMinor } from '../../lib/money.js';
 
 export { STEPS };
 
@@ -368,13 +369,10 @@ export function transferEvidenceBody(item) {
   return REF_ID.test(uid) ? { kind: 'phone_verified_record', source_ref: `deal_transfer:${uid}` } : null;
 }
 
-/** "400,000.00" or "$400000" as integer cents, or null: never a float, never a guess. */
-export function centsFromInput(typed) {
-  const t = String(typed ?? '').replace(/[\s,$]/g, '');
-  const m = /^(\d{1,13})(?:\.(\d{1,2}))?$/.exec(t);
-  if (!m) return null;
-  const cents = Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
-  return cents > 0 && Number.isSafeInteger(cents) ? cents : null;
+/** "400,000.00" or "$400000" as integer minor units of `currency` (lib/money.js parseMinor, D5373), or null: never a float, never a guess. */
+export function centsFromInput(typed, currency = 'USD') {
+  const read = parseMinor(String(typed ?? '').replace(/[\s$]/g, ''), currency);
+  return read.ok && read.minor > 0 ? read.minor : null;
 }
 
 export const TRANSFER_WORDS = Object.freeze({
@@ -385,9 +383,9 @@ export const TRANSFER_WORDS = Object.freeze({
 });
 
 /** The transfer route's body, phone-verified and tied to the line, or `{error}`. The Worker takes no date. */
-export function transferBody({ amount, reference, phone, lineUid }) {
+export function transferBody({ amount, reference, phone, lineUid, currency }) {
   if (!phone) return { error: TRANSFER_WORDS.phoneNeeded };
-  const cents = centsFromInput(amount);
+  const cents = centsFromInput(amount, currency || 'USD');
   if (cents == null) return { error: TRANSFER_WORDS.amount };
   const ref = String(reference ?? '').trim().slice(0, 200);
   return { amount_cents: cents, reference: ref || undefined, phone_verified: true, closing_line_uid: lineUid };

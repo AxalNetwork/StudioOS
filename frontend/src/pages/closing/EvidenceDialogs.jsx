@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { api } from '../../lib/api';
 import { adminMercuryApi } from '../../lib/api/adminMercury';
 import { closingsApi } from '../../lib/api/closings';
+import { majorToMinor } from '../../lib/money';
 import { Lightbox, Unreadable } from '../../ui';
 import { BTN, INPUT } from '../account/AccountCenter';
 import { Err, useAct, useLoad } from './ClosingDialogs';
@@ -92,7 +93,7 @@ export function RecordTransferDialog({ closing, line, onClose, onDone }) {
   };
   const go = async () => {
     if (saved) { await record(saved); return; }
-    const body = transferBody({ ...form, lineUid: line.uid });
+    const body = transferBody({ ...form, lineUid: line.uid, currency: closing.currency });
     if (body.error) { act.setError(body.error); return; }
     const out = await act.run(() => api.dealTransferRecord(closing.deal_id, body), 'The transfer could not be saved. Try again.');
     if (!out) return;
@@ -178,7 +179,10 @@ export function AddLineDialog({ closing, lines, onClose, onDone }) {
     }
     if (await act.run(() => closingsApi.addLine(closing.uid, body), 'The line could not be added. Try again.')) onDone?.();
   };
-  const amountOf = (c) => (Number.isFinite(Number(c.amount)) && Number(c.amount) > 0 ? moneyCents(Math.round(Number(c.amount) * 100), closing.currency || 'USD') : 'Amount not recorded');
+  const amountOf = (c) => {
+    const minor = majorToMinor(c.amount, closing.currency || 'USD');
+    return minor != null && minor > 0 ? moneyCents(minor, closing.currency || 'USD') : 'Amount not recorded';
+  };
   return (
     <Lightbox label="Add a line" title="Add a line to this closing" sub="A live commitment on the deal, or a Raise prospect of the venture." testId="closing-add-line-dialog" onClose={onClose} width={520}>
       <div className="flex flex-col gap-3 px-5 py-4">
