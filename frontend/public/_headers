@@ -36,12 +36,30 @@
 # scanner (components/events/CheckinScanner.jsx) reads QR codes from it, and
 # `camera=()` sent every organiser to manual entry. No other origin, no frame,
 # gets either.
+# Cross-Origin-Resource-Policy: same-site is the Worker's own value (#9207):
+# another site cannot pull the shell, or a file beside it, into its page as a
+# no-cors resource. It does not touch a navigation, so links, sign-in windows
+# and Stripe's redirect are unaffected. There is still NO
+# Cross-Origin-Opener-Policy here, on purpose (D722): `same-origin` cuts
+# Google's sign-in window off from /login, and `same-origin-allow-popups` cuts
+# off a window another site opened on /login (an MCP client's OAuth window).
+# frontend/test/google_popup_headers_d722.test.mjs fails if one is added.
 /*
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), camera=(self), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
+  Cross-Origin-Resource-Policy: same-site
+
+# #9207: the images other sites are meant to show keep loading there. Every
+# email the Worker sends shows /axal-mark.png (services/email.ts), and a webmail
+# page that loads it straight from axal.vc is another site; the /og/ cards are
+# shown by link previews. Rules apply in file order, so these follow /*.
+/axal-mark.png
+  ! Cross-Origin-Resource-Policy
+/og/*
+  ! Cross-Origin-Resource-Policy
 
 # D4582: the sign-in page is not indexed. The same directive is in the page's own head (ogRegistry.js, `robots`);
 # this header is the copy a crawler reads without parsing HTML, and `scripts/check-spa-live.mjs` asserts it.

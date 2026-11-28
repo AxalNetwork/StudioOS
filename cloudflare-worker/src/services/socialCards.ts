@@ -117,6 +117,8 @@ export const SHELL_HEADERS: Readonly<Record<string, string>> = {
   'x-frame-options': 'DENY',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'geolocation=(), camera=(self), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()',
+  // #9207: the shell's resource policy, as in _headers.
+  'cross-origin-resource-policy': 'same-site',
 };
 
 export const CARD_DEADLINE_MS = 1500;
