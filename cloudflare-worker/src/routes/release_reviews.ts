@@ -7,7 +7,8 @@
  *
  *   GET  /pending?tenant_id&company_id[&limit]   the manifests awaiting this person's decision there (ids and digests),
  *                                                and (part 11) `people`: the authors' names, only for people linked to the
- *                                                company, never an email
+ *                                                company, never an email; and (part 17) `renderPending`: the manifests
+ *                                                asking this person for a render approval (decided below, purpose render)
  *   POST /manifests/:manifest/decisions   { tenant_id, company_id, digest, audience, profile, authority, decision,
  *                                           approval_ref?, citations?, disclosure_ref?, rights_ref?, idempotency_key,
  *                                           purpose?, render_ceiling_microusd? }
@@ -49,7 +50,7 @@ import type { Scope } from '../services/workGraphContracts';
 import { Meter, REQUIREMENTS, REQUIREMENT_AUTHORITY, attestComponent, decideRelease, type Requirement } from '../services/workGraphReleases';
 import { companyUnderOtherTenant } from '../services/workGraphReleaseAuthorities';
 import { RELEASE_REFUSAL_SENTENCES, RELEASE_REFUSAL_STATUS, releaseAdminEnabled, scopeFrom } from '../services/workGraphReleaseAdmin';
-import { REVIEW_LIMITS, pendingPeople, pendingReleaseDecisions, reviewerContext, type ReviewerContext } from '../services/workGraphReleaseReviews';
+import { REVIEW_LIMITS, pendingPeople, pendingReleaseDecisions, pendingRenderApprovals, reviewerContext, type ReviewerContext } from '../services/workGraphReleaseReviews';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -112,10 +113,15 @@ r.get('/pending', async (c) => {
   const g = await gate(c.env, scope, Number(user.id));
   if (!g.ok) return refused(c, { code: g.code, ids: [String(scope.companyId)] });
   const out = await pendingReleaseDecisions(c.env, scope, Number(user.id), g.rc.held, listLimit(c.req.query('limit')));
-  const names = await pendingPeople(c.env, scope, out.pending);
+  // Part 17 (D5585-p17): the render approvals this person is asked for, decided on the same route with purpose render.
+  const asks = await pendingRenderApprovals(c.env, scope, Number(user.id), g.rc.held, listLimit(c.req.query('limit')));
+  const names = await pendingPeople(c.env, scope, [...out.pending, ...asks.renderPending]);
   return c.json({
-    ok: true, scope, authorities: g.rc.held, pending: out.pending, people: names.people,
-    cost: { d1Statements: out.cost.d1Statements + names.cost.d1Statements, d1Batches: out.cost.d1Batches + names.cost.d1Batches },
+    ok: true, scope, authorities: g.rc.held, pending: out.pending, renderPending: asks.renderPending, people: names.people,
+    cost: {
+      d1Statements: out.cost.d1Statements + asks.cost.d1Statements + names.cost.d1Statements,
+      d1Batches: out.cost.d1Batches + asks.cost.d1Batches + names.cost.d1Batches,
+    },
   });
 });
 

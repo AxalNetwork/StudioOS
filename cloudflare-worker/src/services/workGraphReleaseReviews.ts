@@ -14,11 +14,17 @@
  * person can decide (an authority they hold now approves it, per `POLICY_PROFILES`); the person has no live decision
  * for that profile (their latest row is absent or a `withdraw`); and no applied takedown covers it (part 2's
  * `takedownsCovering`). Ids, digests, audience and the profile and authority names only; never a body.
+ *
+ * THE RENDER ASKS (part 17, D5585-p17). Beside it, the manifests whose render approval this person is asked for: a
+ * manifest of the scope they did not author, not taken down, that pins a piece a render builds on (a video, image or
+ * brand asset, part 12's kinds) while that revision is still its asset's head, under a profile the person can decide
+ * and holds no live `render` decision for. Deciding one is part 15's render approval, with its ceiling, on the same
+ * decision route. Published manifests count too: a render's approval is about spend, not publication.
  */
 import type { Env } from '../types';
 import type { Scope } from './workGraphContracts';
 import type { Cost } from './workGraphRevisions';
-import { Meter, POLICY_PROFILES, takedownsCovering, type Audience, type ManifestBody, type ProfileName, type ReleaseContext } from './workGraphReleases';
+import { Meter, POLICY_PROFILES, RENDER_KINDS, readComponents, takedownsCovering, type Audience, type ManifestBody, type ProfileName, type ReleaseContext } from './workGraphReleases';
 import { resolveReleaseAuthorities } from './workGraphReleaseAuthorities';
 import { RELEASE_ADMIN_DEPS, type ReleaseAdminEnv } from './workGraphReleaseAdmin';
 import { releasePeople } from './workGraphReleaseDirectory';
@@ -109,11 +115,69 @@ export async function pendingReleaseDecisions(
   return { pending, cost: { ...m.cost } };
 }
 
+/** Part 17: one piece of a render ask, which a render can still build on. */
+export interface RenderAskPiece { asset: string; revision: string; kind: string; role: string; profiles: ProfileName[] }
+/** Part 17: a manifest whose render approval this person is asked for. */
+export interface RenderAskItem {
+  manifestUid: string; lineAssetUid: string; digest: string; audience: Audience; authorUserId: number;
+  /** The pieces a render can build on: render kinds, still their asset's head. */
+  pieces: RenderAskPiece[];
+  /** Their profiles the person can decide and has no live render decision on. */
+  profiles: ProfileName[];
+  authorities: Partial<Record<ProfileName, string[]>>;
+}
+
+/** Part 17: the manifests of one scope asking this person for a render approval, newest first. */
+export async function pendingRenderApprovals(
+  env: Pick<Env, 'DB'>, scope: Scope, userId: number, held: readonly string[], limit: number,
+): Promise<{ renderPending: RenderAskItem[]; cost: Cost }> {
+  const m = new Meter(env);
+  const can = decidableProfiles(held);
+  if (!can.length) return { renderPending: [], cost: { ...m.cost } };
+  const rows = await m.all<{ manifest_uid: string; line_asset_uid: string; manifest_digest: string; audience: Audience; body_json: string; actor_user_id: number }>(env.DB.prepare(
+    `SELECT mf.manifest_uid, mf.line_asset_uid, mf.manifest_digest, mf.audience, mf.body_json, mf.actor_user_id
+       FROM work_graph_release_manifests mf
+      WHERE mf.tenant_id = ? AND mf.company_id = ? AND mf.actor_user_id <> ?
+      ORDER BY mf.created_at DESC, mf.manifest_uid
+      LIMIT ?`,
+  ).bind(scope.tenantId, scope.companyId, userId, REVIEW_LIMITS.scan));
+  const bodies = rows.map((r) => ({ r, body: JSON.parse(r.body_json) as ManifestBody }));
+  const revs = [...new Set(bodies.flatMap(({ body }) => body.components.filter((c) => RENDER_KINDS.includes(c.kind)).map((c) => c.revision)))];
+  if (!revs.length) return { renderPending: [], cost: { ...m.cost } };
+  const now = await readComponents(env, m, revs);
+  const mine = await m.all<{ manifest_uid: string; profile: string; decision: string }>(env.DB.prepare(
+    `SELECT d.manifest_uid, d.profile, d.decision FROM work_graph_release_decisions d
+      WHERE d.tenant_id = ? AND d.company_id = ? AND d.reviewer_user_id = ? AND d.purpose = 'render'
+        AND d.id = (SELECT MAX(x.id) FROM work_graph_release_decisions x
+                     WHERE x.manifest_uid = d.manifest_uid AND x.purpose = 'render' AND x.profile = d.profile
+                       AND x.reviewer_user_id = d.reviewer_user_id)`,
+  ).bind(scope.tenantId, scope.companyId, userId));
+  const decided = new Set(mine.filter((d) => d.decision !== 'withdraw').map((d) => `${d.manifest_uid} ${d.profile}`));
+  const renderPending: RenderAskItem[] = [];
+  for (const { r, body } of bodies) {
+    if (renderPending.length >= limit) break;
+    const pieces: RenderAskPiece[] = body.components
+      .filter((c) => RENDER_KINDS.includes(c.kind) && now.get(c.revision)?.head_revision_uid === c.revision && now.get(c.revision)?.tombstoned_at === null)
+      .map((c) => ({ asset: c.asset, revision: c.revision, kind: c.kind, role: c.role, profiles: [...c.profiles] }));
+    const wanted = new Set(pieces.flatMap((p) => p.profiles));
+    const profiles = can.filter((p) => wanted.has(p) && !decided.has(`${r.manifest_uid} ${p}`));
+    if (!profiles.length) continue;
+    if ((await takedownsCovering(env, m, scope.tenantId, scope.companyId, r.manifest_uid)).length) continue;
+    const authorities: RenderAskItem['authorities'] = {};
+    for (const p of profiles) authorities[p] = POLICY_PROFILES[p].authorities.filter((a) => held.includes(a));
+    renderPending.push({
+      manifestUid: r.manifest_uid, lineAssetUid: r.line_asset_uid, digest: r.manifest_digest, audience: r.audience,
+      authorUserId: Number(r.actor_user_id), pieces: pieces.filter((p) => p.profiles.some((x) => profiles.includes(x))), profiles, authorities,
+    });
+  }
+  return { renderPending, cost: { ...m.cost } };
+}
+
 /**
  * Part 11 (D5585-p11): the names a reviewer may see beside the pending list's authors — only people linked to the
  * reviewer's company, never an email (#3841); anyone else is null. One statement, none for an empty list.
  */
-export async function pendingPeople(env: Pick<Env, 'DB'>, scope: Scope, items: readonly PendingItem[]) {
+export async function pendingPeople(env: Pick<Env, 'DB'>, scope: Scope, items: readonly { authorUserId: number }[]) {
   const m = new Meter(env);
   return { people: await releasePeople(env, m, items.map((i) => i.authorUserId), { linkedTo: scope.companyId }), cost: m.cost };
 }

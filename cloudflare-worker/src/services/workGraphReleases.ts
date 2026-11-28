@@ -650,7 +650,8 @@ export function renderGapsFrom(components: readonly { asset: string; revision: s
     return a && a.gap ? [{ ...a, gap: a.gap, asset: c.asset, revision: c.revision, role: c.role }] : [];
   });
 }
-const RENDER_KINDS: readonly string[] = ['video', 'image', 'brand'];
+/** The asset kinds a render builds or rebuilds (part 12); part 17's render-approval asks read it too. */
+export const RENDER_KINDS: readonly string[] = ['video', 'image', 'brand'];
 async function renderGapsOf(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, body: ManifestBody): Promise<RenderGap[]> {
   if (!body.components.some((c) => RENDER_KINDS.includes(c.kind))) return [];
   return renderGapsFrom(body.components, await readComponents(env, m, body.components.map((c) => c.revision)), ctx);
