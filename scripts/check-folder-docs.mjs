@@ -203,6 +203,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/distribution',  'Grow Distribution tabs (D4484): the shell, Channels (D4486), campaign plans (D4487), Ask drafts (D4488), Ads (D4490) and Inbox (D4494)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
+  ['frontend/src/pages/cycles/reporting',     'Grow\'s Reporting desk, Duties and one report (D1060), its readiness card (D4866) and report questions (D6225)'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
   ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
