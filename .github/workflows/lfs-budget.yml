@@ -18,6 +18,7 @@ jobs:
   budget:
     name: Check LFS bandwidth vs 250 GB plan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Compute projected usage and alert if over threshold
         env:

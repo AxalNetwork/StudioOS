@@ -283,6 +283,13 @@ role bypass it, so an admin's plain Merge skips the queue and its checks: use
    locally and either fix the leak or add it to the allowlist in
    `.gitleaks.toml`.
 
+## Job limits (#9055)
+
+Every job that runs steps declares `timeout-minutes` (a reusable-workflow call
+takes the called jobs' limits), and every workflow declares top-level
+`permissions:` (`{}` when its jobs grant their own); `frontend/test/workflow_job_limits.test.mjs`
+fails on a job or a file that does not.
+
 ## Action version pinning policy
 
 Every action is pinned to a **full commit SHA with a trailing `# vN`
