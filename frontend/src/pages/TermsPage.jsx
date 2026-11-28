@@ -5,12 +5,13 @@ import LegalDocument from './site/LegalDocument';
 /**
  * `/terms` — the Terms of Service, in the owner's canvas legal layout (D680).
  *
- * The text is the page's own, as it read before D680 (option A on #1554): the
- * twenty numbered sections and the closing acknowledgment, their headings in
+ * D8831 publishes owner-approved factual corrections; the regulatory rows remain unchanged.
+ * The layout carries the page's own text, as it read before D680 (option A on #1554): the
+ * numbered sections and the closing acknowledgment, their headings in
  * sentence case, and the effective date as "Last updated". The canvas's Terms
  * of Use wait on the owner and counsel; see LegalDocument.
  */
-export const TERMS_UPDATED = 'July 8, 2026';
+export const TERMS_UPDATED = 'November 27, 2026';
 export const TERMS_EMAIL = 'legal@axal.vc';
 
 const INTRO = (
@@ -194,7 +195,7 @@ const SECTIONS = [
       <>
         <ul>
           <li><strong>Subscription Tiers:</strong> Access to premium features may require payment of subscription fees, performance fees, or transaction-based fees depending on your tier (Growth, Professional, Institutional, or custom arrangements).</li>
-          <li><strong>Billing:</strong> Fees are billed in advance and are non-refundable except as required by law. Your subscription automatically renews unless cancelled in writing before the renewal date.</li>
+          <li><strong>Billing:</strong> Fees are shown before you pay. A paid subscription renews automatically at the end of each billing period, monthly or yearly, until cancelled. You can cancel at any time from Billing in your account; cancellation takes effect at the end of the current paid period, and paid features remain available until then. Cancelling does not by itself refund the current period. Refunds are given where the law requires them or where the price page or checkout says so. Purchased AI tokens are a separate balance from a plan's monthly AI allowance.</li>
           <li><strong>Late Payment:</strong> If you fail to pay fees when due, Axal VC Management LLC may suspend your access and pursue collection remedies, including interest and attorney fees.</li>
           <li><strong>Fund Investor Fees:</strong> If you are an LP in Axal VC Spin-Out Lab Fund I LP, you are subject to the Fund's management fees, carried interest, and expenses as defined in the Fund Agreement. Such fees are separate from and in addition to any Platform subscription fees.</li>
         </ul>
@@ -314,7 +315,7 @@ const SECTIONS = [
           Email: legal@axal.vc<br />
           Website: <code>axal.vc</code>
         </p>
-        <p>All notices must be in writing and shall be deemed received upon email delivery or fifteen (15) days after mailing via registered mail.</p>
+        <p>Notices under these Terms are given in writing by email to legal@axal.vc and take effect on delivery.</p>
       </>
     ),
   },
@@ -332,6 +333,11 @@ const SECTIONS = [
         </ul>
       </>
     ),
+  },
+  {
+    n: '21',
+    h: 'Company formation through partners',
+    body: <p>Where the Platform offers company formation in a country, the registration is filed by a named formation partner licensed or permitted to do that work there, not by Axal VC Management LLC, which arranges the service as intermediary. The partner may carry out its own identity and eligibility checks before filing. Times shown are targets, not guarantees; registration depends on the partner, the registry and the information provided. The partner's own terms may apply to its services.</p>,
   },
   {
     n: null,

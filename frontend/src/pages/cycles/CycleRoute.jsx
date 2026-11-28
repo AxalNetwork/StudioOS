@@ -743,6 +743,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
       <FormLightbox key={`add-${projectId}-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} {...narrativeAccess} cycle={cycle} slug={slug} search={location.search}
+        // D8729 (#8729): Studio's task link names its venture in history state; it is drawn only for the venture in the address.
+        venture={location.state?.under && location.state?.ventureId != null && String(location.state.ventureId) === String(projectId) ? location.state.venture : null}
         renderAssistant={uofAssistant}
         fill={fillFor(formOpen)}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.

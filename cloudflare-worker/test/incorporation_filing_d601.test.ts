@@ -35,6 +35,10 @@ const MIG411 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrat
 const MIG597 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/597_company_archive_and_events.sql'), 'utf8');
 const MIG685 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/685_company_legal_record_and_slugs.sql'), 'utf8');
 const MIG749 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/749_company_registered_agent_and_mailing.sql'), 'utf8');
+// D6691 (#6691): the formation catalogue (its tables and the version 1 seed), so the order reads and the filing run with
+// the catalogue present, as in production.
+const CATALOGUE = ['202611151923_6689_formation_catalogue.sql', '202611161600_6690_formation_catalogue_seed_v1.sql']
+  .map((f) => readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations', f), 'utf8'));
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
   assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
@@ -48,6 +52,7 @@ function fixture() {
   db.exec(MIG597);
   db.exec(MIG685);
   db.exec(MIG749);
+  for (const sql of CATALOGUE) db.exec(sql);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Hq Admin', 'hq@axal.example', null);
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

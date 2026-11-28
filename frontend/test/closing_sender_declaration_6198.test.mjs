@@ -19,7 +19,8 @@ test('declarationOf: the newest active declaration, in the line\'s currency; a w
 
 test('the room asks for no account or card number and sends through the investor route', () => {
   assert.doesNotMatch(ROOM_WAITS.sentWord, /No route records it/);
-  const src = readFileSync(new URL('../src/pages/closing/RecordRoom.jsx', import.meta.url), 'utf8');
+  // D8926: the investor's room, and with it this form, moved to InvestorRoom.jsx.
+  const src = readFileSync(new URL('../src/pages/closing/InvestorRoom.jsx', import.meta.url), 'utf8');
   assert.match(src, /closingsApi\.declareSent\(closing\.uid, row\.uid, \{ sent_on: form\.sentOn, amount_cents: amount\.minor/);
   assert.match(src, /Leave out account and card numbers\./);
   assert.doesNotMatch(src, /account_number: form|iban/i, 'no bank detail field');

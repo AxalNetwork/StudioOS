@@ -11,6 +11,7 @@ import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
 import OfferReadiness from './OfferReadiness';
+import { FromStudioBack } from '../../pages/partner/FromStudioBack';
 import { api } from '../../lib/api';
 import { rowRequests } from '../../lib/serviceMeasures.js';
 
@@ -552,6 +553,8 @@ export default function PartnerBucketRoutes() {
         />
       )}
     >
+      {/* D8733 (#8733): a zone opened from the Studio firm feed (`?from=studio`) says so and links back to it. */}
+      {!isRoot && <FromStudioBack />}
       {body}
     </WorkspaceShell>
   );

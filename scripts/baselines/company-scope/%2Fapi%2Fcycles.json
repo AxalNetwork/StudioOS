@@ -29,6 +29,15 @@
   "GET /api/cycles/raise/evidence/preview": {
     "kind": "filter"
   },
+  "GET /api/cycles/raise/evidence/search-console/preview": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/search-console/recheck": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/search-console/selections": {
+    "kind": "filter"
+  },
   "GET /api/cycles/raise/evidence/share-links": {
     "kind": "filter"
   },
@@ -114,6 +123,15 @@
     "kind": "target"
   },
   "POST /api/cycles/raise/evidence/refresh": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/search-console/selections": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/search-console/selections/:uid/review": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/search-console/selections/:uid/withdraw": {
     "kind": "target"
   },
   "POST /api/cycles/raise/evidence/share-links": {

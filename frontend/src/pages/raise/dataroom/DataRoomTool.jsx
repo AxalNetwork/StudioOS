@@ -162,10 +162,10 @@ function RoomState({ read, onRetry, testId, children }) {
   return children;
 }
 
-function FilesTab({ read, retry, search, projectId }) {
+function FilesTab({ read, retry, search, projectId, phone }) {
   return (
     <RoomState read={read} onRetry={retry} testId="dataroom-files">
-      <DataRoomFiles room={read.room} projectUid={read.uid} projectId={projectId} reload={retry} search={tabSearch(search)} />
+      <DataRoomFiles room={read.room} projectUid={read.uid} projectId={projectId} reload={retry} search={tabSearch(search)} phone={phone} />
     </RoomState>
   );
 }
@@ -231,7 +231,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   // D1464 (#4021, RR11): the Worker answers an admin a summary, never the room; the admin meets
   // the reason gate, once per open, on every tab, and reads the room read only after it.
   else if (read.status === 'ready' && read.room?.mode === 'summary') body = <DataRoomSupport key={read.uid} projectUid={read.uid} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
-  else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} />;
+  else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} phone={phone} />;
   else if (tab === 'access') body = <AccessTab read={read} retry={retry} phone={phone} />;
   else if (tab === 'requests') body = <RequestsTab read={read} retry={retry} />;
   else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} phone={phone} />;

@@ -44,7 +44,7 @@ import { SECTORS, previousPeriodKey, recomputeIndexes } from '../services/market
 import { liveIndexSql, liveRowSql, retrievedAtSql, NO_LIVE_SOURCE_REASON } from '../services/market_intel/liveRows';
 import { periodKey, scoreWindow, storedWindow, WINDOW_NOT_RECORDED } from '../services/market_intel/scoring';
 import { listCountries, loadOverrides, mapFundFocus, mapFundHq, type Mapping } from '../services/researchTaxonomy';
-import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
+import { EURO_SIZE_SQL, SERVED_FUNDS } from '../services/researchFundDirectory';
 
 const researchOverview = new Hono<{ Bindings: Env }>();
 
@@ -78,9 +78,9 @@ function total(n: number | null | undefined, asOf: string | null | undefined, so
 }
 
 /**
- * Fund size bands, on `fund_size_cents` in euro cents. Only the rows whose
- * currency is known are banded — the EuroTech list (`EUR_SOURCE`, D535); the
- * other list records no size in a known currency, and sizes in different
+ * Fund size bands, on `fund_size_cents` in euro cents. Only the rows that
+ * record their size in euros are banded — chosen by the row's own currency
+ * (`EURO_SIZE_SQL`, D7744), never by its list's name; sizes in different
  * currencies are never banded or summed together.
  */
 export const SIZE_BANDS: Array<{ band: string; min: number; max: number | null }> = [
@@ -151,14 +151,14 @@ export interface FundAggregates {
   lists: Array<{ name: string; funds: number; as_of: string | null }>;
   hq: RawCount[]; focus: RawCount[];
   vintages: Array<{ year: number; funds: number }>;
-  /** Funds per SIZE_BANDS index, euro list only; a band with no fund is absent. */
+  /** Funds per SIZE_BANDS index, euro-sized rows only; a band with no fund is absent. */
   bands: Map<number, number>;
 }
 
 /**
  * Every fund aggregate the overview shows, in one statement over the served
- * funds, deduped once. The euro filter (`EUR_SOURCE`, bound) is applied once,
- * as `eur_cents`. The funds missing an HQ, a focus, a size or a vintage are
+ * funds, deduped once. The euro filter (`EURO_SIZE_SQL`, the row's own
+ * currency, D7744) is applied once, as `eur_cents`. The funds missing an HQ, a focus, a size or a vintage are
  * what the grouped rows leave out: those rows count non-blank values only.
  */
 export async function readFundAggregates(env: Env): Promise<FundAggregates> {
@@ -167,7 +167,7 @@ export async function readFundAggregates(env: Env): Promise<FundAggregates> {
   const rows = (await env.DB.prepare(
     `WITH sf AS MATERIALIZED (
        SELECT source_name, hq, sector_focus, fund_year, as_of,
-              CASE WHEN source_name = ? AND fund_size_cents > 0 THEN fund_size_cents END AS eur_cents
+              CASE WHEN fund_size_cents > 0 THEN ${EURO_SIZE_SQL} END AS eur_cents
          FROM ${SERVED_FUNDS} AS f)
      SELECT k, rk, v, n, as_of FROM (
        SELECT 'all' AS k, 0 AS rk, NULL AS v, COUNT(*) AS n, MAX(as_of) AS as_of FROM sf
@@ -183,7 +183,7 @@ export async function readFundAggregates(env: Env): Promise<FundAggregates> {
        UNION ALL
        SELECT 'band', b, b, COUNT(*), NULL FROM (SELECT ${bandSql} AS b FROM sf WHERE eur_cents IS NOT NULL) GROUP BY b
      ) ORDER BY k, rk`
-  ).bind(EUR_SOURCE).all<DirRow>()).results || [];
+  ).all<DirRow>()).results || [];
   const of = (k: string) => rows.filter((r) => r.k === k);
   const all = of('all')[0];
   return {
@@ -519,7 +519,7 @@ async function readMoney(env: Env, top: number, fundsRead: Promise<FundAggregate
     const marketName = new Map((markets.results || []).map((m) => [m.slug, m.name] as const));
     const hq = crosswalkCounts(funds.hq, (v) => mapFundHq(v, overrides), top);
     const focus = crosswalkCounts(funds.focus, (v) => mapFundFocus(v, overrides), top);
-    // Only sizes whose currency is known are banded: the euro list (EUR_SOURCE).
+    // Only sizes recorded in euros are banded (the row's own currency, D7744).
     const sizeBands = SIZE_BANDS
       .map((b, i) => ({ band: b.band, funds: funds.bands.get(i) ?? 0 }))
       .filter((b) => b.funds > 0);
@@ -539,7 +539,7 @@ async function readMoney(env: Env, top: number, fundsRead: Promise<FundAggregate
       other_focus: { markets: focus.other.targets, funds: focus.other.funds },
       focus_unmapped: focus.unmapped,
       size_currency: 'EUR',
-      size_note: 'Sizes in euros, from the one list whose currency is known (the EuroTech list); other lists record no size in a known currency and count as missing. Reported fund sizes only; no NAV, IRR, TVPI or performance is inferred.',
+      size_note: 'Sizes in euros, from the funds whose list records their size in euros; a size in another currency, or with no recorded currency, is not converted and counts as missing. Reported fund sizes only; no NAV, IRR, TVPI or performance is inferred.',
       size_bands: sizeBands,
       vintages: years,
       vintage_range: years.length ? { from: years[0].year, to: years[years.length - 1].year } : null,

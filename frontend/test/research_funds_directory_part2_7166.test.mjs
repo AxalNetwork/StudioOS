@@ -42,7 +42,7 @@ const row = (o) => ({
 const OPP = row({ uid: 'opp', name: 'Manager A', fund_number: 'Opp', fund_size_cents: 75 * M, size_currency: 'EUR' });
 const NOSIZE = row({ uid: 'nosize', name: 'Manager B', fund_number: 'I', size_reason: 'Not recorded' });
 const DATA = {
-  items: [OPP, NOSIZE], total: 2, limit: 25, offset: 0, sort: 'name', size_currency: 'EUR',
+  items: [OPP, NOSIZE], total: 2, limit: 25, offset: 0, sort: 'name', size_currency: 'EUR', size_currencies: ['EUR', 'USD'],
   coverage: { total: 1966, as_of: '2026-11-18', fields: { size_eur: 1000, size_usd: 700, hq: 1881, website: 1000, sector_focus: 1018, fund_year: 1640, notable_lps: 412 } },
   sources: [{ name: EUR, rows: 1076, size_currency: 'EUR' }],
   facets: {

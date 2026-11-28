@@ -44,6 +44,7 @@ async function mount() {
     async type(id, value) { await act(async () => { pr(need(id)).onChange({ target: { value } }); }); await settle(); },
     async press(re) { const b = buttonText(re); if (!b) throw new Error(`No button ${re}`); await act(async () => { pr(b).onClick?.(); }); await settle(); },
     async click(id) { await act(async () => { pr(need(id)).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async tick(id) { await act(async () => { pr(need(id)).onChange({ target: { checked: true } }); }); await settle(); },
     async unmount() { await act(async () => root.unmount()); restore?.(); },
   };
 }
@@ -97,6 +98,7 @@ test('Change amount opens on the live commitment and saving without touching the
     assert.equal(m.value('commit-amount'), '60000', 'the current amount, not the deal minimum');
     assert.equal(m.value('commit-notes'), 'Subject to IC on Thursday');
     await m.type('commit-amount', '75000');
+    await m.tick('commit-ack'); // D5914 (DE14): the confirmation is required
     await m.press(/Save the change/);
     assert.deepEqual(sent, [[7, { amount: 75000, notes: 'Subject to IC on Thursday', route_preference: null }]], 'the note is sent back unchanged (D6195: and no preference stays none)');
     assert.deepEqual(done, [undefined]);
@@ -110,10 +112,11 @@ test('A new commitment still starts at the minimum with no note', async () => {
   const m = await mount();
   try {
     await m.render(h(CommitModal, { deal: DEAL, user: INVESTOR, onClose() {}, onDone() {} }));
-    assert.equal(m.text().includes('Commit capital'), true);
+    assert.equal(m.text().includes('Commit to Venture'), true); // D5914: the DE14 title
     assert.equal(m.value('commit-amount'), 25000);
     assert.equal(m.value('commit-notes'), '');
-    await m.press(/Confirm Commitment/);
+    await m.tick('commit-ack');
+    await m.press(/Commit \$25,000/);
     assert.deepEqual(sent, [{ amount: 25000, notes: null, route_preference: null }], 'D6195: no preference is sent as none, never Direct');
   } finally { await m.unmount(); api.createCommitment = saved; }
 });
@@ -125,6 +128,7 @@ test('A refusal stays in the dialog, in words', async () => {
   const m = await mount();
   try {
     await m.render(h(CommitModal, { deal: DEAL, user: INVESTOR, current: PENDING, onClose() {}, onDone: (o) => done.push(o) }));
+    await m.tick('commit-ack');
     await m.press(/Save the change/);
     assert.match(m.text(), /Finish identity verification \(KYC\) before you commit\. Nothing was recorded\./);
     assert.equal(m.text().includes('KYC required'), false, 'not the raw code');

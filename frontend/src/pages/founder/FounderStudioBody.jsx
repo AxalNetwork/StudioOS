@@ -18,60 +18,106 @@
  *
  * D4619 (#4619): a `project_id` the member has no access to draws
  * `ProjectUnavailable` above the zones (which are Unreadable, with the same
- * reason), and a link to Studio without the ID. No other venture is shown in
- * its place.
+ * reason). No other venture is shown in its place.
+ *
+ * D8729 (#8729) — THE VENTURE FIRST, on both widths. The page opens with the
+ * venture header, whose heading names the active venture (`StudioVenture.jsx`),
+ * then the Next card with one primary task, then Eadwyn, then the strip, the
+ * profile and the modules. The phone draws Eadwyn as a collapsed row under the
+ * Next card (owner Q3 A); the chat stays mounted while collapsed, so its
+ * thread and availability read are kept. A first venture, an unavailable
+ * venture, two ventures with none selected and a failed projects read each
+ * draw their own card in the Next card's place. The unavailable notice offers
+ * the member's own ventures. Tile Open links carry `?project_id=`.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { Unrecorded } from '../../ui';
 import { LOADING, UNREADABLE, READY, headerOf, summaryOf, profileOf, isUnavailableProject } from './founderStudioModel';
+import { nextStepsOf, studioTaskLink, ventureHeadOf, waitingQuestions } from './founderNextModel';
+import { EadwynRow, FirstVentureCard, NextCard, StudioTaskLink, VentureChoices, VentureChooser, VentureHeader, VenturesUnreadable, useReturnFocus } from './StudioVenture';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
+import { cyclesPlaced } from '../studio/studioLayoutModel';
 import { founderNoStoreTiles, founderTiles } from '../studio/tiles/founderTiles';
 import '../studio/studioModules.css';
+
+export const NO_ADVISOR_PHONE = 'The guided founder interview is not available in this environment.';
+const CHAT_ID = 'studio-chat';
+
+/** A tile's own next step (SFD07): opened in the venture with the way back kept, like the Next card's. */
+function TileTaskLink({ next, href, ventureId, venture, slugKey }) {
+  const link = studioTaskLink(href, ventureId);
+  if (!link) return null;
+  return (
+    <StudioTaskLink to={link.to} id={`studio-tile-next-${slugKey}`} ventureId={ventureId} venture={venture}
+      className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">
+      {next.text} ›
+    </StudioTaskLink>
+  );
+}
 
 /** The founder's Studio over a set of reads and a layout. Exported so each state renders in a test. */
 export default function FounderStudioBody({
   user, reads, onRetry, studio, cycles = {}, onRetryCycle, search = '', advisorAvailable = null, children = null, profileCard = null, phone = false,
+  level = 'h1', eadwynOpen = false,
 }) {
   const header = useMemo(() => headerOf({ user, project: reads.project, lab: reads.lab }), [user, reads.project, reads.lab]);
   const summary = summaryOf(reads);
   const profile = profileOf(reads);
-  const tiles = founderTiles({ reads, cycles, onRetry, onRetryCycle, search });
+  const head = ventureHeadOf({ project: reads.project, ventures: reads.ventures });
+  const ventureId = head.kind === 'venture' ? reads.project.id : null;
+  const ventures = Array.isArray(reads.ventures) ? reads.ventures : null;
+  const nextLink = ventureId == null ? null
+    : (key) => (next, href) => <TileTaskLink next={next} href={href} ventureId={ventureId} venture={head.title} slugKey={key} />;
+  const tiles = founderTiles({ reads, cycles, onRetry, onRetryCycle, search, nextLink });
+  const next = head.kind === 'venture' ? nextStepsOf({ shown: studio.shown, cycles, reads, ventureId, layoutRead: studio.layoutRead }) : null;
   const dim = studio.editing ? 'sm-dim' : '';
+  const [open, setOpen] = useState(false);
+  const chatShown = !phone || open || eadwynOpen;
+  const headingRef = useRef(null);
+  const lastVenture = useRef(undefined);
+  useReturnFocus();
+  // SFD14: a venture switch moves focus to the heading, which names the new venture.
+  useEffect(() => {
+    if (ventureId == null) return;
+    if (lastVenture.current !== undefined && lastVenture.current !== ventureId) headingRef.current?.focus?.();
+    lastVenture.current = ventureId;
+  }, [ventureId]);
+  const openEadwyn = () => {
+    setOpen(true);
+    const el = typeof document === 'undefined' ? null : document.getElementById(CHAT_ID);
+    el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
+  const retryCycles = () => { for (const c of cyclesPlaced(studio.shown)) if (cycles[c] && cycles[c].failed) onRetryCycle?.(c); };
+  const addModules = studio.canCustomise ? () => { if (!studio.editing) studio.customise(); studio.setMapOpen?.(true); } : null;
+  const waiting = waitingQuestions(reads);
+  const eadwynLine = ['Today', head.kind === 'venture' ? head.title : head.kind === 'first' ? 'no venture yet' : null,
+    waiting ? `${waiting} ${waiting === 1 ? 'question' : 'questions'} waiting` : null].filter(Boolean).join(' · ');
 
   return (
     <section className={`fs-root sm-tokens ${phone ? 'px-[22px] pt-4' : ''}`} data-testid="founder-studio-home">
-      {!phone && (
-        <header className="flex flex-wrap items-end justify-between gap-4 pb-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="text-[24px] font-extrabold tracking-tight" data-testid="text-founder-studio-title">Studio</h2>
-              {header.phase && <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" data-testid="badge-founder-studio-phase">{header.phase}</span>}
-              {header.phaseState === UNREADABLE && <span className="text-[11px] text-axal-muted"><Unrecorded reason="The Lab state could not be read.">Phase unreadable</Unrecorded></span>}
-            </div>
-            <p className="mt-1.5 max-w-[640px] text-[13.5px] text-axal-muted" data-testid="text-founder-studio-context">
-              {header.company || (header.companyState === LOADING ? '…' : isUnavailableProject(reads.project) ? 'Venture not available' : 'No company record yet')}
-              {' · '}{header.founderLine}: everything you have built across the platform, what it unlocked, and what to do next.
-            </p>
-          </div>
-          <CustomiseButton studio={studio} />
-        </header>
-      )}
+      <VentureHeader head={head} header={header} ventures={ventures} currentId={ventureId} phone={phone} level={level} headingRef={headingRef}
+        customise={!phone && head.kind !== 'unavailable' ? <CustomiseButton studio={studio} /> : null} />
 
-      {!phone && (
-        <div className={`mb-4 ${dim}`} data-testid="section-founder-advisor">
-          {children}
-          {advisorAvailable === false && <AdvisorUnavailable />}
-        </div>
-      )}
+      {head.kind === 'venture' && <NextCard next={next} venture={head.title} ventureId={ventureId} phone={phone} onRetry={retryCycles} onOpenEadwyn={openEadwyn} onAddModules={addModules} dim={dim} />}
+      {head.kind === 'first' && <FirstVentureCard phone={phone} onOpenEadwyn={openEadwyn} dim={dim} />}
+      {head.kind === 'choose' && <VentureChooser ventures={ventures} dim={dim} />}
+      {head.kind === 'unreadable' && <VenturesUnreadable onRetry={onRetry} dim={dim} />}
+      {isUnavailableProject(reads.project) && <ProjectUnavailable ventures={ventures} />}
 
-      {isUnavailableProject(reads.project) && <ProjectUnavailable />}
+      {phone && <EadwynRow open={chatShown} onToggle={() => setOpen(!chatShown)} line={eadwynLine} controls={CHAT_ID} />}
+      <section id={CHAT_ID} hidden={!chatShown} aria-label="Eadwyn AI" className={`mb-4 ${dim}`} data-testid="section-founder-advisor">
+        {children}
+        {advisorAvailable === false && (phone
+          ? <p role="status" className="py-3 text-[13px] text-[#615c6e] dark:text-gray-400" data-testid="studio-phone-no-advisor">{NO_ADVISOR_PHONE}</p>
+          : <AdvisorUnavailable />)}
+      </section>
 
       <div className={`sm-fixed mb-4 ${dim}`} data-testid="founder-studio-strip">
         <StudioFixedLock />
-        <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6" data-testid="founder-studio-summary">
+        <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6" aria-label="Summary" data-testid="founder-studio-summary">
           {summary.map((t) => (
             <li key={t.k} className="rounded-xl border border-axal-hairline bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/40" data-testid={`founder-summary-${slug(t.k)}`}>
               <p className="text-[10.5px] font-extrabold uppercase tracking-wide text-axal-faint">{t.k}</p>
@@ -128,14 +174,25 @@ export default function FounderStudioBody({
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-/** D4619: the venture the link named is not one of this member's; nothing from another venture is drawn in its place. */
-export function ProjectUnavailable() {
+/**
+ * D4619: the venture the link named is not one of this member's; nothing from another venture is drawn in its place.
+ * D8729 (SFD10, SFD12F): the notice offers the member's own ventures by name; "Open your Studio" stays only when
+ * their list is empty or could not be read.
+ */
+export function ProjectUnavailable({ ventures = null }) {
+  const list = Array.isArray(ventures) ? ventures : [];
   return (
     <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="status-founder-project-unavailable">
       <p className="font-bold">This venture is not available to your account.</p>
-      <p className="mt-1">The link names a venture you cannot open, so no venture&apos;s records are shown here.{' '}
-        <Link to="/studio" className="font-semibold underline" data-testid="link-founder-project-unavailable-studio">Open your Studio</Link>
+      <p className="mt-1">The link names a venture you cannot open, so no venture&apos;s records are shown here.
+        {!list.length && <>{' '}<Link to="/studio" className="font-semibold underline" data-testid="link-founder-project-unavailable-studio">Open your Studio</Link></>}
       </p>
+      {list.length > 0 && (
+        <div className="mt-2">
+          <p className="mb-1.5 font-semibold">Open one of yours:</p>
+          <VentureChoices ventures={list} testId="founder-project-unavailable-ventures" />
+        </div>
+      )}
     </section>
   );
 }

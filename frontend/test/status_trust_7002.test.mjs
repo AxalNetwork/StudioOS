@@ -39,6 +39,9 @@ import { LAST_UPDATE_NOT_RECORDED, NO_INCIDENT_RECORDED, statusSummary, summaryL
 import {
   DATA_REQUESTS, REPORT_WAYS, SUBPROCESSORS_REQUEST, UNCHECKED_WHY, dataRequestHref, documentTable, legalDay, lineMark,
 } from '../src/pages/site/trustCenterModel.js';
+import { TERMS_UPDATED } from '../src/pages/TermsPage.jsx';
+import { PRIVACY_UPDATED } from '../src/pages/PrivacyPage.jsx';
+import { RISK_UPDATED } from '../src/pages/RiskDisclosuresPage.jsx';
 import { currentInterviewNotice } from '../src/pages/InterviewNoticePage.jsx';
 import StatusPage from '../src/pages/StatusPage.jsx';
 import TrustCenter from '../src/pages/site/TrustCenter.jsx';
@@ -92,6 +95,11 @@ async function mount(element, url, status = STATUS) {
     has: (id) => Boolean(byId(id)),
     linkIn: (id) => { const a = walk(byId(id) || { childNodes: [] }).find((n) => String(n.tagName).toUpperCase() === 'A'); return a ? props(a).href : null; },
     text: () => textOf(container),
+    documentRow: (href) => {
+      let n = walk(container).find(n => n.tagName === 'A' && props(n).href === href);
+      while (n && n.tagName !== 'TR') n = n.parentNode;
+      return n ? textOf(n) : null;
+    },
     async close() { await act(async () => root.unmount()); globalThis.fetch = previous.fetch; globalThis.matchMedia = previous.matchMedia; restore(); },
   };
 }
@@ -203,10 +211,16 @@ test('4: every legal row reads as a day word, and text that is not a date stays 
   assert.equal(legalDay('Smarch 3, 2026'), 'Smarch 3, 2026');
   assert.equal(legalDay(''), null);
   assert.equal(legalDay('2026-10-22'), '22 Oct 2026', 'an ISO day reads the same way');
+  assert.equal(legalDay('December 01, 2026'), '1 Dec 2026', 'a leading-zero day is normalized');
   const v = await mount(h(TrustCenter), '/trust/documents');
   try {
-    const t = v.text();
-    for (const d of ['8 Jul 2026', '29 Oct 2026', '31 Mar 2026']) assert.ok(t.includes(d), `the table shows ${d}`);
-    assert.ok(!/July 8, 2026|October 29, 2026|March 31, 2026/.test(t), 'no row keeps the long form');
+    for (const [href, date] of [['/terms', TERMS_UPDATED], ['/privacy', PRIVACY_UPDATED], ['/risk-disclosures', RISK_UPDATED]]) {
+      const [month, day, year] = date.replace(',', '').split(' ');
+      const short = `${Number(day)} ${month.slice(0, 3)} ${year}`;
+      const row = v.documentRow(href);
+      assert.ok(row, `the ${href} row exists`);
+      assert.ok(row.includes(short), `the ${href} row shows ${short}`);
+      assert.ok(!row.includes(date), `${href} does not keep the long form`);
+    }
   } finally { await v.close(); }
 });

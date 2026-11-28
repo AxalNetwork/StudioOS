@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { googleWorkspace } from '../../../lib/api/googleWorkspace';
@@ -11,8 +11,10 @@ import useSendCheck from './useSendCheck';
 import {
   EXPORT_TITLE, FORMATS, OPTIONS_WHERE, GOOGLE_CONNECT, GOOGLE_CONNECT_HREF, GOOGLE_CONNECT_LINK, GOOGLE_STATE_UNREADABLE, OPEN_LINK,
   chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
-  lastExportLine, needsConnect, optionsApply, whatExportDoes,
+  lastExportLine, needsConnect, optionsApply, presentHref, whatExportDoes,
 } from './presentExportModel';
+import { DEFAULT_PRESET, PRESETS, ackNeeded, ledgerSettings, parseReport, planOf, presetOf, reportLines } from './exportDisclosureModel';
+import { CopyPicker, ExportCompleted, ExportPreview, NotesAck } from './ExportDisclosure';
 
 /**
  * D901 (#2680) — the export dialog (PD17), opened from the current-deck card.
@@ -43,6 +45,17 @@ import {
  * disabled until that check is clean or its warnings are confirmed through
  * "Export anyway" — the same confirm the editor's own gate already offers,
  * not a second one.
+ *
+ * D8771 (#8771) — before a founder sends the file: the dialog opens on the
+ * Investor copy (no speaker notes, the Sources appendix; owner questions Q1
+ * and Q2, drawn as A), offers the Working copy and Custom, and previews the
+ * file from the version's own cards — its pages or slides and size, What
+ * leaves Axal VC, and what is editable (`ExportDisclosure.jsx`). An export
+ * that carries a card's notes asks for the acknowledgment every time (Q4, A).
+ * The finished export names the frozen version, format, copy and settings,
+ * the file's fingerprint (`X-Content-SHA256`) and what the writer made
+ * (`X-Deck-Export-Report`), with Download again while the dialog is open and
+ * the version in Present. A failure offers Try again with the same settings.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -66,8 +79,12 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
   const rows = versionRows(versions);
   const [format, setFormat] = useState('pdf');
   const [versionId, setVersionId] = useState(current?.id ?? rows[0]?.id ?? null);
-  const [notes, setNotes] = useState(true);
-  const [sources, setSources] = useState(true);
+  // D8771: the investor copy every time the dialog opens (Q2, drawn as A).
+  const [notes, setNotes] = useState(PRESETS[DEFAULT_PRESET].notes);
+  const [sources, setSources] = useState(PRESETS[DEFAULT_PRESET].sources);
+  const [ack, setAck] = useState(false);
+  const [file, setFile] = useState(null);
+  const notesRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
   const [failRef, setFailRef] = useState(null);
@@ -91,7 +108,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
     setContentFailed(null);
     Promise.resolve(api.deckGet(id)).then((r) => {
       const d = r?.deck || r;
-      if (live) setContentById((m) => (m[id] ? m : { ...m, [id]: { slides: Array.isArray(d?.slides) ? d.slides : [], theme: d?.theme ?? null } }));
+      if (live) setContentById((m) => (m[id] ? m : { ...m, [id]: { slides: Array.isArray(d?.slides) ? d.slides : [], theme: d?.theme ?? null, methodId: d?.method_id ?? null } }));
     }, (e) => {
       reportError('ExportDialog:content', e);
       if (live) setContentFailed(id);
@@ -123,9 +140,21 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
   const isGoogle = format === 'google_slides';
   const connectFirst = isGoogle && google.state === 'connect';
 
+  // D8771: the acknowledgment is for this combination only; any change asks again.
+  useEffect(() => { setAck(false); }, [notes, sources, format, version?.id]);
+  const copy = presetOf(notes, sources);
+  const pick = (k) => {
+    if (k === 'custom') { notesRef.current?.focus(); return; }
+    setNotes(PRESETS[k].notes);
+    setSources(PRESETS[k].sources);
+  };
+  const mustAck = optionsApply(format) && ackNeeded(notes, cards);
+
   const run = async () => {
     if (!version?.id || busy) return;
-    setBusy(true); setFailed(null); setFailRef(null); setDone(null); setCreated(null);
+    setBusy(true); setFailed(null); setFailRef(null); setDone(null); setCreated(null); setFile(null);
+    // D8771: the settings this export carries, as the completed panel says them.
+    const sent = { format, version, notes, sources };
     try {
       if (format === 'google_slides') {
         const res = await api.deckExportGoogleSlides(version.id, { notes, sources });
@@ -136,7 +165,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           if (body?.error === 'export_not_recorded_created') setCreated({ converted: body.converted, href: googleOpenHref(body.url), charts: null });
           return;
         }
-        setCreated({ converted: body?.converted, href: googleOpenHref(body?.url), charts: body?.charts });
+        setCreated({ converted: body?.converted, href: googleOpenHref(body?.url), charts: body?.charts, report: reportLines(body?.report), ...sent });
         readLedger();
         return;
       }
@@ -151,8 +180,17 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         setFailRef(exportDiagnostic(body));
         return;
       }
-      download(await r.blob(), exportFileName(version.title, version.version, format));
-      setDone(exportedLine(format, version));
+      const blob = await r.blob();
+      const name = exportFileName(version.title, version.version, format);
+      download(blob, name);
+      setFile({ blob, name });
+      const plan = cards ? planOf(format, cards, { notes, sources, theme: content?.theme, methodId: content?.methodId }) : null;
+      setDone({
+        ...sent, line: exportedLine(format, version),
+        hash: r.headers?.get?.('X-Content-SHA256') ?? null,
+        report: parseReport(r.headers?.get?.('X-Deck-Export-Report') ?? null),
+        count: plan ? plan.count : null, unit: plan ? plan.unit : null,
+      });
       readLedger();
     } catch (e) {
       reportError('ExportDialog:export', e);
@@ -175,7 +213,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading') || contentUnreadable || send.blocked} data-testid="pitch-export-run">
+          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading') || contentUnreadable || send.blocked || (mustAck && !ack)} data-testid="pitch-export-run">
             {busy ? 'Exporting…' : exportButton(format)}
           </button>
         </div>
@@ -187,6 +225,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <PreflightMeasure key={send.pf.running.done} card={send.pf.running.snapshot.slides[send.pf.running.done]} index={send.pf.running.done}
             theme={send.pf.running.snapshot.theme} kit={kit} onMeasured={send.pf.onMeasured} />
         ) : null}
+        <CopyPicker copy={copy} onPick={pick} />
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Format">
           {FORMATS.map((f) => {
             const on = f.id === format;
@@ -246,13 +285,15 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         ) : null}
         <div className="flex flex-col gap-2 text-[12.5px]">
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
-            <input type="checkbox" checked={notes} disabled={!apply} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
+            <input ref={notesRef} type="checkbox" checked={notes} disabled={!apply} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
           </label>
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
             <input type="checkbox" checked={sources} disabled={!apply} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
           </label>
           {apply && (notes || sources) ? <span className={MUTED} data-testid="pitch-export-where">{OPTIONS_WHERE[format]}</span> : null}
         </div>
+        <ExportPreview format={format} slides={content?.slides ?? null} cards={cards} notes={notes} sources={sources} theme={content?.theme ?? null} methodId={content?.methodId ?? null} />
+        {mustAck ? <NotesAck cards={cards} checked={ack} onChange={setAck} /> : null}
         {isGoogle && connectFirst ? (
           <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="pitch-export-google-connect">
             <span className={`text-[12.5px] ${INK}`}>{GOOGLE_CONNECT}</span>
@@ -264,12 +305,15 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last">
           {ledger.status === 'error' ? 'The export history could not be read.' : ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
         </span>
+        {ledger.status === 'ok' && ledger.rows[0] ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last-settings">{ledgerSettings(ledger.rows[0])}</span> : null}
         {failed ? (
           <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-export-failed">
             {failed}
             {failRef ? <span className="mt-1 block font-mono text-[11px] font-normal" data-testid="pitch-export-failed-ref">{failRef}</span> : null}
           </div>
         ) : null}
+        {/* D8771: the same version, format and settings, once more. */}
+        {failed ? <button type="button" className={`${GHOST} self-start`} onClick={run} disabled={busy || (mustAck && !ack)} data-testid="pitch-export-retry">Try again</button> : null}
         {created ? (
           <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-positive dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-export-google-created">
             <span>
@@ -277,10 +321,12 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
               {created.href ? <> · <a href={created.href} target="_blank" rel="noopener noreferrer" className="underline" data-testid="pitch-export-google-open">{OPEN_LINK}</a></> : null}
             </span>
             {chartsAsTextLine(created.charts) ? <span className="font-normal" data-testid="pitch-export-google-charts">{chartsAsTextLine(created.charts)}</span> : null}
+            {created.format ? <span className="font-normal" data-testid="pitch-export-google-settings">{ledgerSettings({ notes: created.notes, sources: created.sources })}</span> : null}
+            {created.report && created.report.length ? <span className="font-normal" data-testid="pitch-export-google-report">The writer made: {created.report.join(' · ')}.</span> : null}
           </div>
         ) : null}
         {done ? (
-          <div role="status" className="rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-positive dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-export-done">{done}</div>
+          <ExportCompleted done={done} onDownloadAgain={file ? () => download(file.blob, file.name) : null} presentTo={done.version?.id != null ? presentHref(done.version.project_id ?? null, done.version.id) : null} />
         ) : null}
       </div>
     </Lightbox>

@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
 import { accountPortfolioApi } from '../../lib/api/accountPortfolio.js';
 import { teamsApi } from '../../lib/api/teams.js';
+import { agentEngineApi } from '../../lib/api/agentEngine.js';
 import { reportError } from '../../lib/log';
 import { safeReadJSON } from '../../lib/storage';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
@@ -35,6 +36,8 @@ import HandoffTrail from './HandoffTrail.jsx';
 import AgentEvaluation from './AgentEvaluation.jsx';
 import SuggestAgentsSheet from './SuggestAgentsSheet.jsx';
 import MoveNotices from './MoveNotices.jsx';
+import { useEngineRead } from './EngineParts.jsx';
+import { engineState } from './agentChoiceModel.js';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
@@ -338,6 +341,8 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
   // The sidebar's bottom block draws the scope this page is about (TM1e–TM1g), once it is read.
   usePublishScope(state.status === 'ready' ? scope : null);
+  // D8769 (#8769, TMM07): the team's engine joins each roster row's "Can it run now".
+  const engineRead = useEngineRead(() => agentEngineApi.engine(kind, id), [kind, id], 'agent-engine:roster');
 
   if (state.status === 'refused') return <div className="p-6"><NotAMember name={null} /></div>;
   const reading = state.status === 'loading';
@@ -416,7 +421,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
             ) : null}
           </PeopleCard>
           <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} scope={scope} companyName={name}
-            canAdd={!!agentsBlock?.value?.can_manage && !planLocked} addOff={rolesOff} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
+            canAdd={!!agentsBlock?.value?.can_manage && !planLocked} addOff={rolesOff} planLocked={planLocked} engine={engineState(engineRead)} onAdd={() => setSheet({ kind: 'agent' })}
             onAssign={kind === 'company' && state.detail?.viewer?.can_edit ? row => navigate(`${pathname}?tab=tasks&agent=${encodeURIComponent(row.uid)}`) : null}
             onOpen={(row, action) => setSheet({ kind: 'profile', uid: row.uid, edit: action || null })} onRetry={loadAgents} />
           <TeamCoverageCard kind={kind} id={id} />

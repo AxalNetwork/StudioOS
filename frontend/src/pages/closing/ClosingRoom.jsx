@@ -25,6 +25,7 @@ import { BTN } from '../account/AccountCenter';
 import { NOT_YET, STEPS, WAITS, lineRows } from './closingModel';
 import { closingForDeal } from './deskModel';
 import RecordRoom, { NoAccess } from './RecordRoom';
+import { InvestorNotOpened } from './InvestorRoom';
 import { NO_ACCESS, canEnter } from './roomModel';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
@@ -192,6 +193,9 @@ export default function ClosingRoom({ dealId, role, deal = null }) {
   if (list.status === 'loading') return <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-loading" />;
   const entry = list.status === 'ok' ? closingForDeal(list.data?.closings, dealId) : null;
   if (entry) return <RecordRoom entry={entry} viewer={role} deal={deal} />;
+  // D8926 (#8926): before the studio opens a closing, and when the closing record could not be read, the
+  // investor meets the v2 canvas's DE38 and DE39: their own commitment, never another line or the round's lines.
+  if (role === 'investor') return <InvestorNotOpened dealId={dealId} deal={deal} failed={list.status === 'error'} onRetry={list.retry} />;
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {list.status === 'error'
