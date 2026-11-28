@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { OG_ROUTES, ogTagsFor, staticBodyFor } from '../frontend/src/lib/ogRegistry.js';
+import { ogTagsFor, prerenderedRoutes, staticBodyFor } from '../frontend/src/lib/ogRegistry.js';
 import { DOOR_LINKS } from '../frontend/src/lib/siteLinks.js';
 import { structuredDataFor, withStructuredData } from '../frontend/src/lib/structuredData.js';
 import { programOgRoutes } from './lib/programCatalog.mjs';
@@ -181,7 +181,8 @@ async function main() {
   // One render per path, the later entry winning: a check of a path listed twice would otherwise compare the
   // registry's render against the program's, which the write left on disk (#7121).
   // D6996 (#6996): each public Help Center guide's own page, after the registry's and the programs' routes.
-  const routes = [...new Map([...OG_ROUTES, ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => [r.path, r])).values()];
+  // D9193 (#9193): a registry entry with `prerender: false` (the bare /authors) has no page of its own and gets no file.
+  const routes = [...new Map([...prerenderedRoutes(), ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => [r.path, r])).values()];
   const shellFile = path.join(OUT_DIR, 'index.html');
   if (!fs.existsSync(shellFile)) {
     console.error(

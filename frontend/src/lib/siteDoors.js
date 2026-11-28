@@ -26,7 +26,15 @@
  *
  * `catalogue` names the `data/pricing.js` list a door's tiers come from
  * (`founder` → FOUNDER_TIERS, `investor` → INVESTOR_TIERS); a door without one
- * has no catalogue entry and shows no plans. `meta` is the door's key in
+ * has no catalogue entry and shows no plans.
+ *
+ * `accent` is the door's canvas colour and is for decoration only (dots, the
+ * highlighted plan's border). `accentText` (#9196) is the same hue darkened
+ * until it reaches 4.5:1 (WCAG AA) on white, on the door's `soft` tint and on
+ * the plans band, and with white text on it; every word the page colours,
+ * and every white label on a coloured pill or button, reads it
+ * (`--door-text` in `pages/site/doors.css`, pinned by
+ * `door_contrast_9196.test.mjs`). `meta` is the door's key in
  * `data/productPages.js`, which holds its title and description.
  */
 import { TOKEN_PACKS_PATH } from './aiTokens.js';
@@ -68,6 +76,7 @@ export const DOORS = {
     path: '/for-founders',
     meta: 'founders',
     accent: '#6d28d9',
+    accentText: '#6d28d9',
     soft: '#f4f0fe',
     catalogue: 'founder',
     label: 'For Founders',
@@ -214,6 +223,7 @@ export const DOORS = {
     path: '/for-investors',
     meta: 'investors',
     accent: '#059669',
+    accentText: '#047857',
     soft: '#e9f8f1',
     catalogue: 'investor',
     label: 'For Investors & LPs',
@@ -308,6 +318,7 @@ export const DOORS = {
     path: '/for-service-partners',
     meta: 'service-partners',
     accent: '#2563eb',
+    accentText: '#1d4ed8',
     soft: '#eaf1fd',
     catalogue: null,
     label: 'For Operating Partners',
@@ -399,6 +410,7 @@ export const DOORS = {
     path: '/for-advisors',
     meta: 'advisors',
     accent: '#d97706',
+    accentText: '#b45309',
     soft: '#fdf3e4',
     catalogue: null,
     label: 'For Advisors',

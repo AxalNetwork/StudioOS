@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { OG_ROUTES, SITE_URL, ogTagsFor } from '../src/lib/ogRegistry.js';
+import { SITE_URL, ogTagsFor, prerenderedRoutes } from '../src/lib/ogRegistry.js';
 import { SECTIONS, PUBLIC_HELP_ANCHORS } from '../src/pages/docs/sections/index.js';
 import { HELP_DESCRIPTION_MAX, HELP_TITLE_SUFFIX, guideDescription, publicHelpRoutes } from '../src/pages/docs/helpMeta.js';
 import { TABS } from '../src/pages/site/trustCenterModel.js';
@@ -40,7 +40,8 @@ function head(path) {
   };
 }
 
-const PRERENDERED = [...new Set([...OG_ROUTES, ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => r.path))];
+// D9193: an entry marked `prerender: false` (the bare /authors) has no file.
+const PRERENDERED = [...new Set([...prerenderedRoutes(), ...(await programOgRoutes()), ...helpOgRoutes()].map((r) => r.path))];
 const isNoindex = (h) => /noindex/i.test(h.robots || '');
 const INDEXABLE = PRERENDERED.filter((p) => !isNoindex(head(p)));
 const HOME = `${SITE_URL}/`;

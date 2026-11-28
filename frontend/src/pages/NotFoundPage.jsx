@@ -1,13 +1,40 @@
-import { useLayoutEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useLayoutEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Compass, ArrowLeft, Home } from 'lucide-react';
 import { setSuppressAuthRedirect } from '../lib/api';
+import { ogTagsFor } from '../lib/ogRegistry';
+import { applyPageMeta } from '../lib/seo';
+
+export const NOT_FOUND_TITLE = 'Page not found';
+const NOT_FOUND_DESCRIPTION = 'The page you’re looking for doesn’t exist or may have moved.';
+
+/**
+ * D9193 (#9193): the head an unknown URL carries while this page is shown. The SPA fallback answers every
+ * unmatched path with the home page's HTML, so without this a URL that matches nothing kept the home title,
+ * the home canonical and no robots directive (a soft 404). Sets a not-found title and `noindex`, takes the
+ * canonical link out of the head, and returns a function that puts all of it back. Pure of React, so a test
+ * can drive it against a fake document.
+ */
+export function applyNotFoundMeta(pathname) {
+  if (typeof document === 'undefined') return () => {};
+  const restoreMeta = applyPageMeta(
+    ogTagsFor(pathname, { title: NOT_FOUND_TITLE, description: NOT_FOUND_DESCRIPTION, robots: 'noindex' }),
+  );
+  // A not-found page names no canonical address: applyPageMeta pointed it at this URL, so take it out.
+  const canonical = document.head.querySelector('link[rel="canonical"]');
+  if (canonical) canonical.remove();
+  return () => {
+    if (canonical) document.head.appendChild(canonical);
+    restoreMeta();
+  };
+}
 
 // Task #11 — Catch-all 404. Rendered by the `path="*"` route at the end of the
 // main route table when no other route matches, so unknown URLs show a clear
 // "Not Found" page (with a way home) instead of a blank screen in the layout.
 export default function NotFoundPage() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   // Task #8 — show this page to logged-OUT visitors too. On any page load a
   // background fetch (SettingsProvider's /settings/appearance probe) 401s for
   // an anonymous visitor; the API layer would otherwise bounce them to /login
@@ -22,6 +49,8 @@ export default function NotFoundPage() {
     setSuppressAuthRedirect(true);
     return () => setSuppressAuthRedirect(false);
   }, []);
+  // D9193: a passive effect, like usePageMeta's, so the page being left restores its head before this one is set.
+  useEffect(() => applyNotFoundMeta(pathname), [pathname]);
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">

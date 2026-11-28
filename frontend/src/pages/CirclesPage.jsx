@@ -24,6 +24,7 @@ import {
 } from '../data/network';
 import { circlesPublic } from '../lib/api';
 import { reportError } from '../lib/log';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { CIRCLES_COPY } from '../lib/siteNetwork2';
 import './site/network2.css';
 
@@ -75,6 +76,9 @@ export function CircleCard({ c }) {
 export default function CirclesPage() {
   const [circles, setCircles] = useState([]);
   const [loading, setLoading] = useState(true);
+  // #9194: a failed read is its own state, never the empty list.
+  const [failed, setFailed] = useState(null);
+  const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [access, setAccess] = useState('');
@@ -82,21 +86,22 @@ export default function CirclesPage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true); setFailed(null);
     (async () => {
       try {
         const res = await circlesPublic.list();
         if (alive) setCircles(Array.isArray(res?.circles) ? res.circles : []);
       } catch (e) {
-        // Worker-only route: 404s in local dev (FastAPI doesn't implement it).
-        // Public marketing surface — degrade to the empty state, never a crash.
+        // Public marketing surface — say the read failed, never a crash, and
+        // never "No circles are published yet": that is a claim about the list.
         reportError('CirclesPage:load', e);
-        if (alive) setCircles([]);
+        if (alive) { setCircles([]); setFailed(pageReadFailure(e, { unreadable: 'The circles could not be read, which is not a claim that there are none.' })); }
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [attempt]);
 
   const regions = useMemo(() => {
     const set = new Set(circles.map((c) => c.region).filter(Boolean));
@@ -136,6 +141,11 @@ export default function CirclesPage() {
 
         {loading ? (
           <div style={{ marginTop: 34 }}><EmptyNote>Loading circles…</EmptyNote></div>
+        ) : failed ? (
+          <div style={{ marginTop: 34 }} role="alert">
+            <EmptyNote>{failed.message}</EmptyNote>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)} className="ax-btn ax-btn-sm ax-btn-quiet" style={{ marginTop: 12 }}>Try again</button>
+          </div>
         ) : circles.length === 0 ? (
           <div style={{ marginTop: 34 }}>
             <EmptyNote>No circles are published yet. They will appear here as soon as they launch.</EmptyNote>

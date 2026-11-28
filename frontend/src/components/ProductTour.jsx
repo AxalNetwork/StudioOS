@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { inertOutside, tabbable, tabTarget } from '../ui/lightboxFocus.js';
 import { usePhoneWidth } from '../ui/phone/usePhoneWidth.js';
 import { useEscapeClose } from './useEscapeClose.js';
+import useCookieChoiceSettled from '../hooks/useCookieChoiceSettled.js';
 import { STUDIO_ROLES, placeTip, resolveSteps, stepFrom, tourKey } from './productTourModel.js';
 
 /**
@@ -26,6 +27,10 @@ import { STUDIO_ROLES, placeTip, resolveSteps, stepFrom, tourKey } from './produ
  * focus goes back to what held it. The arrow keys move between steps. It is
  * placed again on every scroll and resize, and stays inside a phone's width.
  *
+ * #9201: it does not open until the cookie choice is settled (a choice stored
+ * and the banner or dialog closed, `useCookieChoiceSettled`), so its backdrop
+ * never covers or inerts the cookie banner on a first visit.
+ *
  * D323 dropped the "search" and "notifications" steps; D4623 dropped the
  * onboarding-checklist step with the panel it pointed at.
  */
@@ -40,6 +45,7 @@ const rectOf = (el) => { const r = el.getBoundingClientRect(); return { top: r.t
 
 export default function ProductTour({ enabled, onDone, role = 'founder' }) {
   const phone = usePhoneWidth();
+  const cookieChoiceSettled = useCookieChoiceSettled();
   const [stepId, setStepId] = useState(null);
   const [view, setView] = useState(null);
   const root = useRef(null);
@@ -52,7 +58,7 @@ export default function ProductTour({ enabled, onDone, role = 'founder' }) {
   const read = useCallback(() => resolveSteps(role, { phone, find: findAnchor, viewportWidth: viewport().width }), [role, phone]);
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || !cookieChoiceSettled) return undefined;
     let tries = 0;
     let timer;
     const tick = () => {
@@ -65,7 +71,7 @@ export default function ProductTour({ enabled, onDone, role = 'founder' }) {
     };
     timer = setTimeout(tick, OPEN_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [enabled, read, role]);
+  }, [enabled, cookieChoiceSettled, read, role]);
 
   // Lay the current step out: its anchor's box and the card beside it.
   const layout = useCallback((scroll) => {

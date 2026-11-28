@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { OG_ROUTES } from '../src/lib/ogRegistry.js';
+import { OG_ROUTES, prerenderedRoutes } from '../src/lib/ogRegistry.js';
 import { SOCIAL_LINKS } from '../src/lib/siteLinks.js';
 import {
   FORBIDDEN_LD_KEYS, articleLd, eventLd, isoDate, jsonLdScript, structuredDataFor, withStructuredData,
@@ -76,7 +76,7 @@ test('/about carries the Organization; a trust subsection its BreadcrumbList; ot
 
 test('no prerendered page carries a rating, review, price, employee count or founding date', () => {
   // Mutation checked: `foundingDate: '2020'` added to organizationLd → this fails on / and /about.
-  for (const r of OG_ROUTES) {
+  for (const r of prerenderedRoutes()) {
     for (const k of keysOf(ldBlocks(html(r.path)))) assert.ok(!FORBIDDEN_LD_KEYS.includes(k), `${r.path} carries ${k}`);
   }
   assert.doesNotMatch(html('/'), /aggregateRating|"review"|"offers"|numberOfEmployees|foundingDate|Testimonial/);

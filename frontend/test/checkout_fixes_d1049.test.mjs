@@ -174,7 +174,7 @@ test('D1430 mounted: Institutional offers Custom and Contact Axal VC even when t
   try {
     await view.open('institutional');
     assert.match(view.text(), /Custom/); assert.match(view.text(), /Contact Axal VC/);
-    assert.ok(view.hrefs().includes('/contact'));
+    assert.ok(view.hrefs().includes('/contact?topic=invest'), 'Contact Axal VC opens on Investing / LP (#9066)');
     assert.ok(!view.has('paywall-upgrade-institutional'));
     assert.ok(!view.has('paywall-price-investor:institutional'));
     assert.doesNotMatch(view.text(), /\$599|Upgrade to Institutional/);

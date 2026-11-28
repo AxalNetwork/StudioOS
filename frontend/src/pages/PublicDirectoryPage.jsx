@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import SitePage from '../components/site/SitePage';
 import NetworkSubNav from '../components/site/NetworkSubNav';
 import { FilterPills } from '../components/site/SiteBlocks';
@@ -80,11 +81,13 @@ export default function PublicDirectoryPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [type, setType] = useState('');
 
+  const lastParams = useRef({});
   const load = (params) => {
+    lastParams.current = params;
     setLoading(true); setError(null);
     api.publicListPartners(params)
       .then(setData)
-      .catch((e) => setError(e.message || 'Failed to load directory'))
+      .catch((e) => setError(pageReadFailure(e, { unreadable: 'The directory could not be read, which is not a claim that no one is listed.' })))
       .finally(() => setLoading(false));
   };
 
@@ -190,7 +193,12 @@ export default function PublicDirectoryPage() {
 
         <div className="ax-nw-panel ax-dir-list">
           {loading && <p className="ax-nw-empty">Loading directory…</p>}
-          {!loading && error && <p className="ax-nw-empty ax-dir-error" role="alert">{error}</p>}
+          {!loading && error && (
+            <div role="alert">
+              <p className="ax-nw-empty ax-dir-error">{error.message}</p>
+              <p className="ax-nw-empty"><button type="button" onClick={() => load(lastParams.current)} className="ax-btn ax-btn-sm ax-btn-quiet">Try again</button></p>
+            </div>
+          )}
           {!loading && !error && shown.length === 0 && (
             <p className="ax-nw-empty">
               {applied ? 'No partners match your filters yet.' : 'No one is listed in the directory yet.'}

@@ -7,10 +7,19 @@
  * buttons stay the site's violet, as in the canvas. Faces come from the
  * site's classes (`ax-display`, `ax-mono`, h1–h3 under `.ax-site`); nothing
  * here sets one. Breakpoints are the canvas's: 1060px and 640px.
+ *
+ * #9196: `--door-text` is the door's `accentText`, its hue darkened to 4.5:1
+ * on white, on `--door-soft` and on the plans band, and under white text.
+ * Every word coloured by the door, and every coloured fill that carries white
+ * words, reads `--door-text`; `--door-accent` is for decoration only (the
+ * dots, the highlighted plan's border). The site is light only
+ * (`useForcedLightTheme`), so dark mode draws the same colours.
+ * `door_contrast_9196.test.mjs` fails if a rule pairs words with
+ * `--door-accent`.
  */
-.ax-door { --door-accent: var(--ax-violet); --door-soft: #f4f0fe; }
+.ax-door { --door-accent: var(--ax-violet); --door-text: var(--ax-violet); --door-soft: #f4f0fe; }
 .ax-door-wrap { max-width: 1200px; margin: 0 auto; padding-left: 34px; padding-right: 34px; }
-.ax-door .ax-door-lbl { color: var(--door-accent); }
+.ax-door .ax-door-lbl { color: var(--door-text); }
 .ax-door h2.ax-door-lblh { font-family: inherit; margin: 0; }
 .ax-door ol, .ax-door ul { margin: 0; padding: 0; list-style: none; }
 
@@ -30,7 +39,7 @@
 .ax-door-hero-text { max-width: 680px; }
 .ax-door-badge {
   display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
-  text-transform: uppercase; color: #fff; background: var(--door-accent); padding: 7px 12px; border-radius: 999px;
+  text-transform: uppercase; color: #fff; background: var(--door-text); padding: 7px 12px; border-radius: 999px;
 }
 .ax-door-hero .ax-h1 {
   margin-top: 22px; font-size: 68px; line-height: .96; font-weight: 900; letter-spacing: -.045em;
@@ -54,7 +63,7 @@
   display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 12px; padding: 16px 0;
   border-bottom: 1px solid var(--ax-line-2); align-items: baseline;
 }
-.ax-door-fact-n { font-size: 13px; font-weight: 700; color: var(--door-accent); }
+.ax-door-fact-n { font-size: 13px; font-weight: 700; color: var(--door-text); }
 .ax-door-fact-t { font-size: 16px; font-weight: 700; line-height: 1.45; text-wrap: pretty; }
 
 /* How it works */
@@ -66,7 +75,7 @@
   border-bottom: 1px solid var(--ax-line-2);
 }
 .ax-door-chap-head { display: flex; flex-direction: column; gap: 10px; }
-.ax-door-chap-n { font-size: 60px; line-height: 1; font-weight: 900; letter-spacing: -.04em; color: var(--door-accent); }
+.ax-door-chap-n { font-size: 60px; line-height: 1; font-weight: 900; letter-spacing: -.04em; color: var(--door-text); }
 .ax-door-chap-t { font-size: 30px; line-height: 1.08; font-weight: 900; letter-spacing: -.035em; max-width: 720px; }
 .ax-door-chap-d { margin: 14px 0 0; font-size: 16.5px; line-height: 1.65; color: var(--ax-body); max-width: 680px; text-wrap: pretty; }
 .ax-door .ax-door-flow { display: flex; align-items: center; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
@@ -76,7 +85,7 @@
   font-size: 12.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
   border: 1px solid var(--ax-line-3); background: #fff; color: var(--ax-ink);
 }
-.ax-door-chip.is-last { background: var(--door-accent); border-color: var(--door-accent); color: #fff; }
+.ax-door-chip.is-last { background: var(--door-text); border-color: var(--door-text); color: #fff; }
 .ax-door .ax-door-list {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 22px; max-width: 720px;
 }
@@ -115,7 +124,7 @@
 .ax-door-status-row.is-soon { color: var(--ax-muted); }
 .ax-door-pill {
   flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
-  padding: 5px 10px; border-radius: 999px; background: var(--door-soft); color: var(--door-accent); border: 1px solid transparent;
+  padding: 5px 10px; border-radius: 999px; background: var(--door-soft); color: var(--door-text); border: 1px solid transparent;
 }
 .ax-door-pill.is-soon { background: #fff; color: var(--ax-body); border: 1px dashed #b8b3c9; }
 
@@ -134,10 +143,10 @@
 .ax-door-plan.is-hi { border-color: var(--door-accent); }
 .ax-door-plan-tag {
   position: absolute; top: -13px; left: 24px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
-  text-transform: uppercase; color: #fff; background: var(--door-accent); padding: 5px 11px; border-radius: 99px;
+  text-transform: uppercase; color: #fff; background: var(--door-text); padding: 5px 11px; border-radius: 99px;
 }
 .ax-door-plan-head { display: flex; flex-direction: column; gap: 5px; }
-.ax-door-plan-step { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--door-accent); }
+.ax-door-plan-step { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--door-text); }
 .ax-door-plan-name { font-size: 20px; font-weight: 900; letter-spacing: -.02em; }
 .ax-door-plan-desc { font-size: 14px; color: var(--ax-muted); line-height: 1.5; }
 .ax-door-plan-price { display: flex; align-items: baseline; gap: 8px; }
@@ -147,12 +156,12 @@
   display: flex; flex-direction: column; gap: 9px; flex: 1; padding-top: 14px; border-top: 1px solid var(--ax-line-2);
 }
 .ax-door-plan-feats li { display: flex; gap: 10px; align-items: baseline; font-size: 14.5px; line-height: 1.5; }
-.ax-door-tick { flex: none; font-weight: 800; color: var(--door-accent); }
+.ax-door-tick { flex: none; font-weight: 800; color: var(--door-text); }
 .ax-door-plan-cta {
   padding: 13px 18px; border-radius: 12px; font-size: 14.5px; background: #fff;
   color: var(--ax-ink) !important; border-color: var(--ax-line-3);
 }
-.ax-door-plan.is-hi .ax-door-plan-cta { background: var(--door-accent); border-color: var(--door-accent); color: #fff !important; }
+.ax-door-plan.is-hi .ax-door-plan-cta { background: var(--door-text); border-color: var(--door-text); color: #fff !important; }
 .ax-door-plan-note { margin: 20px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-muted); text-wrap: pretty; }
 
 /* Tokens: how AI use is paid, under the plans */
@@ -162,7 +171,7 @@
 }
 .ax-door .ax-door-tokens-t { margin: 10px 0 0; font-size: 26px; line-height: 1.15; font-weight: 900; letter-spacing: -.028em; text-wrap: balance; }
 .ax-door .ax-door-tokens-list { display: flex; flex-direction: column; gap: 10px; }
-.ax-door .ax-door-tokens-link { display: inline-block; margin-top: 14px; font-size: 14.5px; font-weight: 700; color: var(--door-accent); text-decoration: underline; text-underline-offset: 3px; }
+.ax-door .ax-door-tokens-link { display: inline-block; margin-top: 14px; font-size: 14.5px; font-weight: 700; color: var(--door-text); text-decoration: underline; text-underline-offset: 3px; }
 
 /* The aside */
 .ax-door-aside { padding-top: 16px; padding-bottom: 72px; }
@@ -187,7 +196,7 @@
   display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 8px 16px; padding: 26px 0;
   border-bottom: 1px solid var(--ax-line-2);
 }
-.ax-door-faq-n { font-size: 13px; font-weight: 700; color: var(--door-accent); padding-top: 5px; }
+.ax-door-faq-n { font-size: 13px; font-weight: 700; color: var(--door-text); padding-top: 5px; }
 .ax-door-faq-q { font-size: 21px; line-height: 1.2; font-weight: 800; letter-spacing: -.02em; }
 .ax-door-faq-a { margin: 10px 0 0; font-size: 16px; line-height: 1.65; color: var(--ax-body); max-width: 640px; text-wrap: pretty; }
 

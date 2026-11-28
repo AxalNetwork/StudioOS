@@ -27,11 +27,24 @@ export default function PublicNav() {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [netOpen, setNetOpen] = useState(false);
+  const menuTriggerRef = useRef(null);
   const netRef = useRef(null);
   const netTriggerRef = useRef(null);
 
   // A route change closes both menus.
   useEffect(() => { setMenuOpen(false); setNetOpen(false); }, [pathname]);
+
+  // D8839: Escape leaves the mobile menu and returns keyboard focus to its trigger.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuTriggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
 
   // The Network menu closes on Escape or a click outside it.
   useEffect(() => {
@@ -102,6 +115,7 @@ export default function PublicNav() {
           <button
             type="button"
             className="ax-burger"
+            ref={menuTriggerRef}
             onClick={() => setMenuOpen((v) => !v)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}

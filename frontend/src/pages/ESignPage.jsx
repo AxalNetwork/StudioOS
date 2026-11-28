@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { useAuth } from '../hooks/useAuthSync';
 import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-react';
 import DocumentBody from '../components/DocumentBody';
@@ -254,6 +255,8 @@ export default function ESignPage() {
   // acceptance checkbox, and drawn signature instead of showing the inline
   // alert under the signature pad.
   const [loadError, setLoadError] = useState('');
+  // #9194: Try again on the full-page card repeats both reads.
+  const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
@@ -286,15 +289,16 @@ export default function ESignPage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true); setLoadError('');
     api.esignFetchByToken(token)
       .then((env) => { if (alive) { setEnvelope(env); dispatch({ type: 'start', name: env.recipient_name || '' }); } })
-      .catch((e) => { if (alive) setLoadError(e.message || 'Could not load this signing link.'); })
+      .catch((e) => { if (alive) setLoadError(pageReadFailure(e, { unreadable: 'This signing link could not be read just now. Nothing has been signed or declined.' }).message); })
       .finally(() => { if (alive) setLoading(false); });
     api.esignPaperByToken(token)
       .then((p) => { if (alive) setPaper(p); })
       .catch(() => { if (alive) setPaper(null); });
     return () => { alive = false; };
-  }, [token]);
+  }, [token, attempt]);
 
   // A new step starts at its top; the sheet opening or closing over the pad
   // keeps the pad where it was.
@@ -309,7 +313,7 @@ export default function ESignPage() {
   const cancelConfirm = useCallback(() => dispatch({ type: 'cancel' }), []);
 
   if (loading) return <PageShell><div className="p-12 text-center text-gray-500">Loading envelope…</div></PageShell>;
-  if (loadError) return <PageShell><ErrorCard message={loadError} /></PageShell>;
+  if (loadError) return <PageShell><ErrorCard message={loadError} onRetry={() => setAttempt((n) => n + 1)} /></PageShell>;
   if (!envelope) return <PageShell><ErrorCard message="Envelope not found." /></PageShell>;
 
   // D759: a booklet envelope says the booklet's words over the generic ones.
@@ -662,7 +666,7 @@ function PageShell({ children }) {
   );
 }
 
-function ErrorCard({ message }) {
+function ErrorCard({ message, onRetry = null }) {
   return (
     <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center dark:bg-gray-900">
       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-100 flex items-center justify-center">
@@ -670,6 +674,9 @@ function ErrorCard({ message }) {
       </div>
       <h2 className="text-lg font-semibold text-gray-900 mb-1 dark:text-gray-100">Unable to load signing envelope</h2>
       <p className="text-sm text-gray-600">{message}</p>
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="mt-4 inline-flex rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Try again</button>
+      )}
     </div>
   );
 }

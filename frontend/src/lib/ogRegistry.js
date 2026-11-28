@@ -87,6 +87,15 @@ export const SECTION_OG_KEYS = {
 export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
 
 /**
+ * D9193 (#9193): the registry entries `scripts/prerender-og.mjs` writes an HTML file for. An entry with
+ * `prerender: false` only lends its tags to the sub-paths it prefixes; its own path has no page, and a file
+ * there made the SPA's "Page not found" answer 200 under a real page's title (a soft 404).
+ */
+export function prerenderedRoutes() {
+  return ROUTES.filter((r) => r.prerender !== false);
+}
+
+/**
  * Public routes, in sitemap order.
  *
  * - `path`        exact pathname (no trailing slash except the root)
@@ -96,6 +105,7 @@ export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
  * - `type`        og:type
  * - `section`     drives the fallback card and prefix matching
  * - `prefix`      when true, sub-paths (`/articles/whatever`) inherit this entry
+ * - `prerender`   D9193: false when the path itself has no page (only its sub-paths do), so no HTML file is written
  * - `heading`     D6995: the page's own h1, written into its HTML before JavaScript runs (default: `title`)
  * - `summary`     D6995: one or two sentences of its offer, as the page says them (default: `description`)
  * - `primaryLink` D6995: `{ label, to }`, the page's main action (default: Join Axal VC, `/register`)
@@ -418,6 +428,8 @@ const ROUTES = [
     type: 'profile',
     section: 'content',
     prefix: true,
+    // D9193: only /authors/:userId is a page (App.jsx); the bare /authors answered 'Authors' over a 404.
+    prerender: false,
   },
 
   // ---- Product transparency ---------------------------------------------

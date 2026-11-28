@@ -94,7 +94,7 @@ test('Billing shows Institutional as Custom/contact and personas have only two p
     try {
       await investor.flush();
       assert.match(investor.text(), /Institutional — Custom/); assert.doesNotMatch(investor.text(), /\$599|Upgrade to institutional/);
-      assert.ok(investor.nodes().some(n => n.tagName === 'A' && nodeText(n) === 'Contact Axal VC' && investor.props(n).href === '/contact'));
+      assert.ok(investor.nodes().some(n => n.tagName === 'A' && nodeText(n) === 'Contact Axal VC' && investor.props(n).href === '/contact?topic=invest'));
     } finally { await investor.unmount(); }
     for (const group of ['advisor', 'partner']) {
       resetPlansRead();

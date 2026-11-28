@@ -136,6 +136,9 @@ export default function TeamPage() {
                   href={LINKEDIN_URL}
                   target="_blank"
                   rel="noopener noreferrer"
+                  // #9196: with no photo (none recorded, the member unread, or the image failed)
+                  // the link holds only an empty box, so it is named here; with a photo, its alt names it.
+                  aria-label={member?.photo_url && !photoFailed ? undefined : `${member?.name || 'Managing Partner'} on LinkedIn`}
                   className="block aspect-square w-full max-w-[280px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800"
                 >
                   {member?.photo_url && !photoFailed ? (
