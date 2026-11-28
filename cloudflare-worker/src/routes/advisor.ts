@@ -119,6 +119,8 @@ import {
 import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
+import { reportPrivateError, safeUpstreamDiagnostic } from '../util/errorPrivacy';
+import { clipUpstream, refusalBody } from '../util/refusal';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 import { studioOption } from '../services/advisor/studioRail';
 import { rolePreviewRefusal, rolePreviewShell } from '../util/investorPreview';
@@ -2216,6 +2218,12 @@ function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+// D9189 (#9189): what /explain says when something we did not write fails. The
+// provider's or exception's text is logged as a classification and reaches an
+// admin only, clipped, on `upstream`; a member reads our sentence.
+export const EXPLAIN_FAILED = 'Eadwyn could not finish this explanation. Try again in a moment.';
+export const EXPLAIN_UPSTREAM_FAILED = 'Eadwyn could not reach its model just now. Try again in a moment.';
+
 advisor.post('/explain', async (c) => {
   const user = await advisorUser(c);
   // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
@@ -2395,11 +2403,17 @@ advisor.post('/explain', async (c) => {
       : ai.refusal === 'guard_blocked_output' ? 422
       : ai.refusal === 'guard_unavailable' ? 503
       : 502;
+    // D9189: a provider failure carries the provider's text; our own refusals
+    // (budget, plan, guard, model choice) carry sentences we wrote.
+    const providerFailed = !ai.refusal || ai.refusal === 'all_models_failed';
+    if (providerFailed && ai.error) reportPrivateError('refusal', ai.error, 'upstream_error');
     return c.json({
       error: ai.refusal === 'kill_switch'
         ? 'AI budget exhausted — try again later.'
+        : providerFailed ? EXPLAIN_UPSTREAM_FAILED
         : (ai.error || 'upstream LLM error'),
       reason: ai.refusal || 'upstream_error',
+      ...(providerFailed && ai.error && user.role === 'admin' ? { upstream: clipUpstream(safeUpstreamDiagnostic(ai.error)) } : {}),
       ...(ai.guard?.refusal?.link ? { link: ai.guard.refusal.link } : {}),
     }, status);
   }
@@ -2457,7 +2471,10 @@ advisor.post('/explain', async (c) => {
           shadowFlagged: false,
         });
       } catch (e) {
-        controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
+        controller.enqueue(enc.encode(sseEvent('error', refusalBody({
+          code: 'explain_failed', message: EXPLAIN_FAILED, raw: e,
+          audience: user.role === 'admin' ? 'admin' : 'member',
+        }))));
       } finally {
         controller.close();
       }
@@ -2577,11 +2594,12 @@ advisor.post('/tool', async (c) => {
     try {
       envelope = await executeTool(toolCtx, name, args);
     } catch (e) {
-      console.error('[advisor.tool] execute failed', name, (e as Error).message);
+      // D9189: the audit row stores a fixed code; the text is classified in the log.
+      reportPrivateError('refusal', e, 'tool_execution_failed');
       await writeTurnAudit(c.env, {
         userId: user.id, conversationId: conv.id, model: null,
         promptHash: await promptHash(),
-        toolCalls: [{ name, error: (e as Error).message }],
+        toolCalls: [{ name, error: 'tool_execution_failed' }],
         aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
         sanitisationActions: [], refusalReason: 'tool_error',
         shadowFlagged: false,
@@ -2700,7 +2718,9 @@ advisor.post('/tool/auto', async (c) => {
       }
     }
   } catch (e) {
-    llmRefusal = `parse_failed:${(e as Error).message.slice(0, 80)}`;
+    // D9189: the parser's message is engine text; the caller gets the code.
+    reportPrivateError('refusal', e, 'parse_failed');
+    llmRefusal = 'parse_failed';
   }
 
   // Step 2 — dispatch through the same gated pipeline as POST /tool.
@@ -2749,7 +2769,7 @@ advisor.post('/tool/auto', async (c) => {
     try {
       envelope = await executeTool(toolCtx, pickedName, pickedArgs);
     } catch (e) {
-      console.error('[advisor.tool/auto] execute failed', pickedName, (e as Error).message);
+      reportPrivateError('refusal', e, 'tool_execution_failed');
       return c.json({ error: 'tool execution failed', status: 'error', requested_tool: pickedName }, 500);
     }
   }
