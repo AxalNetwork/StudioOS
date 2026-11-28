@@ -31,6 +31,10 @@ const PartnerNetworkOrganizations = lazy(() => import('../pages/partner/Organiza
 const NetworkPage = lazy(() => import('../pages/NetworkPage'));
 // D9025 (#9025): People, the shared directory, one body for every licence (D7676).
 const NetworkPeoplePage = lazy(() => import('../pages/network/NetworkPeoplePage'));
+// D9071 (#9071): Organizations' shared directory scope, and one organization's people.
+const NetworkOrganizationsDirectory = lazy(() => import('../pages/network/NetworkOrganizationsDirectory'));
+const NetworkOrganizationPage = lazy(() => import('../pages/network/NetworkOrganizationPage'));
+const OrgScopes = lazy(() => import('../pages/network/NetworkOrganizationsDirectory').then((m) => ({ default: m.OrgScopes })));
 
 /**
  * `/network/*` — the three zones, for every licence rather than just founders.
@@ -138,6 +142,9 @@ const INTRO = {
   organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
 };
 
+// D9071: the shared directory scope and an organization's page describe the directory, not the licence's roll-up.
+const ORG_SHARED_INTRO = 'Who works where, as published sources record it, people first. A listing is not a relationship.';
+
 // One object, read by the overview card, the board section and this module,
 // so a reader cannot be told a softer reason on one surface than another.
 const ORG_NO_STORE = NETWORK_ORG_COPY.heading;
@@ -186,7 +193,12 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   const forward = isRoot ? legacyZonePath(location.search) : null;
   // D9025: `/network/people/:uid` is the People zone with a person's sheet open, not a zone of its own.
   const peoplePath = !!bucket && /^\/network\/people(\/|$)/.test(location.pathname);
-  const zone = isRoot ? null : (peoplePath ? bucket.zones.find((z) => z.slug === 'people') : zoneForPath(bucket, location.pathname));
+  // D9071: `/network/organizations/:uid` (and its person sheet) is the Organizations zone, on one organization.
+  const orgDetailPath = !!bucket && /^\/network\/organizations\/[^/]+/.test(location.pathname);
+  const childSlug = peoplePath ? 'people' : orgDetailPath ? 'organizations' : null;
+  const zone = isRoot ? null : (childSlug ? bucket.zones.find((z) => z.slug === childSlug) : zoneForPath(bucket, location.pathname));
+  // D9071 (D7680 NPO-01): the Organizations zone opens on the shared directory; `?scope=mine` is the licence's own body.
+  const orgScope = new URLSearchParams(location.search).get('scope') === 'mine' ? 'mine' : 'shared';
   const slug = zone?.slug;
 
   // The filter half of the canvas's header row, bound to the licence and the
@@ -212,6 +224,13 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     // D9025: the same shared directory on every licence; the Worker scopes what each member may read.
     if (slug === 'people') {
       return <Suspense fallback={<Loading />}><NetworkPeoplePage /></Suspense>;
+    }
+    // D9071: one organization in the shared directory, then the directory itself, on every licence.
+    if (orgDetailPath) {
+      return <Suspense fallback={<Loading />}><NetworkOrganizationPage /></Suspense>;
+    }
+    if (slug === 'organizations' && orgScope === 'shared') {
+      return <Suspense fallback={<Loading />}><NetworkOrganizationsDirectory /></Suspense>;
     }
     // `embedded`: the three founder pages each draw a full frame of their own
     // — crumb, h1, zone nav and Worker AI rail — because they were built to be
@@ -330,9 +349,10 @@ export default function NetworkWorkspace({ role = 'founder' }) {
         />
       </Suspense>
     );
-  }, [role, slug, isRoot, zoneFilters]);
+  }, [role, slug, isRoot, zoneFilters, orgDetailPath, orgScope]);
 
-  const orgGap = slug === 'organizations' && !ORG_BACKED.has(role);
+  // D9071: the gap is the licence's own roll-up; the shared directory scope has a store on every licence.
+  const orgGap = slug === 'organizations' && !orgDetailPath && orgScope === 'mine' && !ORG_BACKED.has(role);
 
   // Before the shell draws anything: a legacy `/network?tab=<zone>` address is
   // that zone's address, so answer at the zone rather than at the overview.
@@ -342,7 +362,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     <WorkspaceShell
       role={role}
       title={isRoot ? bucketTitle(bucket) : undefined}
-      activeSlug={isRoot ? null : (peoplePath ? 'people' : undefined)}
+      activeSlug={isRoot ? null : (childSlug || undefined)}
       rail={(
         <WorkerRail
           workspace="Network"
@@ -371,7 +391,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       // conditional form the frame contract's attribute-only pattern missed.
       // The shell fills that slot from `ActiveCompanyContext`, so the badge
       // names the company instead of restating the rule.
-      intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (INTRO[slug] || INTRO.relationships)}
+      intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (slug === 'organizations' && (orgDetailPath || orgScope === 'shared') ? ORG_SHARED_INTRO : (INTRO[slug] || INTRO.relationships))}
     >
       {/* D493 — requests to record a relationship, either way, on every
           licence's Relationships zone. Draws nothing when none are open.
@@ -386,6 +406,8 @@ export default function NetworkWorkspace({ role = 'founder' }) {
           canvas's three sections, From your team; the body below draws Curated
           matches and Your asks, each counted apart. */}
       {slug === 'introductions' && <Suspense fallback={null}><IntroductionsDesk variant={role === 'investor' ? 'investor' : 'default'} /></Suspense>}
+      {/* D9071: on My relationships the licence's own body keeps its place, under the same scope control. */}
+      {slug === 'organizations' && !orgDetailPath && orgScope === 'mine' && <Suspense fallback={null}><OrgScopes scope="mine" /></Suspense>}
       {body}
     </WorkspaceShell>
   );

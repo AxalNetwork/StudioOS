@@ -23,6 +23,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
+import { countUids, organizationPeopleCounts } from '../services/networkDirectoryOrgPeople';
 import { requireAuth, requireSuperAdmin, requireSuperAdminWriteBar, selectJwt } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
@@ -72,6 +73,15 @@ directory.get('/entries', async (c) => {
 directory.get('/entries/:uid', async (c) => {
   await requireAuth(c);
   try { return c.json(await readEntry(c.env, uidParam(c))); } catch (e) { return answer(c, e); }
+});
+
+/**
+ * D9071 (#9071): distinct published people per published organization, by affiliation status, for up to 50
+ * organizations (`?uids=a,b`). Counts only, never names; a uid that is not a visible organization is left out.
+ */
+directory.get('/organizations/people-counts', async (c) => {
+  await requireAuth(c);
+  try { return c.json(await organizationPeopleCounts(c.env, countUids(c.req.query('uids')))); } catch (e) { return answer(c, e); }
 });
 
 directory.get('/entries/:uid/overlay', async (c) => {
