@@ -2123,10 +2123,18 @@ const studioos = {
       // tick that finds it held can record WHICH tick holds it.
       const leaseHolder = leaseHolderValue(crypto.randomUUID(), event.scheduledTime, triggerKey);
       let heldBy: string | null = null;
+      // D9205 (#9205): an atomic take in the AiGovernor Durable Object, not a KV get then put, so two ticks cannot
+      // both take the lease and a released one is free at once. KV only without the binding. Dynamic import (D5615).
+      const atomicLease = env.AI_GOVERNOR ? await import('./services/atomicLease') : null;
       try {
-        const existing = await env.RATE_LIMITS.get(LEASE_KEY);
-        if (existing) heldBy = existing;
-        else await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
+        if (atomicLease) {
+          const took = await atomicLease.takeCronLease(env, leaseHolder);
+          if (!took.taken) heldBy = took.heldBy;
+        } else {
+          const existing = await env.RATE_LIMITS.get(LEASE_KEY);
+          if (existing) heldBy = existing;
+          else await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
+        }
       } catch (e) {
         console.error('[cron] lease acquire failed', e);
       }
@@ -3481,8 +3489,11 @@ const studioos = {
           console.error('[cron] cron history write failed', dbErr);
         }
         try {
-          const cur = await env.RATE_LIMITS.get(LEASE_KEY);
-          if (cur === leaseHolder) await env.RATE_LIMITS.delete(LEASE_KEY);
+          if (atomicLease) await atomicLease.releaseCronLease(env, leaseHolder);
+          else {
+            const cur = await env.RATE_LIMITS.get(LEASE_KEY);
+            if (cur === leaseHolder) await env.RATE_LIMITS.delete(LEASE_KEY);
+          }
         } catch {}
       }
     })();

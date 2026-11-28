@@ -8,6 +8,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+import { bumpAtomicCounter } from '../services/atomicLease';
 // D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
 import { redactPath } from '../util/pathRedaction';
 
@@ -659,10 +660,13 @@ const RATE_LIMIT_EXEMPT = [
 ];
 
 // NOTE: KV is eventually consistent and the read-modify-write below is not
-// strictly atomic. For a venture-studio scale workload (dozens of partners,
-// double-digit RPS), the worst case is a small over-allowance at window
-// boundaries — acceptable. If/when traffic grows, swap this for a Durable
-// Object token-bucket or D1 transactional counter.
+// atomic: a read can be up to ~60s stale and KV takes ~1 write/s per key, so
+// concurrent requests can read the same count. That is accepted ONLY for the
+// fail-open buckets, where the worst case is a small over-allowance. D9205
+// (#9205): a `failClosed` bucket's counter is the `AiGovernor` Durable
+// Object's atomic counter instead (`bumpBucket`, services/atomicLease.ts), so
+// exactly `limit` requests pass and a counter write is no longer a KV write
+// that can fail into a 503; without the binding it stays on KV.
 // Fail-open is the DEFAULT: a KV outage should not lock out admins/partners
 // from running spinouts, and most buckets have their own RBAC checks
 // downstream. Buckets marked `failClosed` (abuse-prone / money-adjacent:
@@ -674,6 +678,12 @@ async function bumpCounter(kv: KVNamespace, key: string, windowSec: number): Pro
   // expirationTtl must be ≥ 60 in CF KV
   await kv.put(key, String(next), { expirationTtl: Math.max(60, windowSec) });
   return next;
+}
+
+/** D9205: one bucket's count for this request: atomic in `AiGovernor` for a fail-closed bucket, KV otherwise. */
+function bumpBucket(env: Env, b: Bucket, scopeKey: string, windowKey: number): Promise<number> {
+  if (b.failClosed && env.AI_GOVERNOR) return bumpAtomicCounter(env, scopeKey, windowKey, b.windowSec);
+  return bumpCounter(env.RATE_LIMITS, `${scopeKey}:${windowKey}`, b.windowSec);
 }
 
 async function logBlock(env: Env, ctx: ExecutionContext | undefined, opts: {
@@ -750,13 +760,14 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
       const b = matching[i];
 
       const windowKey = b.windowSec >= 3600 ? windowHour : windowMinute;
-      let key: string;
+      // D9205: the KV key is `<scopeKey>:<window>`, as before; the atomic counter is one object per scopeKey.
+      let scopeKey: string;
       if (b.scope === 'global') {
-        key = `rl:g:${b.name}:${windowKey}`;
+        scopeKey = `rl:g:${b.name}`;
       } else if (b.scope === 'ip') {
-        key = `rl:i:${clientIp}:${b.name}:${windowKey}`;
+        scopeKey = `rl:i:${clientIp}:${b.name}`;
       } else {
-        key = `rl:u:${userId}:${b.name}:${windowKey}`;
+        scopeKey = `rl:u:${userId}:${b.name}`;
       }
 
       let count = 0;
@@ -770,7 +781,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         // 2026-09-12 sign-in returned "The server did not respond within 30s"
         // with nothing in the log, which is what that looks like from outside.
         count = await withDeadline(
-          bumpCounter(env.RATE_LIMITS, key, b.windowSec), KV_DEADLINE_MS, `ratelimit:${b.name}`,
+          bumpBucket(env, b, scopeKey, windowKey), KV_DEADLINE_MS, `ratelimit:${b.name}`,
         );
       } catch (e) {
         // KV outage OR a KV that never answered — deliberately the same branch,
