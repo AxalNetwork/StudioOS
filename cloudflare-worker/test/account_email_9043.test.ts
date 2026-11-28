@@ -290,7 +290,7 @@ function normalised(src: string, at: number, expr: string): boolean {
   const e = expr.trim();
   if (/^normalizeEmail\(/.test(e)) return true;
   if (!/^[A-Za-z_$][\w$]*$/.test(e)) return false;
-  const decl = new RegExp(`\\b(?:const|let|var)\\s+${e.replace(/\$/g, '\\$')}\\s*(?::[^=]+)?=\\s*([^;\\n]+)`, 'g');
+  const decl = new RegExp(`\\b(?:const|let|var)\\s+${e.replace(/[\\$]/g, '\\$&')}\\s*(?::[^=]+)?=\\s*([^;\\n]+)`, 'g');
   let last: string | null = null; let m: RegExpExecArray | null;
   while ((m = decl.exec(src)) && m.index < at) last = m[1];
   return last != null && /^normalizeEmail\(/.test(last.trim());
