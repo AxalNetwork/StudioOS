@@ -662,6 +662,24 @@ export function currencyPosition(currency, { summary, refunds, disputes }) {
   return { currency, runRate, refund, dispute };
 }
 
+/**
+ * D9199 (#9199): the three tiles drawn while no currency can be named yet.
+ * `null` once every read has answered (the page then says there is nothing in
+ * any currency). Each tile takes its OWN read's state: Loading only while that
+ * read is out, Unavailable once it failed — never Loading forever for a read
+ * that will not come back. A read that answered with nothing is a measured
+ * zero, or Unavailable when the endpoint said it could not read the source.
+ */
+export function placeholderTiles({ summary, refunds, disputes }) {
+  if (isReady(summary) && isReady(refunds) && isReady(disputes)) return null;
+  const answered = (read, available) => (isReady(read) ? { state: available ? 'zero' : 'unavailable', text: null } : { state: pendingState(read), text: null });
+  return [
+    { label: 'Contracted run-rate', figure: answered(summary, isReady(summary) && summary.licence_fees?.available) },
+    { label: 'Refunds', figure: answered(refunds, isReady(refunds) && refunds.available) },
+    { label: 'Open disputes', figure: answered(disputes, true) },
+  ];
+}
+
 /* ── data coverage (RV11) ────────────────────────────────────────────── */
 
 export const COVERAGE_STATES = Object.freeze({

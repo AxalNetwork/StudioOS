@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Figure, When, Why, BTN } from './RevenueStates.jsx';
 import {
-  LEDGER_FIGURES, subscriptionLines, currencyPosition, isReady, ledgerPosition, pendingState, summaryCurrencies, summaryTemporal, tokenMarginView,
+  LEDGER_FIGURES, subscriptionLines, currencyPosition, isReady, ledgerPosition, pendingState, placeholderTiles, summaryCurrencies, summaryTemporal, tokenMarginView,
 } from './revenueModel.js';
 
 /**
@@ -124,7 +124,8 @@ export function ExecutiveSummary({ summary, refunds, disputes, period, onWhy, on
       // Partial: some runs settled before the charge ledger and sit outside the margin, so the mark says so.
       ? { state: v.partial ? 'incomplete' : (v.tone === 'zero' ? 'zero' : 'recorded'), text: v.margin }
       : { state: v.state === 'predates' ? 'not_recorded' : 'unavailable', text: null });
-  const anyLoading = !isReady(summary) || !isReady(refunds) || !isReady(disputes);
+  // D9199: null once every read answered; otherwise each tile in its own read's state (Loading or Unavailable).
+  const placeholders = currencies.length ? null : placeholderTiles({ summary, refunds, disputes });
   const feesWhen = <When kind={summaryTemporal(summary, 'licence_fees')} period={period} />;
 
   return (
@@ -177,15 +178,15 @@ export function ExecutiveSummary({ summary, refunds, disputes, period, onWhy, on
           </div>
         );
       })}
-      {!currencies.length && !anyLoading && (
+      {!currencies.length && !placeholders && (
         <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-no-currency">
           No active licence fee, refund or open dispute in any currency.
         </p>
       )}
-      {!currencies.length && anyLoading && (
-        <div className={GRID}>
-          {['Contracted run-rate', 'Refunds', 'Open disputes'].map((l) => (
-            <div key={l} className="col-span-2"><Kpi label={l} figure={{ state: 'loading', text: null }} /></div>
+      {placeholders && (
+        <div className={GRID} data-testid="hq-revenue-placeholder-tiles">
+          {placeholders.map((t) => (
+            <div key={t.label} className="col-span-2"><Kpi label={t.label} figure={t.figure} /></div>
           ))}
         </div>
       )}
