@@ -346,14 +346,23 @@ export function aboveCeiling(ws: WorkspaceCaps, platform: WorkspaceCaps): (typeo
   return WS_KEYS.find((k) => ws[k] != null && platform[k] != null && (ws[k] as number) > (platform[k] as number)) ?? null;
 }
 
-/** An agent's budget as a page shows it: caps, used this period, and the period. */
+/** The name of the admin who set an agent's caps (D9111), or null when none is recorded or the account has no name. */
+async function setterName(env: DbEnv, userId: number | null): Promise<string | null> {
+  if (userId == null) return null;
+  const u = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string | null }>();
+  return u?.name ? String(u.name) : null;
+}
+
+/** An agent's budget as a page shows it: caps, used this period, the period, and who set the caps and when (D9111). */
 export async function agentBudgetView(env: DbEnv, agentId: number, now = new Date()) {
   const [caps, month, day] = await Promise.all([agentCaps(env, agentId), usageOf(env, agentId, monthKey(now)), usageOf(env, agentId, dayKey(now))]);
+  const setBy = await setterName(env, caps.set_by);
   return {
     period: { month: monthKey(now), day: dayKey(now), kind: 'calendar_month_utc' as const },
     caps: { tokens: caps.tokens_cap, minutes: caps.minutes_cap, prs_per_day: caps.prs_per_day_cap, retries_per_task: caps.retries_per_task_cap },
     used: { tokens: month.tokens, minutes: Math.round((month.ms / 60_000) * 100) / 100, prs_today: day.prs },
     set_at: caps.set_at,
+    set_by: setBy,
   };
 }
 

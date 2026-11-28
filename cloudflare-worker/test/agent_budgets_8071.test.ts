@@ -339,3 +339,37 @@ test('the sponsor reads their own agent\'s budget, read-only; another member doe
     assert.equal((await call(w, SPONSOR, 'PUT', `/api/teams/agents/${agentUid}/budget`, { tokens_cap: 1 })).status, 404, 'no write here');
   } finally { w.close(); }
 });
+
+// ── D9111 (#9111): the panel's read names the workspace, its own ceilings and who set the caps ─────────────
+
+test('GET /budgets names each agent and its workspace, lists each workspace\'s own ceilings, and says who set the caps', async () => {
+  const w = setup();
+  try {
+    w.agent(AGENT + 1, 'cfo', { scope: 'company' });
+    const agentUid = hex(AGENT, 'b');
+    assert.equal((await call(w, ADMIN, 'PUT', `${POLICY}/budgets/agents/${agentUid}`, { tokens_cap: 5000, reason: 'Pilot month' })).status, 200);
+    assert.equal((await call(w, ADMIN, 'PUT', `${POLICY}/budgets/workspace`, { scope_kind: 'project', scope_id: PROJECT, agents_cap: 2, reason: 'Pilot' })).status, 200);
+
+    const view = await call(w, ADMIN, 'GET', `${POLICY}/budgets`);
+    assert.equal(view.status, 200);
+    const byUid = Object.fromEntries(view.body.agents.map((a: any) => [a.agent_uid, a]));
+    assert.deepEqual([byUid[agentUid].scope_kind, byUid[agentUid].scope_id, byUid[agentUid].scope_name], ['project', PROJECT, 'Kestrel']);
+    assert.deepEqual([byUid[hex(AGENT + 1, 'b')].scope_kind, byUid[hex(AGENT + 1, 'b')].scope_id, byUid[hex(AGENT + 1, 'b')].scope_name], ['company', COMPANY, 'Acme']);
+    assert.equal(byUid[agentUid].name, `Agent${AGENT}`, 'the agent by name, never only its uid');
+    assert.equal(byUid[agentUid].set_by, 'Ada Admin', 'who set the caps, by name');
+    assert.equal(byUid[hex(AGENT + 1, 'b')].set_by, null, 'no caps set: nobody named');
+    assert.ok(byUid[agentUid].set_at, 'and when');
+
+    const ws = Object.fromEntries(view.body.workspaces.map((s: any) => [`${s.scope_kind}:${s.scope_id}`, s]));
+    assert.deepEqual(Object.keys(ws).sort(), [`company:${COMPANY}`, `project:${PROJECT}`]);
+    assert.deepEqual(ws[`project:${PROJECT}`].caps, { agents_cap: 2, live_agents_cap: null, ai_spend_cap_cents: null, compute_spend_cap_cents: null });
+    assert.equal(ws[`project:${PROJECT}`].scope_name, 'Kestrel');
+    assert.deepEqual([ws[`project:${PROJECT}`].used.agents, ws[`company:${COMPANY}`].used.agents], [1, 1], 'each workspace\'s use this month');
+    assert.deepEqual(ws[`company:${COMPANY}`].caps, { agents_cap: null, live_agents_cap: null, ai_spend_cap_cents: null, compute_spend_cap_cents: null },
+      'a workspace with none of its own: null each, the platform figure applies');
+
+    const sponsor = await call(w, SPONSOR, 'GET', `/api/teams/agents/${agentUid}/budget`);
+    assert.equal(sponsor.status, 200);
+    assert.equal(sponsor.body.budget.set_by, 'Ada Admin', 'the sponsor\'s read carries set_by too');
+  } finally { w.close(); }
+});

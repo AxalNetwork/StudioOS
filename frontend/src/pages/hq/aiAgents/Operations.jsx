@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import CohortCard from "./CohortCard.jsx";
 import PolicyControls from "./PolicyControls.jsx";
 import { policyRefusal } from "./refusals.js";
+import Budgets, { SpendSwitch } from "./Budgets.jsx";
 import { provenanceRows } from "./provenanceModel.js";
 import { adminAiAgentsApi as api } from "../../../lib/api/adminAiAgents";
 const missing = "Not recorded";
@@ -249,7 +250,17 @@ function RunProvenance({ uid }) {
     </Reading>
   );
 }
-export function Spend() {
+/** D9111 (#9111, SAB-H): Spend switches between Platform spend (below, as before) and Agent budgets (`Budgets.jsx`). */
+export function Spend({ initialView = "platform" }) {
+  const [view, setView] = useState(initialView);
+  return (
+    <div className="space-y-4">
+      <SpendSwitch view={view} onChange={setView} />
+      {view === "budgets" ? <Budgets RunDetail={RunDetail} /> : <PlatformSpend />}
+    </div>
+  );
+}
+export function PlatformSpend() {
   const [by, setBy] = useState("agent");
   const state = useRead(() => api.spend(by), by);
   return (
