@@ -63,6 +63,24 @@ test('selection: another run, production, preview and lookalikes are never selec
   assert.throws(() => selectForSweep({ run: 'x'.repeat(21), listed: {} }), /run id/);
 });
 
+test('selection: full names keep the run boundaries and queue-only DLQ suffix', () => {
+  for (const run of ['abc123', 'z'.repeat(20)]) {
+    const n = stageANames(run);
+    const names = { worker: n.worker, d1: n.d1.name, kv: n.kv[0].title,
+      queue: `studioos-a-b-s4594-${run}`, bucket: `studioos-files-s4594-${run}`,
+      workflow: `studioos-agent-workflow-s4594-${run}` };
+    for (const [kind, name] of Object.entries(names)) {
+      assert.equal(isRunName(run, kind, name), true, `${kind} accepts a valid run boundary`);
+      for (const suffix of ['x', '\n', '\r\n']) {
+        assert.equal(isRunName(run, kind, name + suffix), false, `${kind} refuses an appended suffix`);
+      }
+      assert.equal(isRunName(run, kind, name + '-dlq'), kind === 'queue', 'only queues accept DLQs');
+      assert.equal(isRunName(run + '\n', kind, name), false, 'a full run id is required');
+    }
+    assert.equal(isRunName(run + '\n', 'worker', n.worker + '\n'), false, 'a newline cannot be part of the run or name');
+  }
+});
+
 test('receipt: lines round-trip, are refused for a name that is not the run\'s, and cannot widen the sweep', () => {
   const at = new Date('2026-11-25T00:00:00Z');
   const line = receiptLine(RUN, { kind: 'kv', name: `studioos-s4594-${RUN}-tokens`, id: 'a'.repeat(32) }, at);
@@ -105,7 +123,12 @@ test('left: zero only when every list was read and none of the run\'s names rema
 });
 
 const WF = readFileSync(new URL('../../.github/workflows/agent-stage-a.yml', import.meta.url), 'utf8');
-const job = (name) => { const m = new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z-]*:\\n|$)`).exec(WF); assert.ok(m, `job ${name}`); return m[1]; };
+const job = (name) => {
+  const marker = `\n  ${name}:\n`;
+  const start = WF.indexOf(marker);
+  assert.notEqual(start, -1, `job ${name}`);
+  return WF.slice(start + marker.length).split(/\n  [a-z][a-z-]*:\n/, 1)[0];
+};
 
 test('workflow: the sweep job runs always, after Stage A, in the same environment, and fails on anything left', () => {
   const a = job('stage-a');

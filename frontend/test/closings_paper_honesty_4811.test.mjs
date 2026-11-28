@@ -109,7 +109,8 @@ test('a line read whose answer carries no list is a failed read on the desk and 
   const line = { uid: 'l1', commitment_id: 31 };
   assert.equal(paperPhrase(line, envelopesOf({})), 'Could not be read');
   assert.equal(paperState(line, envelopesOf({})), null);
-  for (const f of ['AdminClosing.jsx', 'RecordRoom.jsx']) {
+  // D8926: the room's paper read moved from RecordRoom.jsx to roomShared.jsx, which both rooms use.
+  for (const f of ['AdminClosing.jsx', 'roomShared.jsx']) {
     assert.doesNotMatch(src(f), /Array\.isArray\(\w\?\.envelopes\) \? \w\.envelopes : \[\]/, f);
     assert.match(src(f), /envelopesOf\(/, f);
   }
