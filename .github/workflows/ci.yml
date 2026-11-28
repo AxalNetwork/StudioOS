@@ -995,7 +995,8 @@ jobs:
     name: editor visual regression and axe
     if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # #9038: 30 -> 45. The job ran about 18 minutes on main before the three frame and reload checks (#9038) were added.
+    timeout-minutes: 45
     container:
       image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
       options: --user 1001
@@ -1064,6 +1065,18 @@ jobs:
       - name: Public routes axe gate (local Worker, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/axe-top-routes.spec.js --retries=0 --trace off
+      # #9038 (D9038): every workspace route of four licences rendered from the docs/ built above with /api/* stubbed:
+      # no crash, one h1, one rail, the zone asked for, the shell padding, no sideways scroll. PW_CHROMIUM_PATH is the
+      # pinned browser; with CI set a browser that cannot launch fails the step, it never reports SKIPPED.
+      - name: Workspace frames (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs
+      # #9038 (D9038): the same routes with every read answered 500: each states the failure, no skeleton left up and no
+      # claim of "no records".
+      - name: Workspace frames with failed reads (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs --fail-reads
+      # #9038 (D9038): a storm of service-worker controllerchange events reloads the page a bounded number of times.
+      - name: Service-worker reload loop is bounded (built SPA)
+        run: node scripts/check-reload-loop.mjs
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

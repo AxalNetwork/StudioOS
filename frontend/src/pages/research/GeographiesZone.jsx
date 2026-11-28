@@ -74,7 +74,8 @@ export default function GeographiesZone() {
   return (
     <div data-testid="geographies" className="space-y-4">
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Geographies</h1>
+        {/* #9038: the shell (WorkspaceShell) draws the page h1; this is the section heading under it. */}
+        <h2 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Geographies</h2>
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted">
           Where the directory’s companies are based and where its funds are headquartered. Market intelligence is worldwide only, so no country carries a demand reading.
         </p>

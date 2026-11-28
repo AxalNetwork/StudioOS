@@ -4,7 +4,8 @@
  * AI rails. Renders the built `docs/` in Chromium with `/api/*` stubbed, so it
  * sees what the source-reading suite cannot: it caught `/expertise/profile`
  * throwing into the error boundary on every visit. Needs a browser, so it is
- * **not** in `test:guards` — run it by hand after `npm run build`.
+ * not in `test:guards`: `ci.yml` job `visual` runs it, and `--fail-reads`, on
+ * every PR's own build (#9038, D9038).
  *
  * Render every workspace route and MEASURE the frame, instead of reading the
  * source and believing it.
@@ -38,30 +39,40 @@
  * `{matrix: []}` produced a convincing false positive. Shapes here are copied
  * from each page's own 404 fallback for that reason.
  *
- * NOT IN `test:guards`, and that is a judgement rather than an oversight: it
- * needs a Chromium the CI runner is not known to carry, and a check that
- * cannot run must not report success. Run it by hand after a build:
+ * NOT IN `test:guards`: it needs a Chromium, and a check that cannot run must
+ * not report success. `ci.yml` job `visual` carries the pinned one
+ * (`PW_CHROMIUM_PATH`) and runs both modes after its build (#9038, D9038).
+ * There, with `CI` set, a missing Playwright or a browser that does not launch
+ * exits 1 (`scripts/lib/browserCheck.mjs`); only off CI does a missing
+ * Playwright still print SKIPPED. By hand:
  *
  *     npm run build && node scripts/check-workspace-frames.mjs [role]
  */
 import http from 'node:http';
+import { register } from 'node:module';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, extname, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { browserPlan, launchFailure } from './lib/browserCheck.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = join(ROOT, 'docs');
 
-let chromium;
+let chromium = null;
 try {
   ({ chromium } = await import(join(ROOT, 'frontend/node_modules/@playwright/test/index.mjs')));
-} catch {
-  console.log('check-workspace-frames: SKIPPED — @playwright/test is not installed.');
-  process.exit(0);
+} catch { /* reported by browserPlan below */ }
+// #9038: PW_CHROMIUM_PATH first (ci.yml job `visual`), then the sandbox's pin; in CI nothing here may skip.
+const plan = browserPlan({ env: process.env, exists: existsSync, playwright: !!chromium, name: 'check-workspace-frames' });
+if (plan.action !== 'run') {
+  (plan.action === 'fail' ? console.error : console.log)(plan.message);
+  process.exit(plan.action === 'fail' ? 1 : 0);
 }
-const EXECUTABLE = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome']
-  .find((p) => existsSync(p));
+const EXECUTABLE = plan.executablePath;
 
+// #9038: the boards import `.jsx` (frontend/src/pages/advisor/advisory/kit.jsx), which plain node cannot load; the
+// frontend suite's Oxc loader hook does, so the check runs as `node scripts/check-workspace-frames.mjs` again.
+register(new URL('../frontend/test/_deck-loader-hook.mjs', import.meta.url));
 const { bucketsFor, zonePath } = await import(join(ROOT, 'frontend/src/workspaces/shellConfig.js'));
 const { boardFor } = await import(join(ROOT, 'frontend/src/workspaces/boards/index.js'));
 const ARGS = process.argv.slice(2);
@@ -165,7 +176,12 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {});
+const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {}).catch((error) => {
+  const { message, code } = launchFailure('check-workspace-frames', error);
+  console.error(message);
+  server.close();
+  process.exit(code);
+});
 const failures = [];
 
 /**
@@ -273,6 +289,28 @@ for (const role of ROLES) {
         current: null,
         room: { available: false, reason: '' },
       };
+    } else if (p.endsWith('/contacts/book')) {
+      // #9038: the contact book's envelope (bookOf, services/linkedinCsvImport.ts). Found by this check's first CI
+      // wiring: a bare `[]` has no `contacts`, so NetworkContacts threw on /network/relationships for three licences.
+      body = { total: 0, page: 1, page_size: 50, contacts: [] };
+    } else if (p.endsWith('/research/fund-directory')) {
+      // #9038: the fund directory's empty page (listDirectory, services/researchFundDirectory.ts), for the reason the
+      // book above gives: against a bare `[]` founder /research/funds threw on `.map` into the error boundary.
+      const facet = [];
+      body = {
+        items: [], total: 0, limit: 50, offset: 0, sort: 'name', size_currency: 'USD', size_currencies: [], kind: null,
+        size_basis: '', coverage: { total: 0, as_of: null, fields: {}, kinds: [] }, sources: [], removed_sources: [],
+        facets: { hq_country: facet, focus: facet, vintage: facet, size_band: facet, size_not_comparable: 0, eif: facet, eifo: facet, kind: facet },
+        facets_unmapped: { hq_country: 0, focus: 0 }, facets_basis: '', source: null, source_boundary: '',
+      };
+    } else if (p.endsWith('/research/funds')) {
+      // #9038: the saved-funds page (GET /research/funds, routes/research.ts), empty: no fund saved.
+      body = {
+        items: [], total: 0, limit: 50, offset: 0, q: '', sort: 'updated', filter: 'all', identity: 'all', counts_scope: 'all_saved',
+        saved_count: 0, researched_count: 0, right_stage_count: 0, warm_path_count: 0, passed_count: 0, passed_without_reason: 0,
+        linked_count: 0, own_count: 0, legacy_count: 0, cheque_overlap_count: null, cheque_overlap_note: null, raise_target_cents: null,
+        allocation_count: 0, allocation_set_count: 0, allocation_currency: 'USD', catalogue_links: [],
+      };
     } else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -330,7 +368,11 @@ for (const role of ROLES) {
       await page.waitForTimeout(FAIL_READS ? 2500 : 250);
       const m = await page.evaluate(() => {
         const main = document.querySelector('[data-app-main]');
-        const shellBody = main?.querySelector('.min-w-0.flex-1');
+        // #9038: the shell's own padded body is the child of RailFrame's `.fwr-frame-main` that holds the crumb
+        // (WorkspaceShell's `<div className="p-5">`). `.min-w-0.flex-1` named the column before RailFrame (D556)
+        // and since matched whatever page content first carried those classes, so it measured the wrong element.
+        const crumbRow = main?.querySelector('[data-testid="link-workspace-crumb"]')?.parentElement || null;
+        const shellBody = crumbRow?.closest('.fwr-frame-main > div') || null;
         const text = (main?.innerText || '').replace(/\s+/g, ' ').trim();
         return {
           h1: main?.querySelectorAll('h1').length ?? 0,
@@ -345,7 +387,11 @@ for (const role of ROLES) {
           // The crumb's bold half and the heading, for the identity check. The
           // crumb is `<bucket link> ‹ <b>zone</b>`; the bold element is the only
           // one in it, so it is read from the crumb row rather than the page.
-          crumbZone: (main?.querySelector('.mb-2.flex.items-center b')?.innerText || '').trim(),
+          //
+          // #9038: the crumb is `<bucket> ‹ <zone>` and, where a page passes its own title, `<bucket> ‹ <zone link> ‹
+          // <b>title</b>` (WorkspaceShell's crumbTitle, D6160). The zone is therefore the SECOND named item, a `<b>` or
+          // a link, never "the bold one": reading the bold one compared a page's own title with the zone label.
+          crumbZone: ([...(crumbRow?.children || [])].filter((el) => el.getAttribute('aria-hidden') !== 'true')[1]?.innerText || '').trim(),
           h1Text: (main?.querySelector('h1')?.innerText || '').trim(),
           // A bucket root must offer a way into its own bucket, whether it drew
           // a board or the overview grid. `BucketBoard` returns null for an
@@ -360,6 +406,10 @@ for (const role of ROLES) {
           // "locked" — matching on the tier word is what keeps this from also
           // catching a page that merely mentions a lock icon somewhere.
           locked: /add-on|not included in your plan|upgrade to/i.test(text),
+          // #9038: the founder's no-venture notice, drawn INSTEAD of the bucket for an account with no venture yet
+          // ("There is no venture to show yet. Build fills in once you have one." and its Create your startup link).
+          // Like the lock it is a complete, stated answer, and the bucket has no zones to offer until a venture exists.
+          noVenture: /There is no venture to show yet\./.test(text),
         };
       });
       const bad = [];
@@ -400,7 +450,12 @@ for (const role of ROLES) {
       // offer. Detected from what the page says rather than from a list of route
       // names, so a bucket that gains a lock later is exempt without anyone
       // remembering to add it.
-      if (root && !m.locked) {
+      // #9038: a bucket that declares no zones (founder `/validate`, `zones: []`) has nothing of its own to link to.
+      // Under --fail-reads, a root whose own read was refused and that SAYS so ("The Build overview could not be
+      // read. This is not a claim that nothing is recorded." with Retry) has given the answer that mode demands:
+      // it cannot draw a board it could not read. The default run still holds every root to its links.
+      const statedFailedRead = FAIL_READS && failedReads > 0 && m.statesFailure && !m.skeletons;
+      if (root && root.zones.length && !m.locked && !m.noVenture && !statedFailedRead) {
         const own = new Set(root.zones.map((z) => zonePath(root, z)));
         if (!m.zoneLinks.some((href) => own.has(href))) {
           const shape = boardFor(role, root.prefix, {}) ? 'board' : 'overview grid';

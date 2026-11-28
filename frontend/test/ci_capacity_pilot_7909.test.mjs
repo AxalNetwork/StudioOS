@@ -317,7 +317,7 @@ const BASE_JOB_DIGESTS={
   "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
-  "visual":'dae7df5fbbfde376', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step. #9037: the public routes axe gate step.
+  "visual":'e090b35180b79c27', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step. #9037: the public routes axe gate. #9038: workspace frames, failed-read frames, reload loop and the 45-minute limit.
   "drift":'d870bd539b8eced2',
   "og-tags":'e7c2cfaf81226e04',
   "dev-backend":'82b39cdcaa1e275a',
