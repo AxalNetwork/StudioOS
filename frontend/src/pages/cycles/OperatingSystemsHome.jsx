@@ -26,8 +26,19 @@ import { DataState } from '../../ui/Honesty.jsx';
 import { api } from '../../lib/api';
 import { dayLabel, kindLabel, scheduleLabel } from '../../lib/cadence';
 import {
-  OS_SECTIONS, RUN_WORD, cadenceHref, cadenceView, companyCreationHref, companyMissing, sectionOf, systemRowView, systemsSummaryText,
+  OS_SECTIONS, RUN_WORD, cadenceHref, cadenceView, companyCreationHref, companyMissing, sectionOf, systemRowView, systemsSummaryText, ventureQuery,
 } from './operatingSystemsModel.js';
+import { accountOnlyText } from './codeSystem.js';
+
+/**
+ * D8774 (#8774, BLS08 A): where a venture with no company is linked to one inside
+ * Build: Connect a tool opens its link dialog for the owner (`link=company`) and
+ * names the owner to anyone else, and the setup carries on there.
+ */
+export function linkCompanyHref(search = '') {
+  const q = ventureQuery(search);
+  return `/build/connect${q ? `${q}&` : '?'}link=company`;
+}
 
 const CARD = 'flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100';
@@ -58,7 +69,8 @@ export function OsTabs({ section, search = '', phone = false }) {
 }
 
 /** BD20 A and BD24 B: the one step first. Systems and tools connect to a company, so nothing is listed before it. */
-export function CompanyNotLinked({ search = '', phone = false, what = 'systems' }) {
+export function CompanyNotLinked({ search = '', phone = false, what = 'systems', code = null }) {
+  const account = what === 'tools' ? accountOnlyText(code) : null;
   return (
     <section className={CARD} aria-labelledby="os-no-company-title" data-testid="os-no-company">
       <span className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">One step first</span>
@@ -68,7 +80,12 @@ export function CompanyNotLinked({ search = '', phone = false, what = 'systems' 
           ? 'Tools connect to a company, too. They appear here after this venture has a company.'
           : 'Core company systems become available after this venture has a company.'}
       </p>
-      <Link to={companyCreationHref(search)} className={`${PRIMARY} ${phone ? 'w-full' : 'self-start'}`} data-testid="os-no-company-go">Go to Company Creation →</Link>
+      {account && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="os-no-company-account">{account}</p>}
+      <div className={`flex gap-2 ${phone ? 'flex-col' : 'flex-wrap'}`}>
+        <Link to={companyCreationHref(search)} className={`${PRIMARY} ${phone ? 'w-full' : 'self-start'}`} data-testid="os-no-company-go">Go to Company Creation →</Link>
+        {/* D8774: a venture whose owner already has a company is linked to it in Build, not re-formed. */}
+        <Link to={linkCompanyHref(search)} className={`${SECONDARY} ${phone ? 'w-full' : 'self-start'}`} data-testid="os-no-company-link">Link to a company you have</Link>
+      </div>
       {what === 'systems' && (
         <p className="m-0 text-[11.5px] text-axal-faint dark:text-gray-500" data-testid="os-no-company-preview">Bank, Accounting, Payroll, CRM and Workspace appear here, each with Connect, once it is linked.</p>
       )}
@@ -191,7 +208,7 @@ export function OperatingSystemsView({ section, data, projectId, search = '', ph
   if (data?.card?.state === 'unreadable') {
     return wrap(<DataState state="unavailable" what="Operating systems" claim="This is not a claim that nothing is connected." onRetry={onRetry} size="block" />);
   }
-  if (companyMissing(data)) return wrap(<CompanyNotLinked search={search} phone={phone} what={section === 'tools' ? 'tools' : 'systems'} />);
+  if (companyMissing(data)) return wrap(<CompanyNotLinked search={search} phone={phone} what={section === 'tools' ? 'tools' : 'systems'} code={data?.parts?.tools?.code} />);
   if (section === 'tools') return wrap(<ToolsSection sources={sources} search={search} />);
   if (!data?.parts?.systems) return wrap(<DataState state="unavailable" what="Systems" claim="This is not a claim that nothing is connected." onRetry={onRetry} size="block" />);
   return wrap(<SystemsList systems={data.parts.systems} phone={phone} />);

@@ -32,7 +32,8 @@
  */
 import type { Env } from '../types';
 import { agrees, fmtFigure, FIGURE_LABEL, FIGURE_UNIT, narrativeSectionWords, parseStatedFigures, VERSION_MARKER_KEY, type FigureKey } from './raiseCycle';
-import { EVIDENCE_RULES, type EvidenceSourceLabel } from './raiseEvidenceSources';
+import { EVIDENCE_RULES, SEARCH_CONSOLE_EVIDENCE_KIND, type EvidenceSourceLabel } from './raiseEvidenceSources';
+import { SEARCH_CONSOLE_METRICS, searchConsoleMayBack, type SearchConsoleMetric } from './raiseSearchConsoleEvidence';
 import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
 import { cellText } from './decks/tableCells';
 
@@ -111,6 +112,20 @@ export function decideCount(stated: number, items: PinnedItem[]): Decision {
 }
 
 const suffix = (ref: string) => ref.slice(ref.lastIndexOf(':') + 1);
+
+/**
+ * D5842 part 2: may this item back a claim of this kind. A Search Console aggregate (`<selection>:<metric>`) backs only
+ * the organic-search claim of its own metric (`searchConsoleMayBack`): never paying customers, revenue, conversions or
+ * traction proof, whoever links it. Every other kind keeps its existing rules.
+ */
+export function claimMayBack(item: { kind: string; source_ref: string }, claimKind: string): boolean {
+  if (item.kind !== SEARCH_CONSOLE_EVIDENCE_KIND) return true;
+  const metric = suffix(String(item.source_ref ?? ''));
+  return (SEARCH_CONSOLE_METRICS as readonly string[]).includes(metric) && searchConsoleMayBack(metric as SearchConsoleMetric, claimKind);
+}
+/** A Search Console aggregate of one metric, in the claim's own unit (CTR is stored as a ratio, stated as a percentage). */
+const organic = (metric: SearchConsoleMetric, scale = 1) => (i: PinnedItem) =>
+  (i.kind === SEARCH_CONSOLE_EVIDENCE_KIND && suffix(i.source_ref) === metric && i.value_num != null ? i.value_num * scale : null);
 const prefix = (ref: string) => ref.split(':')[0];
 const usdOrNone = (i: PinnedItem) => i.currency == null || i.currency.toLowerCase() === 'usd';
 const one = (i: PinnedItem, value: number): Candidate => ({ value, label: i.source_label, provider: i.provider, observed_on: i.observed_on, items: [i] });
@@ -131,6 +146,10 @@ const MEASURES: Partial<Record<FigureKey, (i: PinnedItem) => number | null>> = {
   churn: (i) => (['kpi-snapshot', 'model-assumption'].includes(i.kind) && suffix(i.source_ref) === 'monthly_churn_pct' ? i.value_num : null),
   cac: (i) => (['kpi-snapshot', 'model-assumption'].includes(i.kind) && suffix(i.source_ref) === 'cac' ? i.value_num : null),
   headcount: (i) => (i.kind === 'kpi-snapshot' && suffix(i.source_ref) === 'headcount' ? i.value_num : null),
+  // D5842 part 2: a founder-chosen week of the venture's selected Search Console property.
+  organic_search_clicks: organic('clicks'),
+  organic_search_impressions: organic('impressions'),
+  organic_search_ctr: organic('ctr', 100),
   // `raise` and `pilots`: no rule in D1263's table records either, so they are Not backed until one does.
 };
 /** The figures that are counts of pinned records, not a value one record holds. */
@@ -315,7 +334,7 @@ const readiness = (env: Env, projectId: number, items: PinnedItem[], links: Map<
   const claims = (r.results || []).map((row): ComputedClaim => {
     const kind = READINESS_CLAIMS[row.item_key];
     const linkedIds = new Set(links.get(JSON.stringify(['readiness', 'current', row.item_key])) || []);
-    const backing = items.filter((i) => EVIDENCE_RULES.find((rule) => rule.kind === i.kind)?.backs.includes(kind) || linkedIds.has(i.id));
+    const backing = items.filter((i) => (EVIDENCE_RULES.find((rule) => rule.kind === i.kind)?.backs.includes(kind) || linkedIds.has(i.id)) && claimMayBack(i, kind));
     const { state, record, bearing } = decidePresence(backing.map((i): Candidate => ({ value: null, label: i.source_label, provider: i.provider, observed_on: i.observed_on, items: [i] })));
     return { surface: 'readiness', surface_version: 'current', field_key: row.item_key, claim_kind: kind, stated_value: null, unit: null, state, record, linked: bearing };
   });

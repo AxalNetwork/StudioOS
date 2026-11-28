@@ -227,7 +227,7 @@ export async function sendHandoff(env: Env, user: User, projectId: number, scope
     await privacyCheck(env, [{ key: 'prompt', text }]);
     rows.push({ provider, items, target: 'lovable.dev', text, marker: items.map(i => i.marker).join(' ') });
     // Lovable's "Build with URL" link: the prompt rides in the fragment, which is never sent to a server.
-    Object.assign(out, { text, prompt_chars: text.length, link: `https://lovable.dev/?autosubmit=true#prompt=${encodeURIComponent(text)}` });
+    Object.assign(out, { text, prompt_chars: text.length, link: `https://lovable.dev/#prompt=${encodeURIComponent(text)}` });
   } else if (provider === 'github') {
     const issues = items.map(i => ({ item: i, ...issueText(i) }));
     await privacyCheck(env, issues.map(x => ({ key: x.item.uid, text: `${x.title}\n\n${x.body}` })));

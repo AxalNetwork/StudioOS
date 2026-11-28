@@ -266,15 +266,15 @@ test('the canvas\'s confidentiality line is printed, and the route it describes 
 // ---------------------------------------------------------------- Legal pages
 
 const LEGAL = [
-  { file: 'TermsPage', title: 'Terms of Service', updated: 'July 8, 2026', email: 'legal@axal.vc', sections: 21,
+  { file: 'TermsPage', title: 'Terms of Service', dateExport: 'TERMS_UPDATED', email: 'legal@axal.vc',
     first: ['01', 'Definitions & parties'],
     own: ['Axal VC Management LLC is not a registered investment adviser or broker-dealer.',
       'These Terms and your use of the Platform are governed by the laws of the State of Delaware'] },
-  { file: 'PrivacyPage', title: 'Privacy Policy', updated: 'October 29, 2026', email: 'privacy@axal.vc', sections: 11,
+  { file: 'PrivacyPage', title: 'Privacy Policy', dateExport: 'PRIVACY_UPDATED', email: 'privacy@axal.vc',
     first: ['00', 'Who we are'],
     own: ['in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P',
       'typically 7 years after the dissolution of a fund or termination of a relationship'] },
-  { file: 'RiskDisclosuresPage', title: 'Risk Disclosures & Disclaimers', updated: 'March 31, 2026', email: 'legal@axal.vc', sections: 8,
+  { file: 'RiskDisclosuresPage', title: 'Risk Disclosures & Disclaimers', dateExport: 'RISK_UPDATED', email: 'legal@axal.vc',
     first: ['01', 'Loss of principal'],
     own: ['Investment in startups involves a high degree of risk and may result in the loss of your entire investment.',
       'Statistically, most startup companies fail.'] },
@@ -290,15 +290,16 @@ const CANVAS_LEGAL = (() => {
 
 test('option A: each legal page keeps its own text, date and address in the canvas layout', async () => {
   for (const page of LEGAL) {
-    const { default: Page } = await import(`../src/pages/${page.file}.jsx`);
+    const module = await import(`../src/pages/${page.file}.jsx`);
+    const Page = module.default;
     const html = render(React.createElement(Page), '/');
     const body = text(html.slice(html.indexOf('<article'), html.indexOf('</article>')));
     assert.match(html, /<div class="ax-lbl-q">Legal<\/div>/, `${page.file}: the "Legal" eyebrow`);
     assert.match(html, new RegExp(`<h1 id="ax-legal-h" class="ax-legal-h1">${page.title.replace(/&/g, '&amp;')}</h1>`));
-    assert.match(html, new RegExp(`<div class="ax-mono ax-legal-updated">Last updated ${page.updated}</div>`),
+    assert.match(html, new RegExp(`<div class="ax-mono ax-legal-updated">Last updated ${module[page.dateExport]}</div>`),
       `${page.file}: its own date, as "Last updated"`);
     assert.doesNotMatch(body, /July 1, 2026/, `${page.file}: the canvas's date`);
-    assert.equal((html.match(/class="ax-legal-section"/g) || []).length, page.sections, `${page.file}: its own sections`);
+    assert.equal((html.match(/class="ax-legal-section"/g) || []).length, Page().props.sections.length, `${page.file}: its own sections`);
     const [n, h] = page.first;
     assert.match(html, new RegExp(`<span class="ax-mono ax-legal-n">${n}</span><h2 id="ax-legal-s0" class="ax-legal-h2">${h.replace(/&/g, '&amp;')}</h2>`));
     for (const s of page.own) assert.ok(body.includes(s), `${page.file}: its own sentence "${s.slice(0, 50)}…" is gone`);
@@ -316,7 +317,8 @@ test('option A: none of the canvas\'s legal text appears on the live pages', asy
   ];
   for (const s of named) assert.ok(CANVAS_LEGAL.some((c) => c.includes(s)), `the canvas no longer says "${s}"`);
   for (const page of LEGAL) {
-    const { default: Page } = await import(`../src/pages/${page.file}.jsx`);
+    const module = await import(`../src/pages/${page.file}.jsx`);
+    const Page = module.default;
     const body = text(render(React.createElement(Page), '/'));
     for (const s of [...named, ...CANVAS_LEGAL]) {
       assert.ok(!body.includes(s), `${page.file} carries the canvas's "${s.slice(0, 60)}…", which waits on the owner`);

@@ -301,8 +301,9 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
   // twenty until D894 (#2434) replaced Raise · Pitch with the Pitch deck studio,
   // which draws the canvas's own tabs, not the Raise sections row; nineteen
   // until D1109 (#2989) retired Raise · Data room's access view for the tool's tabs; eighteen
-  // until D6118 (#6118) made Grow · Partnerships Partner network's cycle page, whose row is the cycle's.
-  assert.ok(rows.length >= 17, `only ${rows.length} founder section rows are lens switchers`);
+  // until D6118 (#6118) made Grow · Partnerships Partner network's cycle page, whose row is the cycle's; seventeen
+  // until D8776 (#8776, owner Q3 A) dropped /build/roadmap's zone row for its own By quarter · Dependencies · Scenarios views.
+  assert.ok(rows.length >= 16, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

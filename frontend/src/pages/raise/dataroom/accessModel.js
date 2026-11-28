@@ -90,6 +90,7 @@ export function accessRows(room, now = Date.now()) {
     const ends = g.expires_at ? Date.parse(String(g.expires_at).replace(' ', 'T') + (/[zZ]$/.test(String(g.expires_at)) ? '' : 'Z')) : null;
     const left = ends != null && Number.isFinite(ends) && state === 'active' ? Math.ceil((ends - now) / DAY_MS) : null;
     const last = eventsOf(room, g)[0] || null;
+    const open = state === 'active' ? canOpen(room, g, now) : 0;
     return {
       uid: g.uid,
       who: who(g),
@@ -102,10 +103,25 @@ export function accessRows(room, now = Date.now()) {
       folders: foldersWord(room, g),
       nda: ndaOf(g),
       committed: g.committed ? 'Yes' : 'No',
-      canOpen: state === 'active' ? `${canOpen(room, g, now)} of ${total}` : '0 of ' + total,
+      canOpen: `${open} of ${total}`,
+      // D5075 part 2 (DR33, RAD33B): the phone card's counts, the same `grantOn` count as Can open.
+      open, shut: total - open, total,
       last: last ? `${eventLine(last)} · ${day(last.created_at)}` : 'None in the last fifty events',
       grant: g,
     };
+  });
+}
+
+/**
+ * D5075 part 2 (#5075, DR33): one grant, file by file, for the phone's
+ * investor sheet in place of the matrix's column. Every line is `grantOn`'s,
+ * so it says exactly what the matrix cell for that investor says.
+ */
+export function grantFiles(room, g, now = Date.now()) {
+  const folders = new Map((room?.folders || []).map((f) => [Number(f.id), f]));
+  return (room?.files || []).map((f) => {
+    const r = grantOn(room, f, g, now);
+    return { uid: f.uid, name: f.name, folder: f.folder_id == null ? 'Top level' : folders.get(Number(f.folder_id))?.name || NOT_RECORDED, open: r.open, why: r.open ? 'Can open' : r.why };
   });
 }
 

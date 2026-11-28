@@ -28,11 +28,15 @@ export function hostedGithubRead({ token, fetcher = globalThis.fetch } = {}) {
 /**
  * Trusted-code dependencies only. readReceipt is the authenticated authority client; oidcToken is GitHub's
  * reserved target-job closure. job is the supervisor-owned native object, never a request-supplied ID or flag.
- * No default positive job or eligibility producer is supplied. Every reader port fails closed.
+ * No default positive job or eligibility producer is supplied. Every reader port fails closed, and readProvenance
+ * refuses before any outbound call when no trusted JobContainer serves the receipt's profile (D8345-p1).
  */
 export function createHostedReaders({ audience, readReceipt, oidcToken, githubRead, issuerFetch = globalThis.fetch,
   job, now = Date.now } = {}) {
   let scope = null, proof = null, instance = null;
+  // D8345-p1 (H4): both native documents need this exact trusted job, so without it no reader may spend authority,
+  // OIDC, JWKS or Actions calls first. nativeDocument repeats the check at inspection time.
+  const servesJob = receipt => job instanceof JobContainer && job.profileId === receipt?.profile;
   const currentTime = (receipt, phase) => {
     const time = now();
     need(Number.isSafeInteger(time) && Number.isSafeInteger(receipt.executionDeadline) && time < receipt.executionDeadline
@@ -77,6 +81,7 @@ export function createHostedReaders({ audience, readReceipt, oidcToken, githubRe
   };
   const readProvenance = bounded(async args => {
     proof = null; // A failed refresh cannot leave previous provenance usable by the next reader.
+    need(servesJob(args.receipt), 'hosted_native_job_unconfigured');
     const { receipt, signal, phase } = args, observedAt = currentTime(receipt, phase);
     await authority(args);
     need(typeof audience === 'string' && audience.length > 0 && audience.length <= 200
@@ -133,8 +138,7 @@ export function createHostedReaders({ audience, readReceipt, oidcToken, githubRe
   const nativeDocument = async (args, readiness) => {
     const { receipt, signal, phase } = args;
     await authority(args); const provenance = recentProof(receipt);
-    need(job instanceof JobContainer && job.profileId === receipt.profile
-      && typeof job[readiness ? 'inspectReadiness' : 'inspectBoundary'] === 'function', 'hosted_native_job_unconfigured');
+    need(servesJob(receipt) && typeof job[readiness ? 'inspectReadiness' : 'inspectBoundary'] === 'function', 'hosted_native_job_unconfigured');
     const policy = structuredClone(job.policy), before = readiness ? null : structuredClone(job.boundaryIdentity());
     need(policy.version === 1 && /^sha256:[a-f0-9]{64}$/.test(policy.image ?? '')
       && policy.nodeVersion === '22.23.3' && policy.pythonVersion === '3.11.18', 'hosted_native_runtime_refused');

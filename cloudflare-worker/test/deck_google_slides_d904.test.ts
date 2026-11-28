@@ -171,6 +171,8 @@ function fixture(opts: { scope?: string | null; enabled?: boolean } = {}) {
   for (const t of ['users', 'founders', 'projects', 'pitch_decks', 'activity_logs', 'user_company_links']) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)!));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/034_unmounted_routes.sql'), 'companies')!));
   db.exec(read('cloudflare-worker/sql/migrations/537_deck_exports.sql'));
+  // D8771 (#8771): the ledger records what each file carried.
+  db.exec(read('cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/445_connector_fed_items.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/588_google_workspace_files.sql'));
   db.exec('CREATE TABLE google_oauth_tokens(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER UNIQUE,refresh_token TEXT,scope TEXT,google_sub TEXT,google_email TEXT,updated_at TEXT)');

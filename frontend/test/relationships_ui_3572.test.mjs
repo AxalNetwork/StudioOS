@@ -194,11 +194,11 @@ test('Write the intro: the Email composer from the member\'s own mailbox, and th
 
 test('where it lives: Network › Relationships and Introductions, the LinkedIn connector page, an investor and a Deal flow company', () => {
   const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
-  assert.match(read('workspaces/NetworkWorkspace.jsx'), /slug === 'introductions' && <Suspense fallback=\{null\}><IntroductionsDesk \/>/);
+  assert.match(read('workspaces/NetworkWorkspace.jsx'), /slug === 'introductions' && <Suspense fallback=\{null\}><IntroductionsDesk variant=\{role === 'investor' \? 'investor' : 'default'\} \/>/);
   assert.match(read('workspaces/NetworkWorkspace.jsx'), /slug === 'relationships' && <Suspense fallback=\{null\}><SharingCard testId="network-sharing" \/>/);
   assert.match(read('pages/account/LinkedInSection.jsx'), /<SharingCard testId="linkedin-sharing" \/>/);
   assert.match(read('pages/raise/caprel/CapRelPipeline.jsx'), /<WhoKnowsStrip query=\{prospect\.email \? \{ person: prospect\.email \} : \{ company: prospect\.firm \}\}/);
   assert.match(read('pages/investor/dealflow/PeekDrawer.jsx'), /<WhoKnowsStrip query=\{\{ company: row\.name \}\}/);
-  // Phone: the log scrolls sideways inside its card; dark: every surface carries its dark: class (check-dark-mode).
+  // Phone: from 640px up the log is a table that scrolls inside its card; below it each row stacks (D6257); dark: every surface carries its dark: class (check-dark-mode).
   assert.match(read('pages/relationships/IntroductionsDesk.jsx'), /overflow-x-auto[\s\S]*min-w-\[720px\]/);
 });

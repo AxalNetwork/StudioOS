@@ -154,7 +154,7 @@ test('5965: automatic nonconflicting parts create only a draft; published histor
   assert.equal((await call(w, EDITOR, 'POST', `${paths(ext)}/publish`)).status, 200);
   const lineage = (await call(w, EDITOR, 'GET', `${paths(ext)}/base`)).body.lineage;
   assert.equal(lineage.base_update_available, false);
-  assert.deepEqual(lineage.versions, [{ version: 2, based_on_version: 2 }, { version: 1, based_on_version: 1 }]);
+  assert.deepEqual(lineage.versions.map((v: any) => ({ version: v.version, based_on_version: v.based_on_version })), [{ version: 2, based_on_version: 2 }, { version: 1, based_on_version: 1 }]);
   assert.deepEqual(w.db.prepare('SELECT version FROM agent_skill_links WHERE skill_id = ?').all(row(w, ext).id).map((r: any) => r.version), [1]);
 });
 

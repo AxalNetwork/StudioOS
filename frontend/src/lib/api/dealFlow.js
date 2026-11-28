@@ -25,6 +25,7 @@ export const dealFlowApi = {
   setAttentionRule: (days) => request('/deals/flow/attention-rule', {method:'PUT',body:JSON.stringify({days})}),
   studio: () => request('/deals/studio'),
   flow: () => request('/deals/flow'),
+  flowInline: () => request('/deals/flow', { inlinePaywall: true }), // D6287 part 2: Firm Settings draws its own plan refusal
   add: (body) => request('/deals/flow', { method: 'POST', body: JSON.stringify(body) }),
   update: (dealId, body) => request(`/deals/flow/${id(dealId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   pass: (dealId, body) => request(`/deals/flow/${id(dealId)}/pass`, { method: 'POST', body: JSON.stringify(body) }),
