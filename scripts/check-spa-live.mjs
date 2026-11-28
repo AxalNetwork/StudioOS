@@ -62,8 +62,9 @@
  *     the `studioos` Worker (since 2026-09-01, commit 1d320dda9). The Worker
  *     serves the SPA on EVERY path of either host via `not_found_handling =
  *     "single-page-application"`, so `/` and all deep links return the
- *     shell; `/api/*`, `/landing/*`, `/p/*` and `/assets/*` run the Hono app
- *     first (`run_worker_first`). One build sits behind both hosts and they
+ *     shell, except the paths in wrangler.toml's `run_worker_first` list
+ *     (`/api/*`, `/assets/*` and the others there), which reach the Worker
+ *     script first. One build sits behind both hosts and they
  *     ship together on every deploy. The asset checks ensure each shell
  *     receives its matching JS and CSS.
  *   - There is no other host. The Cloudflare Pages mirror
