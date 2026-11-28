@@ -32,12 +32,22 @@
  * venture, never an investor-only account. That is the rule here, written out
  * in each query. Admin access never widens it: a calendar is the member's own.
  *
+ * LINKS (#9024, owner Q18=b on #3723). Every reader above still sees the
+ * item; only a reader the Distribution routes admit gets its `url`. Whether
+ * they do is `opensGrowDistribution` (`frontend/src/lib/growDistributionAccess.js`):
+ * the route guard's own list and RoleGuard's own rule (`guardAdmits`), given
+ * the reader's `users.role` and their held licences (`heldLicences`, what
+ * `/api/auth/me` reports and RoleGuard reads). An advisor who is an accepted
+ * member sees the venture's Grow items with no link to pages that refuse them.
+ *
  * Voice notes have no reader of their own: a recording (`outreach_steps
  * .recording_*`) carries no date, so it is on the calendar only as its
  * sequence step's due time.
  */
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
+import { heldLicences } from '../accountLicences';
+import { opensGrowDistribution } from '../../../../frontend/src/lib/growDistributionAccess.js';
 
 type Row = Record<string, any>;
 export type GrowDateKind = 'grow_campaign' | 'ad_flight' | 'newsletter_send' | 'sequence_step';
@@ -87,6 +97,26 @@ function timed(kind: GrowDateKind, id: number, uid: string, title: string, at: u
 
 const named = (v: unknown, fallback: string) => String(v ?? '').trim() || fallback;
 
+/**
+ * #9024: whether this reader may open `/grow/distribution/...`, by the route
+ * guard's rule. Asked only when there are items to link. A read that fails
+ * gives no link, never a refused one, and the items are shown all the same.
+ */
+async function opensDistribution(env: Env, userId: number, kind: GrowDateKind): Promise<boolean> {
+  try {
+    const u = await env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string | null }>();
+    if (!u) return false;
+    const role = String(u.role || '').toLowerCase();
+    return opensGrowDistribution(role, await heldLicences(env.DB, { id: Number(u.id), role }));
+  } catch {
+    console.warn('[calendar] grow link role unreadable', { kind });
+    return false;
+  }
+}
+
+/** The item's link, when its reader may open it; otherwise no `url` at all. */
+const linked = (opens: boolean, url: string): { url?: string } => (opens ? { url } : {});
+
 // Every reader joins the member (active, not leaving) and applies the venture
 // read rule above in full. The SQL is literal: the schema guards read every
 // statement as one string, and an interpolated fragment would be skipped.
@@ -109,11 +139,12 @@ export async function growCampaignEvents(env: Env, userId: number, from: string,
         AND julianday(COALESCE(date(c.starts_on), date(c.ends_on))) < julianday(?)
       ORDER BY COALESCE(date(c.starts_on), date(c.ends_on)), c.id`,
   ).bind(userId, from, to).all<Row>());
+  const opens = rows.length > 0 && await opensDistribution(env, userId, 'grow_campaign');
   return rows.map((r) => {
     const uid = String(r.uid);
     return {
       ...spanItem('grow_campaign', Number(r.id), uid, edgeTitle('Campaign', r.starts, r.ends, named(r.name, 'Campaign')), r.starts ?? r.ends, r.ends ?? r.starts),
-      status: String(r.status), project_id: Number(r.project_id), url: `/grow/distribution/campaigns/${encodeURIComponent(uid)}`,
+      status: String(r.status), project_id: Number(r.project_id), ...linked(opens, `/grow/distribution/campaigns/${encodeURIComponent(uid)}`),
     };
   });
 }
@@ -140,11 +171,12 @@ export async function adFlightEvents(env: Env, userId: number, from: string, to:
         AND julianday(COALESCE(date(l.starts_on), date(l.ends_on))) < julianday(?)
       ORDER BY COALESCE(date(l.starts_on), date(l.ends_on)), c.id, g.id`,
   ).bind(userId, from, to).all<Row>());
+  const opens = rows.length > 0 && await opensDistribution(env, userId, 'ad_flight');
   return rows.map((r) => {
     const name = `${named(r.channel_name, 'Paid channel')} · ${named(r.campaign_name, 'Campaign')}`;
     return {
       ...spanItem('ad_flight', Number(r.id), `${r.campaign_uid}:${r.channel_uid}`, edgeTitle('Ad flight', r.starts, r.ends, name), r.starts ?? r.ends, r.ends ?? r.starts),
-      status: String(r.status), project_id: Number(r.project_id), url: '/grow/distribution/ads',
+      status: String(r.status), project_id: Number(r.project_id), ...linked(opens, '/grow/distribution/ads'),
     };
   });
 }
@@ -170,9 +202,10 @@ export async function newsletterSendEvents(env: Env, userId: number, from: strin
                OR (p.company_id IS NOT NULL AND EXISTS (SELECT 1 FROM user_company_links lk WHERE lk.company_id = p.company_id AND lk.user_id = u.id))))
       ORDER BY at, b.id`,
   ).bind(userId, from, to).all<Row>());
+  const opens = rows.length > 0 && await opensDistribution(env, userId, 'newsletter_send');
   return rows.map((r) => ({
     ...timed('newsletter_send', Number(r.id), `beehiiv-post-${r.id}`, `Newsletter sent · ${named(r.title, 'Beehiiv post')}`, r.at),
-    status: 'sent', project_id: Number(r.project_id), url: '/grow/distribution/newsletter',
+    status: 'sent', project_id: Number(r.project_id), ...linked(opens, '/grow/distribution/newsletter'),
   }));
 }
 
@@ -197,9 +230,10 @@ export async function sequenceStepEvents(env: Env, userId: number, from: string,
         AND julianday(e.next_due_at) >= julianday(?) AND julianday(e.next_due_at) < julianday(?)
       ORDER BY at, e.id`,
   ).bind(userId, from, to).all<Row>());
+  const opens = rows.length > 0 && await opensDistribution(env, userId, 'sequence_step');
   return rows.map((r) => ({
     ...timed('sequence_step', Number(r.id), String(r.uid),
       `${STEP_WORDS[String(r.channel)] ?? 'Step'} · step ${Number(r.current_step)} · ${named(r.sequence_name, 'Sequence')}`, r.at),
-    project_id: Number(r.project_id), url: '/grow/distribution/prospects',
+    project_id: Number(r.project_id), ...linked(opens, '/grow/distribution/prospects'),
   }));
 }

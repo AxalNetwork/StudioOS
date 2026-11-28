@@ -52,6 +52,15 @@ export function resolveHeldLicences({ user, realUser, viewMode, isImpersonating 
 }
 
 /**
+ * D4473 — RoleGuard's admission rule: a route's list admits the role browsed as, or any licence held. `App.jsx`'s
+ * RoleGuard calls it, and #9024 reads it from the Worker (`lib/growDistributionAccess.js`), so a link the Worker
+ * offers is decided by the rule the route will apply.
+ */
+export function guardAdmits(allowedRoles, role, held = []) {
+  return allowedRoles.includes(role) || held.some((l) => allowedRoles.includes(l));
+}
+
+/**
  * D7178 (#7044): the Research shell a page is drawn in, from the role browsed as and the licences held. The rule
  * lives in `lib/researchAccess.js` beside the admissions it reads; it is re-exported here, beside the two resolvers
  * it takes its inputs from, so the router reads it from the module it already reads them from.

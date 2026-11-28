@@ -20,6 +20,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { PAGE_ONLY_KINDS, PERSONAL_ONLY_KINDS, eventsToIcs, fetchUserEvents, fetchUserEventsWithSources } from '../src/services/calendar.ts';
 import { SOURCES } from '../src/services/calendar/registry.ts';
@@ -230,6 +231,63 @@ test('§e: no row is invented onto the timeline', async () => {
     ]) assert.ok(!seen.has(k), k);
     // Later steps of e1 (voice, three days on) have no stored time: only the step it stands on is shown.
     assert.equal(events.filter((e) => e.source_uid === UID('d')).length, 1);
+  } finally { db.close(); }
+});
+
+/** The role lists `frontend/src/routes/growDistribution.jsx` guards its tabs with, as written there. */
+function distributionGuards(): string[][] {
+  const src = readFileSync(new URL('../../frontend/src/routes/growDistribution.jsx', import.meta.url), 'utf8');
+  return [...src.matchAll(/path="\/grow\/distribution\/[^"]*" element=\{guard\(\[([^\]]*)\]/g)]
+    .map((m) => m[1].split(',').map((r) => r.trim().replace(/['"]/g, '')).filter(Boolean));
+}
+
+test('#9024 (Q18=b): an advisor who is a member sees every Grow item with no link; a founder keeps the links', async () => {
+  const { db, env } = fixture();
+  try {
+    // 10 is an advisor and an accepted member of venture 10, with no other licence.
+    db.exec(`INSERT INTO users(id,role,name,email,is_active) VALUES (10,'advisor','Member advisor','ten@example.test',1);
+      INSERT INTO project_members(project_id,user_id,role,status) VALUES (10,10,'advisor','accepted');`);
+    const founder = await read(env, 1);
+    const advisor = await read(env, 10, 'advisor');
+    const mate = await read(env, 3);
+    for (const kind of KINDS) {
+      assert.deepEqual(uids(advisor, kind).sort(), uids(mate, kind).sort(), `${kind}: the advisor sees what any member sees`);
+      assert.ok(uids(advisor, kind).length > 0, `${kind}: the advisor has items of this kind`);
+    }
+    for (const e of advisor) assert.equal('url' in e, false, `${e.kind} ${e.source_uid}: no url for an advisor`);
+    for (const i of await describeItems(env, { id: 10, role: 'advisor' }, advisor)) assert.equal(i.href, null, `${i.kind}: no page link`);
+
+    const url = (events: any[], kind: string, uid: string) => events.find((e) => e.kind === kind && e.source_uid === uid)?.url;
+    assert.equal(url(founder, 'grow_campaign', 'camp-both'), '/grow/distribution/campaigns/camp-both');
+    assert.equal(url(founder, 'ad_flight', 'camp-both:ch-google'), '/grow/distribution/ads');
+    assert.equal(url(founder, 'newsletter_send', 'beehiiv-post-1'), '/grow/distribution/newsletter');
+    assert.equal(url(founder, 'sequence_step', UID('d')), '/grow/distribution/prospects');
+    assert.ok(founder.every((e) => typeof e.url === 'string'), 'every founder item keeps its link');
+    // RoleGuard admits a held licence too: an advisor who holds a founder licence opens Distribution.
+    assert.ok((await read(env, 8, 'advisor')).every((e) => typeof e.url === 'string'), 'a held founder licence keeps the links');
+  } finally { db.close(); }
+});
+
+test('#9024: the roles whose Grow items carry a link are the /grow/distribution guard list', async () => {
+  const guards = distributionGuards();
+  assert.equal(guards.length, 10, 'every Distribution tab route is read');
+  const list = guards[0];
+  for (const g of guards) assert.deepEqual(g, list, 'every tab has the same guard');
+  const { db, env } = fixture();
+  try {
+    // One accepted member of venture 10 per role (an investor-only account reads none, so it is not here).
+    const roles = ['admin', 'founder', 'partner', 'advisor', 'exploring'];
+    roles.forEach((role, i) => db.exec(`INSERT INTO users(id,role,name,email,is_active) VALUES (${20 + i},'${role}','Member ${role}','m${20 + i}@example.test',1);
+      INSERT INTO project_members(project_id,user_id,role,status) VALUES (10,${20 + i},'member','accepted');`));
+    const linked: string[] = [];
+    for (const [i, role] of roles.entries()) {
+      const events = await read(env, 20 + i, role);
+      assert.ok(events.length > 0, `${role} sees the venture's Grow items`);
+      const withUrl = events.filter((e) => typeof e.url === 'string').length;
+      assert.ok(withUrl === 0 || withUrl === events.length, `${role}: all linked or none`);
+      if (withUrl) linked.push(role);
+    }
+    assert.deepEqual(linked.sort(), [...list].sort());
   } finally { db.close(); }
 });
 
