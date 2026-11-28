@@ -18,6 +18,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { AdminStudioOverview } from '../src/pages/admin/AdminStudioOverview.jsx';
 import { StudioPostureView } from '../src/pages/admin/StudioPosture.jsx';
+import { StudioSetupRow } from '../src/pages/admin/StudioSetup.jsx';
 import { StudioNeedsDecisionView } from '../src/pages/admin/StudioNeedsDecision.jsx';
 import {
   UNAVAILABLE,
@@ -105,24 +106,30 @@ const POSTURE_OK = {
   ],
 };
 
-test('the posture header is the server\'s count over the bank, not the values on screen', () => {
-  const html = render(createElement(StudioPostureView, { posture: POSTURE_OK }));
+// RE-AIMED BY D8728: the count moved from the posture's header to the Setup row.
+test('the Setup row\'s count is the server\'s count over the bank, not the values on screen', () => {
+  const html = render(createElement(StudioSetupRow, { posture: POSTURE_OK, open: false, onToggle: () => {} }));
   // Two values are on screen (Monthly, Balanced); three are recorded.
   assert.match(html, /3 of 11 admin-bank questions recorded/);
-  const other = render(createElement(StudioPostureView, { posture: { ...POSTURE_OK, recorded: 5, bank_size: 12 } }));
-  assert.match(other, /5 of 12 admin-bank questions recorded/, 'the header typed its numbers');
+  assert.match(html, />8<\/span> answers remaining/);
+  const other = render(createElement(StudioSetupRow, { posture: { ...POSTURE_OK, recorded: 5, bank_size: 12 }, open: false, onToggle: () => {} }));
+  assert.match(other, /5 of 12 admin-bank questions recorded/, 'the row typed its numbers');
+  assert.match(other, />7<\/span> answers remaining/, 'the row typed its remainder');
 });
 
-test('a recorded field shows its value, a skipped one says so, an unanswered one points at the chat', () => {
+// RE-AIMED BY D8728: an unanswered question is no longer a row; Resume setup is the one way to the chat.
+test('a recorded field shows its value, a skipped one says so, and an unanswered one is not listed', () => {
   const html = render(createElement(StudioPostureView, { posture: POSTURE_OK }));
   assert.match(html, /Monthly/);
   assert.match(html, /Balanced/, 'the risk-tolerance chip is missing');
   const skipped = html.slice(html.indexOf('Alert channel'));
-  assert.match(skipped, /^Alert channel<\/dt><dd><span data-state="skipped"[^>]*>Skipped in the chat/);
-  assert.equal((html.match(/data-state="not_recorded"/g) || []).length, 7);
+  assert.match(skipped, /^Alert channel<\/dt><dd><span data-state="skipped"[^>]*>Skipped in the chat<\/span>/);
+  assert.equal((html.match(/data-state="not_recorded"/g) || []).length, 0);
   assert.equal((html.match(/data-state="skipped"/g) || []).length, 1);
-  assert.match(html, /Not recorded/);
-  assert.match(html, /href="#studio-chat"[^>]*>Continue in the chat ↑/);
+  assert.doesNotMatch(html, /Intake priority|Access-review cadence|Escalation condition/, 'an unanswered question is listed again');
+  assert.doesNotMatch(html, /Continue in the chat/, 'the repeated chat link is back');
+  // A section with nothing answered draws no card.
+  assert.doesNotMatch(html, /studio-posture-operations|studio-posture-governance/);
   assert.match(html, /Answered, value not stored/);
   assert.match(html, /href="\/account"[^>]*>Settings →/);
   // D5129: the Not recorded chip's aria-hidden glyph is an <svg> too; a chart would not be aria-hidden.

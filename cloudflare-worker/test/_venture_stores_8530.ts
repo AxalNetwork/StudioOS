@@ -99,6 +99,7 @@ export function repairReferences(db: DatabaseSync): number {
 const OVERRIDES: Record<string, (which: 'A' | 'B') => Record<string, unknown>> = {
   user_company_links: (w) => (w === 'A' ? { role_in_company: 'Admin', is_primary_admin: 1 } : {}),
   work_graph_release_authority_events: () => ({ seq: 1 }), // its trigger takes only the next seq of a key
+  work_graph_release_site_origins: (w) => ({ seq: 1, op: 'allow', origin: `https://s26-${w.toLowerCase()}.example` }), // D5585-p18: next seq, an origin
   // D5585-p16: a line name is the next seq of a line of its own tenant and company (its two triggers).
   work_graph_release_line_names: (w) => ({ seq: 1, tenant_id: 1, line_asset_uid: `s26-line-${w}` }),
   financial_events: () => ({ source: 's26-source' }), // its trigger needs a coverage row for the source

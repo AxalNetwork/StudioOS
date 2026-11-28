@@ -17,7 +17,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export interface SubscriptionPlanRow {
   plan_id: string;
@@ -65,15 +65,14 @@ export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
       "updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_sub_plans_active ON subscription_plans(is_active)');
-    // Task #14 — best-effort ALTERs (idempotent; "duplicate column" is fine).
-    for (const a of [
+    // Task #14's columns. #5343: asked first (`runSchemaBootstrap`), so a
+    // migrated database issues no ALTER; a real failure reaches the catch
+    // below, as it did, and the schema is not marked ready.
+    await runSchemaBootstrap(env, [
       "ALTER TABLE subscription_plans ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'",
       'ALTER TABLE subscription_plans ADD COLUMN native_amount REAL',
       'ALTER TABLE subscription_plans ADD COLUMN native_interval TEXT',
-    ]) {
-      try { await env.DB.exec(a); }
-      catch (e) { if (!/duplicate column/i.test((e as Error).message || '')) throw e; }
-    }
+    ]);
     await env.DB.exec(
       'CREATE TABLE IF NOT EXISTS fx_rates (' +
       'currency TEXT PRIMARY KEY, ' +

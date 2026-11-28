@@ -39,7 +39,7 @@ import { readListedTotals, type ListedTotals } from '../services/listedCompanies
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { companyGroups, companyPage, directoryNameOrder as byName, type CompanyGroup, type CompanyRow } from '../services/researchDirectoryReads';
-import { EUR_SOURCE, SERVED_FUNDS } from '../services/researchFundDirectory';
+import { euroSizeCents, NO_SIZE_CURRENCY, SERVED_FUNDS } from '../services/researchFundDirectory';
 import { distinctObservationsSql, liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON, retrievedAtSql } from '../services/market_intel/liveRows';
 import { periodKey, storedWindow, WINDOW_DAYS } from '../services/market_intel/scoring';
 import {
@@ -57,6 +57,8 @@ const LIST_CAP = 50;
 
 interface FundRow {
   uid: string; name: string; hq: string | null; sector_focus: string | null; fund_size_cents: number | null;
+  /** D7744: the currency the row records its size in; NULL when none is recorded. */
+  fund_size_currency: string | null;
   fund_year: number | null; website: string | null; source_name: string; eif_flag: number; eifo_flag: number;
   notable_lps: string | null; as_of: string | null;
 }
@@ -79,7 +81,7 @@ function oneOf<T extends string>(v: string | undefined, allowed: readonly T[], f
 
 async function funds(env: Env): Promise<FundRow[]> {
   const r = await env.DB.prepare(
-    `SELECT uid, name, hq, sector_focus, fund_size_cents, fund_year, website, source_name,
+    `SELECT uid, name, hq, sector_focus, fund_size_cents, fund_size_currency, fund_year, website, source_name,
             eif_flag, eifo_flag, notable_lps, as_of
        FROM ${SERVED_FUNDS} AS f`,
   ).all<FundRow>();
@@ -117,13 +119,20 @@ const companyDto = (c: CompanyRow, ov: Overrides) => ({
 });
 
 /**
- * THE CURRENCY RULE (D533, as `researchFundDirectory.presentFund` applies it).
- * Only the EuroTech list records sizes in a known currency, euros. Any other
- * source's number is not a size anyone can compare, so it is null with a
- * reason, never printed as if it were euros or dollars.
+ * THE CURRENCY RULE (D533; D7744). These pages compare and print sizes in
+ * euros only (the Geography page prints every size here as euros), so only a
+ * row that records its size in euros has one here — chosen by the row's own
+ * currency through `euroSizeCents`, never by its list's name. Any other size
+ * is null with a reason, never printed as if it were euros.
  */
-export function eurSizeCents(f: Pick<FundRow, 'source_name' | 'fund_size_cents'>): number | null {
-  return f.source_name === EUR_SOURCE && f.fund_size_cents != null ? Number(f.fund_size_cents) : null;
+export function eurSizeCents(f: Pick<FundRow, 'fund_size_cents' | 'fund_size_currency'>): number | null {
+  return euroSizeCents(f);
+}
+
+/** Why a row has no euro size here: none recorded, none in a recorded currency, or one in another currency. */
+function noEuroSizeReason(f: Pick<FundRow, 'fund_size_cents' | 'fund_size_currency'>): string {
+  if (f.fund_size_cents == null) return 'Not recorded';
+  return f.fund_size_currency ? 'Not shown: this page compares sizes in euros only' : NO_SIZE_CURRENCY;
 }
 
 /** EIF/EIFO: true, false only when the fund names its LPs, otherwise null (unknown). */
@@ -140,7 +149,7 @@ const fundDto = (f: FundRow, ov: Overrides) => {
     fund_size_cents: size,
     size_currency: size != null ? 'EUR' : null,
     ...(size != null ? {} : {
-      size_reason: f.source_name === EUR_SOURCE ? 'Not recorded' : 'Not recorded: this list records no size in a known currency',
+      size_reason: noEuroSizeReason(f),
     }),
     eif: backing(f.eif_flag, f),
     eifo: backing(f.eifo_flag, f),

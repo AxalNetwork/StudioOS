@@ -1,10 +1,12 @@
 import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { readAllPages } from '../../../lib/pagedRead';
 import PartialRead, { PipelineReadStatus } from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
+import { matchesFocus, useEngagementFocus } from '../delivery/engagementFocus';
+import { BackToFeedLink, NotFoundNotice, feedItemName } from '../FromStudioBack';
 import {
   BAND, LOW_USE_PCT, TAB_LABEL, attentionSets, healthOf, monthlyEquivalent, retainerRows,
   retainerStrip, scopeText, sheetTabs, utilisationRead,
@@ -356,7 +358,7 @@ function UsageForm({ row, onSave, onDelete, busy }) {
  * something is recorded behind it (`sheetTabs`). Every panel stays mounted and
  * the inactive ones are hidden, so a draft in Terms survives a look at Usage.
  */
-function RetainerSheet({ row, tab, onTab, onClose, handlers, busy, note }) {
+function RetainerSheet({ row, tab, onTab, onClose, handlers, busy, note, backToStudio = false }) {
   const closeRef = useRef(null);
   useEffect(() => {
     const opener = typeof document !== 'undefined' ? document.activeElement : null;
@@ -396,6 +398,7 @@ function RetainerSheet({ row, tab, onTab, onClose, handlers, busy, note }) {
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close retainer"
               className="grid h-11 w-11 place-items-center rounded-lg text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
           </div>
+          {backToStudio && <BackToFeedLink />}
           <h2 id={`${id}-h`} className="mt-1 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">
             {clientName(row) || 'Client not recorded'}
           </h2>
@@ -493,7 +496,13 @@ export default function PartnerRetainersZone() {
   // up on every render — so a refresh hands it the fresh row and keeps it open.
   const [sheet, setSheet] = useState(null);
   const openSheet = (engagementId, tab = 'summary') => setSheet({ id: engagementId, tab });
-  const closeSheet = useCallback(() => setSheet(null), []);
+  // D8733 (#8733, SOP06 C): `?engagement=<uid>` opens that engagement's sheet, as Board does, so the Studio feed's
+  // renewal alert lands on its retainer. Closing the sheet clears the parameter with it.
+  const focus = useEngagementFocus();
+  const [params] = useSearchParams();
+  const fromStudio = params.get('from') === 'studio';
+  const { key: focusKey, clear: clearFocus } = focus;
+  const closeSheet = useCallback(() => { setSheet(null); if (focusKey) clearFocus(); }, [focusKey, clearFocus]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -513,7 +522,10 @@ export default function PartnerRetainersZone() {
     return retainerRows(items);
   }, [view, sets, items]);
   const unretained = useMemo(() => items.filter((r) => !r.retainer), [items]);
-  const sheetRow = items.find((r) => r.engagement_id === sheet?.id) || null;
+  const focusRow = focusKey ? items.find((r) => matchesFocus(r, focusKey)) || null : null;
+  const sheetRow = sheet ? (items.find((r) => r.engagement_id === sheet?.id) || null) : focusRow;
+  // SOP08: an engagement the read does not hold opens nothing, and says so; the retainer list stays as it is.
+  const focusMissing = Boolean(focusKey && !focusRow && !state.loading && !state.error && d);
 
   const handlers = {
     onSaveRetainer: (r, patch) => run(
@@ -577,6 +589,9 @@ export default function PartnerRetainersZone() {
       )}
     >
       <div className="space-y-6">
+        {focusMissing && (
+          <NotFoundNotice name={feedItemName('engagement', focusKey)} where="retainer list" onShowAll={clearFocus} showAllLabel="Show all retainers" />
+        )}
         <PartialRead data={state.data} noun="engagements" onRetry={load} />
         <ZoneHeading
           title="Retainers"
@@ -733,8 +748,8 @@ export default function PartnerRetainersZone() {
     </ZoneBody>
     {sheetRow ? (
       <RetainerSheet
-        row={sheetRow} tab={sheet?.tab} onTab={(t) => setSheet((s) => (s ? { ...s, tab: t } : s))}
-        onClose={closeSheet} handlers={handlers} busy={busy} note={note}
+        row={sheetRow} tab={sheet?.tab} onTab={(t) => setSheet((s) => (s ? { ...s, tab: t } : { id: sheetRow.engagement_id, tab: t }))}
+        onClose={closeSheet} handlers={handlers} busy={busy} note={note} backToStudio={fromStudio}
       />
     ) : null}
     </>

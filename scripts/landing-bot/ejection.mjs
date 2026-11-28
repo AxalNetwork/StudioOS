@@ -11,7 +11,7 @@ import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eligible, LABELS, renderSticky, stickyComment, verdictFor } from './rules.mjs';
-import { classify, consent, decide, evidenceState, groupRunFor, keeperMergedSince, KIND, RETRY_CUTOVER, STRANDED_DAYS } from './ejection-rules.mjs';
+import { classify, consent, decide, evidenceState, gateRequeue, groupRunFor, keeperMergedSince, KIND, requeuePolicy, RETRY_CUTOVER, STRANDED_DAYS } from './ejection-rules.mjs';
 import { client, pages, readBreakers } from './keeper.mjs';
 import { keeperAttempts } from './keeper-plan.mjs';
 import { createGitHubReader } from './feeder-github.mjs';
@@ -121,9 +121,17 @@ export async function sweep(env, {
   gh = client({ repo: env.GITHUB_REPOSITORY, token: env.GH_TOKEN }),
   app = env.EJECTION_APP_TOKEN ? client({ repo: env.GITHUB_REPOSITORY, token: env.EJECTION_APP_TOKEN }) : null,
   now = Date.now(),
+  // The feeder's read-only GitHub reader (feeder-github.mjs), made on first use.
+  reader = null,
   // The same trusted current-head evidence first admission reads (feeder-github.mjs).
-  evidence = (number, sha) => createGitHubReader({ repo: env.GITHUB_REPOSITORY, token: env.GH_TOKEN }).readHeadEvidence(number, sha),
+  evidence = null,
+  // D6476-p7: the same landing decision first admission reads (readLandingDecision(): landPr.decide() on this head).
+  landing = null,
 } = {}) {
+  let shared = reader;
+  const readerNow = () => (shared ??= createGitHubReader({ repo: env.GITHUB_REPOSITORY, token: env.GH_TOKEN, botLogin: env.LANDING_BOT_LOGIN || undefined }));
+  const readEvidence = evidence ?? ((number, sha) => readerNow().readHeadEvidence(number, sha));
+  const readLanding = landing ?? ((number) => readerNow().readLandingDecision(number));
   const botLogin = env.LANDING_BOT_LOGIN;
   const prs = normalise((await gh.graph(Q, {})).pullRequests.nodes);
   const dispatchPr = env.EJECTION_PR ? Number(env.EJECTION_PR) : null;
@@ -152,12 +160,12 @@ export async function sweep(env, {
     try { files = (await gh.get(`pulls/${pr.number}/files?per_page=100`)).map((f) => ({ path: f.filename, previousPath: f.previous_filename })); } catch { /* eligible() waits on an unread diff */ }
     const commits = await gh.get(`pulls/${pr.number}/commits?per_page=100`);
     let ev;
-    try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, required: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
+    try { ev = await readEvidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, required: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
     const fresh = await gh.get(`pulls/${pr.number}`);
     // D6476-p6: the keeper's attempts so far; an unread sticky comment leaves it unknown (null), which changes nothing.
     let stickyBody = null;
     try { stickyBody = stickyComment(await pages(gh, `issues/${pr.number}/comments`, 5), botLogin)?.body ?? ''; } catch { /* null */ }
-    const d = decide({
+    let d = decide({
       keeperAttempts: keeperAttempts({ keeperTriedEvents: pr.keeperTriedEvents, commits, stickyBody }, botLogin).used,
       klass: k.class, mergeable: typeof fresh.mergeable === 'boolean' ? fresh.mergeable : null, keeperMerged: keeperMergedSince(commits, removal.at, botLogin),
       removedAt: removal.at, consent: consent({ ...pr, commits }, { botLogin }),
@@ -166,7 +174,15 @@ export async function sweep(env, {
       eligible: eligible(pr, { env, event: env.GITHUB_EVENT_NAME, dispatchPr, repo: env.GITHUB_REPOSITORY, files, kind: KIND, breakers: brk }),
       breakers: brk, openAlertTitles, requeues, pr: pr.number, now, env, queueRuns,
     });
-    const minutes = Math.round((now - Date.parse(removal.at)) / 60_000);
+    // D6476-p7: before anything is re-queued, the landing policy is read fresh for the head the enqueue names
+    // (landPr.decide() through the feeder's reader), with LANDING_AUTO, #5500, the merge-queue rule and the stalled
+    // alert. A refusal or an unread decision waits or hands back with its reason; it never re-queues.
+    if (d.action === 'requeue') {
+      let decision = null;
+      let error = null;
+      try { decision = await readLanding(pr.number); } catch (e) { error = String(e?.message ?? e).slice(0, 120); }
+      d = gateRequeue(d, requeuePolicy({ landing: decision, error, number: pr.number, headSha: pr.head.sha, env }), { removedAt: removal.at, now });
+    }    const minutes = Math.round((now - Date.parse(removal.at)) / 60_000);
     const line = `#${pr.number}: ${k.class} (${k.why}); ${d.action}${pr.stranded ? ' (stranded label, second look)' : ''}${d.reasons.length ? ` — ${d.reasons.join('; ')}` : ''}; ${minutes} min after the ejection; auto-merge ${pr.autoMerge ? 'still set' : 'not set'}`;
     say(`- ${line}`);
     if (!app) continue;

@@ -2,6 +2,8 @@
 
 `network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
 
+`mutation_atomic_writes.test.mjs` pins `_atomic_write.mjs`, the one way an in-suite mutation check rewrites a source file: a temporary file beside it renamed over it, so a test file running in parallel never imports a truncated copy. The guard fails if any suite under `cloudflare-worker/test`, `frontend/test` or `scripts` writes a mutated or restored source with `writeFileSync(<file>, original…)`. Mutations run on a private copy (`_isolated_mutation_source.mjs`, D6811), not on the checkout.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
@@ -73,6 +75,14 @@ product testing) through the mounted routers on the full schema. Another firm's 
 or advisor 403, an account with no firm 400, no credentials or a disabled account 401, with nothing named and no row or
 file changed; the firm's own partner then passes every gate. An unknown consent-link token answers 404 and writes
 nothing. Its first test fails if a ledger route under `/api/partner` is missing from it.
+
+`authz_research_d4570.test.ts` (#4570, D4570 part 10) asks the 29 `/api/research` ledger routes through the research
+routers, mounted in the Worker's order on the full schema. A member's own record (Library, Ask, benchmarks, collections,
+drafts, fund dossiers and reports, market readings, brief notes, attachments) answers every other account, an admin,
+the Super Admin and a share recipient included, with the 404 a missing record gets, naming nothing and changing
+nothing. The catalogue reads need a session, and Companies follows D7178's rule. The Sheets OAuth callback stores a
+token only for a Super Admin's own unspent, signed state. Its first test fails if a `/api/research` route is left
+`unreviewed`.
 
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
@@ -351,6 +361,7 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `workspace_checkpoint_r2_5568_p2.test.ts` | D5568 part 2: the R2 checkpoint adapter on a faultable in-memory bucket: key, namespace and prefix scope, checksum on put, read-back loss, null and corruption, corruption at rest, paging, the fenced delete, and the service's typed refusals through it; mutations R1 to R7 in its header. |
 | `workspace_checkpoint_store_5568_p2.test.mjs` | D5568 part 2: the pointer and runner stores on a real SQLite Durable Object with the adapter on a real Miniflare R2 bucket (test-only object): racing commits, restart, a runner cancel fencing the old writer, rollback, the store's refusals, the fenced head, retention GC; mutations S1 to S7 in its header. |
 | `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
+| `workspace_cloudflare_5566.test.ts` | D5566: the disabled coding host's controller and Cloudflare adapter with fake provider I/O: default-off, image/policy refusals, grant audiences, cancel/timeout/unknown cleanup, artifact scope and hashes, preview config, and guard mutations; Docker image evidence lives in `workspace-engine/test/`. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
 | File | Guarantee |
@@ -448,3 +459,4 @@ catalogue version only in the fixture.
 | `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
 `capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
+- `role_qualification_8688.test.ts` — D8688: the five role scenarios and a pending-review control, run through the real Worker on local synthetic data with a second tenant each. Their scenarios and fail-closed fixture are in `_role_qualification_8688.ts`, which `scripts/qualification/role-matrix.mjs` also runs.

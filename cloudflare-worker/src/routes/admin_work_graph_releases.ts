@@ -15,6 +15,8 @@
  *   POST /manifests/:manifest/takedown  { tenant_id, company_id, digest, component?: { revision_uid, digest }, reason_code, evidence_ref, authority, idempotency_key }
  *   POST /lines/:line/repin             { tenant_id, company_id, target_manifest_uid, expected_manifest_uid, idempotency_key }
  *   PUT  /lines/:line/name              part 16: { tenant_id, company_id, name, expected_seq, idempotency_key }   name or rename a line
+ *   GET  /site-origins?tenant_id&company_id   part 18: the origins whose browsers may read the company's site records
+ *   POST /site-origins                  part 18: { tenant_id, company_id, op: allow|remove, origin, expected_seq, idempotency_key }
  *   POST /drain                         { limit? }   one bounded drain of the release outbox (at most 25 effects)
  *   GET  /authorities?tenant_id&company_id[&user_id][&history=1]   part 8: who holds which release authority, and the history
  *   POST /authorities/grant             { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
@@ -74,6 +76,7 @@ import {
 } from '../services/workGraphReleaseDirectory';
 import type { ReleaseState } from '../services/workGraphReleases';
 import { UNNAMED, lineNameFields, lineNamesOf, setReleaseLineName } from '../services/workGraphReleaseLineNames';
+import { changeSiteOrigin, siteOriginHistory, siteOriginsOf } from '../services/workGraphReleaseSiteOrigins';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -300,6 +303,38 @@ r.put('/lines/:line/name', async (c) => {
   }
   await out('named', { name: res.name, seq: res.seq, replayed: res.replayed });
   return c.json({ ok: true, scope, lineAssetUid: lineUid, lineName: res.name, lineNameSeq: res.seq, replayed: res.replayed, cost: res.cost });
+});
+
+// Part 18 (D5585-p18): the origins whose browsers may read this company's published site records (part 9).
+r.get('/site-origins', async (c) => {
+  await requireSuperAdmin(c);
+  const scope = queryScope(c);
+  if (!scope) return badScope(c);
+  const m = new Meter(c.env);
+  const list = await siteOriginsOf(c.env, m, scope);
+  const history = await siteOriginHistory(c.env, m, scope);
+  const names = await named(c.env, [...list.origins.map((o) => o.allowedByUserId), ...history.map((h) => h.actorUserId)]);
+  return c.json({ ok: true, scope, origins: list.origins, seq: list.seq, history, people: names.people, cost: addCost(m.cost, names.cost) });
+});
+
+r.post('/site-origins', async (c) => {
+  const user = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const scope = b && scopeFrom(b.tenant_id, b.company_id);
+  if (!b || !scope) return badScope(c);
+  if ((b.op !== 'allow' && b.op !== 'remove') || typeof b.origin !== 'string' || !Number.isSafeInteger(b.expected_seq) || b.expected_seq < 0
+    || typeof b.idempotency_key !== 'string') {
+    return refuse(c, 400, { code: 'malformed', message: 'A change names op (allow or remove), the origin, the list seq you saw (0 for none), and an idempotency key.' });
+  }
+  const base = { tenant_id: scope.tenantId, company_id: scope.companyId, op: b.op, origin: b.origin.slice(0, 270), expected_seq: b.expected_seq, idempotency_key: b.idempotency_key.slice(0, 160) };
+  const out = async (outcome: string, extra: Record<string, unknown> = {}) => audit(c, user, 'work_graph_release_site_origin', { ...base, outcome, ...extra });
+  const res = await changeSiteOrigin(c.env, { scope, op: b.op, origin: b.origin, expectedSeq: b.expected_seq, actorUserId: Number(user.id), idempotencyKey: b.idempotency_key });
+  if (!res.ok) {
+    await out(res.code, { ids: res.ids.slice(0, 20) });
+    return refused(c, { code: res.code, ids: res.ids, cost: res.cost, ...(res.current ? { current: res.current } : {}) });
+  }
+  await out(res.op === 'allow' ? 'allowed' : 'removed', { origin: res.origin, seq: res.seq, replayed: res.replayed });
+  return c.json({ ok: true, scope, op: res.op, origin: res.origin, seq: res.seq, replayed: res.replayed, cost: res.cost });
 });
 
 r.post('/drain', async (c) => {

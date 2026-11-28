@@ -19,6 +19,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { homeTiles, homeFeed, partnerTiles, UNLINKED_REASON } from '../src/pages/partner/PartnerHomeP2.jsx';
+import { feedSummary } from '../src/pages/partner/firmFeedModel.js';
 import StudioModules from '../src/pages/studio/StudioModules.jsx';
 import { studioFromReads } from '../src/pages/studio/useStudioLayout.js';
 
@@ -89,7 +90,9 @@ test('D394: a failed read is unreadable, not empty', () => {
 test('D394: the feed names each line\'s receipt, and a seat reads as recorded by the firm', () => {
   const f = homeFeed({ board: BOARD, retainers: RETAINERS, capacity: CAP_SET });
   const keys = f.map((x) => x.key);
-  assert.deepEqual(keys, ['risk-1', 'due-1', 'due-2', 'cap-9', 'renew-1', 'seat-1']);
+  // D8733: kinds in feed order; within a kind the most pressing first, then by name (neither due row names its next
+  // milestone here, so Thornfield sorts before Verwood).
+  assert.deepEqual(keys, ['risk-1', 'due-2', 'due-1', 'cap-9', 'renew-1', 'seat-1']);
   assert.ok(f.every((x) => x.receipt && x.to), 'every line has a receipt and a place to act');
   assert.equal(f[0].body, '2 milestones overdue');
   assert.equal(f.find((x) => x.key === 'cap-9').body, '46 h a week against a cap of 40 h a week'); // #5314 part 4: one basis
@@ -97,7 +100,10 @@ test('D394: the feed names each line\'s receipt, and a seat reads as recorded by
   assert.equal(seat.grant, 'Scope recorded by the firm: Board, KPIs');
   assert.ok(!f.some((x) => /granted by/i.test(`${x.grant || ''}${x.title}`)), 'no chip speaks in the founder\'s voice');
   assert.ok(!keys.includes('risk-3') && !keys.includes('seat-4'), 'closed and revoked rows stay off the feed');
-  assert.ok(homeFeed({ board: { items: Array.from({ length: 10 }, (_, i) => ({ engagement_id: i, health: 'blocked', status: 'accepted' })) } }).length <= 6);
+  // D8733: the feed keeps every alert; the module's summary (`feedSummary`) is what keeps six.
+  const ten = homeFeed({ board: { items: Array.from({ length: 10 }, (_, i) => ({ engagement_id: i, health: 'blocked', status: 'accepted' })) } });
+  assert.equal(ten.length, 10);
+  assert.equal(feedSummary(ten).length, 6);
 });
 
 const render = (state, studio = STUDIO) => renderedText(renderToStaticMarkup(

@@ -7,7 +7,7 @@
  * replit.md pending-migrations gotcha).
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -49,26 +49,19 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_article_submission_log_author ON article_submission_log(author_id, submitted_at DESC)',
     );
-    // Lazy column backfill for migration 092 (SQLite lacks ADD COLUMN IF NOT EXISTS).
-    // Run once per process, before the _ready guard.
-    const info: any = await env.DB.prepare('PRAGMA table_info(articles)').all();
-    const names = new Set((info.results || []).map((c: any) => c.name));
-    if (!names.has('excerpt')) {
-      await env.DB.exec('ALTER TABLE articles ADD COLUMN excerpt TEXT').catch(() => {});
-    }
-    if (!names.has('seo_title')) {
-      await env.DB.exec('ALTER TABLE articles ADD COLUMN seo_title TEXT').catch(() => {});
-    }
-    if (!names.has('canonical_url')) {
-      await env.DB.exec('ALTER TABLE articles ADD COLUMN canonical_url TEXT').catch(() => {});
-    }
-    if (!names.has('views')) {
-      await env.DB.exec('ALTER TABLE articles ADD COLUMN views INTEGER NOT NULL DEFAULT 0').catch(() => {});
-    }
-    // D1292 — migration 635's approver, for a database the migration has not reached.
-    if (!names.has('approved_by')) {
-      await env.DB.exec('ALTER TABLE articles ADD COLUMN approved_by INTEGER REFERENCES users(id)').catch(() => {});
-    }
+    // Lazy column backfill for migration 092, and D1292's migration 635
+    // approver, for a database the migrations have not reached. #5343
+    // (#4568 R2-04): through `runSchemaBootstrap`, which reads the columns once
+    // per binding and skips an ALTER whose column is there. A failed ALTER used
+    // to be swallowed and the schema marked ready; it now reaches the catch
+    // below and the next call tries again.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE articles ADD COLUMN excerpt TEXT',
+      'ALTER TABLE articles ADD COLUMN seo_title TEXT',
+      'ALTER TABLE articles ADD COLUMN canonical_url TEXT',
+      'ALTER TABLE articles ADD COLUMN views INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE articles ADD COLUMN approved_by INTEGER REFERENCES users(id)',
+    ]);
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[newsSchema] ensure failed:', (e as Error).message);

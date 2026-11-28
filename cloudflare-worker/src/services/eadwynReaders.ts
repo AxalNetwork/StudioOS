@@ -24,6 +24,7 @@ import type { IntegrationRow } from '../integrations/registry';
 import { companyEnabled } from '../integrations/companyScope';
 import { MODULE_LABELS } from '../integrations/moduleLabels';
 import type { ConnectorRead, ConnectorReader } from './eadwynConnectors';
+import { hiddenDealIds, hiddenJson } from './dealPreparation';
 
 /** At most this many rows feed one connector's lines. */
 const READ_LIMIT = 20;
@@ -42,6 +43,14 @@ async function inScope(env: Env, row: IntegrationRow, companyId: number | null):
  * Deals a CRM connection synced, one literal query per CRM: they differ only
  * in the column that holds the CRM's id. Affinity stores its ids in
  * `hubspot_deal_id` too, prefixed `affinity:`; those are not HubSpot's.
+ *
+ * D5454 (#5454, R4): AI context is a discovery reader, and these rows are the
+ * run company's own ventures' deals, so the company reads them as the
+ * venture's owner: a deal whose preparation is never released or unknown is
+ * left out (`hiddenDealIds('transactional')`, bound before the LIMIT), and a
+ * withdrawn or archived release stays, the audience D5454 §3 keeps for it. A
+ * guard failure throws, so `readForRun` drops this connector's lines rather
+ * than feed the model an unfiltered list.
  */
 const CRM_DEALS_SQL = {
   hubspot:
@@ -49,12 +58,14 @@ const CRM_DEALS_SQL = {
        FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE p.company_id = ? AND p.deleted_at IS NULL
         AND d.hubspot_deal_id IS NOT NULL AND d.hubspot_deal_id NOT LIKE 'affinity:%'
+        AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
       ORDER BY d.updated_at DESC, d.id DESC LIMIT ?`,
   salesforce:
     `SELECT p.name AS project_name, d.status, d.amount, d.updated_at
        FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE p.company_id = ? AND p.deleted_at IS NULL
         AND d.sf_opportunity_id IS NOT NULL
+        AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
       ORDER BY d.updated_at DESC, d.id DESC LIMIT ?`,
 } as const;
 
@@ -66,8 +77,9 @@ async function crmDeals(
   noun: string,
 ): Promise<ConnectorRead> {
   if (!(await inScope(env, row, companyId))) return NOTHING(row);
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
   const rows = await env.DB.prepare(CRM_DEALS_SQL[crm])
-    .bind(companyId, READ_LIMIT).all<{ project_name: string | null; status: string; amount: number | null; updated_at: string }>();
+    .bind(companyId, hidden, READ_LIMIT).all<{ project_name: string | null; status: string; amount: number | null; updated_at: string }>();
   const deals = rows.results ?? [];
   return {
     facts: deals.length

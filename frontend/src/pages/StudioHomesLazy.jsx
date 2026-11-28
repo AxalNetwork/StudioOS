@@ -15,6 +15,8 @@ const Investor = lazy(() => import('./investor/InvestorStudioHome'));
 const Advisor = lazy(() => import('./advisor/AdvisorStudioHome'));
 const Partner = lazy(() => import('./partner/PartnerStudioHome'));
 const Admin = lazy(() => import('./admin/AdminStudioHome'));
+// D8730 (#8730): the Founder role as an HQ-held preview draws, never the operator's own Studio.
+const FounderPreview = lazy(() => import('./founder/FounderStudioPreview'));
 
 function Holding({ role }) {
   return (
@@ -36,3 +38,4 @@ export const InvestorStudioHome = wrap('investor', Investor);
 export const AdvisorStudioHome = wrap('advisor', Advisor);
 export const PartnerStudioHome = wrap('partner', Partner);
 export const AdminStudioHome = wrap('admin', Admin);
+export const FounderStudioPreview = wrap('founder', FounderPreview);

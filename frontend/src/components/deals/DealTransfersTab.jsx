@@ -1,8 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { api } from '../../lib/api';
+import { dealStaffApi } from '../../lib/api/dealStaff.js';
+import { verifierOptions } from '../../pages/investor/deals/closingWorkspaceModel';
 import { STATES, amountToCents, centsMoney, transferRefusal, whenLine } from './dealRoomCopy';
-import { Loading, Empty, Unreadable, NotRecorded, StatusPill, Refusal, BTN, INPUT } from './DealRoomKit';
+import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN, INPUT } from './DealRoomKit';
+import DealActionDialog from './DealActionDialog';
+import { refusalWords, transferGateLine } from './dealActionModel';
+
+const GATE_WARN = 'm-0 rounded-[9px] border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200';
 
 /**
  * D630 (#1388) — canvas `dr-transfers`: the deal room's Transfers tab.
@@ -90,66 +96,96 @@ export function TransfersView({ dealId, currency = 'USD', state, onRetry, canRec
   );
 }
 
+/**
+ * D5914 (#5914, Deals v2 board DE14): Record transfer is a dialog in the DX14
+ * shell (`DealActionDialog`): the amount in the deal's currency, the
+ * reference, phone verification and who confirmed it (D6889, an Admin, or Not
+ * recorded), the note, and the firm from the company switcher. The gate read
+ * (`GET /deals/:id/transfer-gate`, D1155) warns before anything is sent when an
+ * open IC condition holds the wire; the Worker still decides, and its refusal
+ * stays in the dialog in its own words.
+ */
 export function RecordTransferForm({ dealId, onClose, onRecorded, initialRefusal = null, currency = 'USD' }) {
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [verified, setVerified] = useState(false);
+  const [verifier, setVerifier] = useState('');
   const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [refusal, setRefusal] = useState(initialRefusal);
+  const [gate, setGate] = useState({ state: 'loading' });
+  const [admins, setAdmins] = useState(null);
+  useEffect(() => {
+    let live = true;
+    dealStaffApi.transferGate(dealId).then((value) => { if (live) setGate({ state: 'ready', value }); }, () => { if (live) setGate({ state: 'unreadable' }); });
+    return () => { live = false; };
+  }, [dealId]);
+  useEffect(() => {
+    if (!verified || admins !== null) return undefined;
+    let live = true;
+    api.listUsers('admin').then((r) => { if (live) setAdmins(Array.isArray(r) ? r : (r?.items || [])); }, () => { if (live) setAdmins(false); });
+    return () => { live = false; };
+  }, [verified, admins]);
+  const warning = transferGateLine(gate);
+  const cents = amountToCents(amount, currency);
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
-    const cents = amountToCents(amount, currency);
-    if (!Number.isFinite(cents)) { setRefusal(transferRefusal({ code: 'transfer_amount_invalid' })); return; }
-    setSaving(true); setRefusal(null);
-    try {
-      await api.dealTransferRecord(dealId, {
-        amount_cents: cents,
-        reference: reference.trim() || null,
-        phone_verified: verified,
-        note: note.trim() || null,
-      });
-      onRecorded?.();
-    } catch (err) {
-      setRefusal(transferRefusal(err));
-    } finally {
-      setSaving(false);
-    }
+  const send = () => {
+    const body = {
+      amount_cents: cents,
+      reference: reference.trim() || null,
+      phone_verified: verified,
+      note: note.trim() || null,
+    };
+    if (verified && Number(verifier) > 0) body.phone_verified_by = Number(verifier);
+    return api.dealTransferRecord(dealId, body);
   };
 
   return (
-    <form onSubmit={submit} className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900 dark:bg-violet-950/20" data-testid="dr-transfer-form">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Record a transfer</h3>
-        <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Close"><X size={16} /></button>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
+    <DealActionDialog testId="dr-transfer-form" goId="dr-transfer-submit" title="Record a transfer" width={520}
+      act={Number.isFinite(cents) ? `Record ${centsMoney(cents, currency)} transfer` : 'Record the transfer'} busyLabel="Recording…"
+      check={() => (Number.isFinite(cents) ? null : transferRefusal({ code: 'transfer_amount_invalid' }))}
+      onConfirm={send}
+      refusalOf={(err) => {
+        const said = transferRefusal(err);
+        return { ...said, body: refusalWords(err, said.body), tone: said.code === 'open_conditions_block_transfer' ? 'warn' : 'bad' };
+      }}
+      initialRefusal={initialRefusal ? { ...initialRefusal, tone: initialRefusal.code === 'open_conditions_block_transfer' ? 'warn' : 'bad' } : null}
+      onDone={() => onRecorded?.()} onClose={onClose}>
+      {warning && (
+        <div className={warning.tone === 'warn' ? GATE_WARN : 'm-0 text-[12.5px] text-gray-500 dark:text-gray-400'} role={warning.tone === 'warn' ? 'status' : undefined} data-testid="dr-transfer-gate">
+          {warning.tone === 'warn' && <span aria-hidden="true" className="mr-1.5 font-bold">!</span>}{warning.text}
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
           Amount ({currency})
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="50,000.00" className={`${INPUT} mt-1`} />
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="50,000.00" className={`${INPUT} mt-1 font-mono`} data-testid="dr-transfer-amount" />
         </label>
         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
           Reference
-          <input value={reference} onChange={(e) => setReference(e.target.value)} className={`${INPUT} mt-1`} />
+          <input value={reference} onChange={(e) => setReference(e.target.value)} className={`${INPUT} mt-1 font-mono`} data-testid="dr-transfer-reference" />
         </label>
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} className="accent-violet-600" />
+        <label className="flex min-h-[44px] items-center gap-2 text-sm text-gray-700 sm:min-h-0 dark:text-gray-300">
+          <input type="checkbox" checked={verified} onChange={(e) => { setVerified(e.target.checked); if (!e.target.checked) setVerifier(''); }} className="accent-violet-600" data-testid="dr-transfer-verified" />
           Phone-verified with the sender
         </label>
-        <p className="text-xs text-gray-500">Firm: the one chosen in the company switcher.</p>
-        <label className="block text-xs font-medium text-gray-600 md:col-span-2 dark:text-gray-400">
+        <p className="m-0 self-center text-xs text-gray-500 dark:text-gray-400">Firm: the one chosen in the company switcher.</p>
+        {verified && (
+          <label className="block text-xs font-medium text-gray-600 sm:col-span-2 dark:text-gray-400">
+            Who confirmed it by phone <span className="font-normal text-gray-500 dark:text-gray-400">· an Admin, optional</span>
+            <select value={verifier} onChange={(e) => setVerifier(e.target.value)} disabled={!Array.isArray(admins)} className={`${INPUT} mt-1 min-h-[44px] sm:min-h-0`} data-testid="dr-transfer-verifier">
+              <option value="">Not recorded</option>
+              {(Array.isArray(admins) ? verifierOptions(admins, null) : []).map((o) => <option key={o.id} value={String(o.id)}>{o.label}</option>)}
+            </select>
+            <span className="mt-0.5 block font-normal text-gray-500 dark:text-gray-400">
+              {admins === false ? 'The list of Admins could not be read, so no verifier can be named. The transfer still records.'
+                : admins === null ? 'Reading the Admins…' : 'Left as Not recorded, the transfer still records.'}
+            </span>
+          </label>
+        )}
+        <label className="block text-xs font-medium text-gray-600 sm:col-span-2 dark:text-gray-400">
           Note (optional)
-          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={`${INPUT} mt-1`} />
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={`${INPUT} mt-1`} data-testid="dr-transfer-note" />
         </label>
       </div>
-      {refusal && <div className="mt-3"><Refusal refusal={refusal} tone={refusal.code === 'open_conditions_block_transfer' ? 'warn' : 'bad'} /></div>}
-      <div className="mt-3 flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={BTN.ghost}>Cancel</button>
-        <button type="submit" disabled={saving} className={BTN.primary} data-testid="dr-transfer-submit">
-          {saving && <Loader2 size={14} className="animate-spin" />} Record the transfer
-        </button>
-      </div>
-    </form>
+    </DealActionDialog>
   );
 }

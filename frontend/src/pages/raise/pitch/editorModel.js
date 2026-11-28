@@ -23,7 +23,13 @@ export const CALLOUTS = [
   { n: '3', t: 'Eadwyn drafts, you keep or discard', d: 'Nothing Eadwyn proposes reaches a version until you keep it.' },
 ];
 export const FIRST_RUN_KEY = 'studioos:pitch-editor:first-run-seen';
-export const NOTES_PLACEHOLDER = 'What you will say on this card. Only you see these.';
+/**
+ * D8771 (#8771): the notes field's words on desktop and phone. "Only you see
+ * these." was not true: anyone who can open the deck in Axal VC reads them, and
+ * an export or investor link that includes notes carries them out.
+ */
+export const NOTES_PLACEHOLDER = 'What you will say on this card.';
+export const NOTES_HELPER = 'People who can open this deck in Axal VC can read these notes. They go into a file or an investor link only when you include them.';
 export const NO_CARDS = 'This version has no cards yet.';
 export const READ_FAILED = 'This version could not be read.';
 export const MODEL_FAILED = 'The editor could not read the slide model.';

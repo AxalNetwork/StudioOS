@@ -38,6 +38,13 @@
 // The runner now names that shape and refuses; `--adopt-legacy-ledger` renames
 // the table to `schema_migrations_legacy` (rows kept) so a baseline can run.
 //
+// Present columns (D8936, #8936): a pending file that fails with `duplicate
+// column name` because Worker runtime DDL already added EVERY column it adds
+// (same name, type and NOT NULL-ness) is adopted in apply mode — its other
+// statements run as one batch and it is recorded like any applied file, with
+// the present columns printed. Partial state and every other error fail as
+// before. scripts/lib/migrationAdopt.mjs holds the rule; DEPLOY.md §4(e).
+//
 // Baseline (one-time, for the existing hand-migrated prod DB):
 //   Because prod already has ~124 migrations applied by hand with no ledger,
 //   the first automated run must NOT blindly replay everything — the historical
@@ -52,7 +59,8 @@
 // Wrangler needs Node 22+ (same as the manual `wrangler d1 execute` commands).
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -72,6 +80,7 @@ import {
   bootstrapStateProblem,
 } from './lib/migrationPlan.mjs';
 import { resolveTarget, bootstrapRefusal, branchConfigPath } from './lib/migrationTargets.mjs';
+import { withPresentColumnAdoption, predictAdoptions } from './lib/migrationAdopt.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKER_DIR = path.join(ROOT, 'cloudflare-worker');
@@ -157,6 +166,28 @@ function printAudit(files) {
     }
   }
   return { report, unsafe };
+}
+
+// D8936 — the live `PRAGMA table_info(<t>)`, keyed by lower-cased column name
+// (an empty map when the table is absent). `t` is checked against a plain-name
+// pattern by migrationAdopt.mjs before it gets here; PRAGMA takes no bind
+// parameter, so that check is the whole of the escaping.
+function liveTableColumns(target, t) {
+  const rows = wrangler(target, { json: true, command: `PRAGMA table_info(${t})` });
+  return new Map(rows.map((r) => [String(r.name).toLowerCase(), r]));
+}
+
+// D8936 — run the statements of a file being adopted as ONE `--file` batch,
+// so D1 applies them all or none, exactly as the `--file` apply they replace.
+function execStatementsAsFile(target, statements, file) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'migrate-d1-adopt-'));
+  const tmp = path.join(dir, file.name);
+  try {
+    writeFileSync(tmp, statements.map((s) => (/;\s*$/.test(s) ? s : `${s};`)).join('\n') + '\n');
+    wrangler(target, { file: tmp });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // Column names of the ledger table on the target, [] when it does not exist.
@@ -437,8 +468,38 @@ function main() {
       );
     }
 
+    // D8936 — a pending file whose columns the Worker already added at
+    // runtime is ADOPTED by a live apply run, and one with only some of them
+    // FAILS. Read the live schema so the plan says which, rather than "apply".
+    let predictions = new Map();
+    if (dryMode === 'apply') {
+      try {
+        predictions = predictAdoptions(dryActions, (t) => liveTableColumns(target, t));
+      } catch (e) {
+        console.log(
+          `\n  NOTE: could not read the live schema (${String(e?.message ?? e).split('\n')[0]}), so this plan ` +
+            'does not say which pending files a live run would adopt (D8936) or fail on.',
+        );
+      }
+    }
+
     console.log('\n[migrate-d1] Plan:');
-    for (const a of dryActions) console.log(`  ${a.action.padEnd(5)} ${a.file.name}`);
+    for (const a of dryActions) {
+      const p = predictions.get(a.file.name);
+      if (p?.action === 'adopt') {
+        console.log(`  adopt ${a.file.name}  (will adopt present columns: ${p.columns.join(', ')}; the rest of the file runs)`);
+      } else if (p?.action === 'fail') {
+        console.log(`  apply ${a.file.name}  \u26a0 will FAIL with duplicate column name and not be adopted: ${p.reason}`);
+      } else {
+        console.log(`  ${a.action.padEnd(5)} ${a.file.name}`);
+      }
+    }
+    if (predictions.size) {
+      console.log(
+        '  (adopt/FAIL read against the live schema now, plus the columns earlier pending files add; ' +
+          'see documentation/operations/DEPLOY.md §4(e).)',
+      );
+    }
     return;
   }
 
@@ -523,10 +584,22 @@ function main() {
 
   if (MODE_BASELINE) printAudit(files);
 
-  const exec = (file) => {
+  const applyFile = (file) => {
     console.log(`[migrate-d1]   applying ${file.name} ...`);
     wrangler(target, { file: `sql/migrations/${file.name}` });
   };
+  // D8936 — in apply mode a file that fails ONLY because the Worker's runtime
+  // DDL already added every column it adds is adopted: its other statements
+  // run as one batch and it is recorded like any applied file. Every other
+  // failure, and any partial state, fails exactly as before.
+  const exec =
+    mode === 'apply'
+      ? withPresentColumnAdoption(applyFile, {
+          tableColumns: (t) => liveTableColumns(target, t),
+          execStatements: (statements, file) => execStatementsAsFile(target, statements, file),
+          log: (line) => console.log(line),
+        })
+      : applyFile;
   const record = (file) => {
     recordMigration(target, file, {
       marked: MODE_BASELINE && !classifyIdempotency(file.sql).idempotent,
@@ -560,10 +633,20 @@ function main() {
     process.exit(1);
   }
 
+  const adopted = exec.adopted ?? [];
   console.log(
     `[migrate-d1] \u2713 Done. applied=${result.applied.length} ` +
-      `marked=${result.marked.length} skipped=${result.skipped.length}.`,
+      `marked=${result.marked.length} skipped=${result.skipped.length}` +
+      (adopted.length ? ` (of the applied, ${adopted.length} adopted present columns)` : '') +
+      '.',
   );
+  if (adopted.length) {
+    console.log(
+      '[migrate-d1] The following files found their columns already present (Worker runtime DDL, D8936); ' +
+        'the columns were not added again, the rest of each file ran, and each is recorded as applied:',
+    );
+    for (const a of adopted) console.log(`    - ${a.file.name}: ${a.columns.join(', ')}`);
+  }
   if (result.marked.length) {
     console.log(
       '[migrate-d1] \u26a0 The following non-idempotent files were RECORDED ' +

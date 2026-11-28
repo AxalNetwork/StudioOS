@@ -314,12 +314,14 @@ const INVESTOR_ROUTES = (over = {}) => ({
 test('mounted CP2: an investor sees their own line and the round’s total, never another investor’s line', async () => {
   const v = await mount({ role: 'investor', routes: INVESTOR_ROUTES() });
   try {
-    assert.match(v.text('closing-head'), /Deals › Acme Robotics › Closing/);
-    assert.match(v.text('closing-your-line'), /Your line · Third-party fund/);
+    // D8926: DE35's header and line card (the route is a row of the card, the round's total its own row).
+    assert.match(v.text('closing-head'), /Your closing room Acme Robotics · Seed round Closing · Open/);
+    assert.match(v.text('closing-your-route'), /^Third-party fund · set by the studio$/);
     assert.match(v.text('closing-your-amount'), /\$300,000\.00/);
     assert.match(v.text('closing-your-paper'), /● Executed/);
     assert.match(v.text('closing-your-money'), /Waiting for money/);
-    assert.match(v.text('closing-round'), /Round: \$650,000\.00 committed.*Other investors in the round are not shown to you\./);
+    assert.equal(v.text('closing-round'), '$650,000.00');
+    assert.match(v.text('closing-your-line'), /Round total \$650,000\.00 Only you, the founder and the studio team see this line\. Other investors are never named\./);
     for (const name of ['Nora Angel', 'Fund I', 'A prospect']) assert.ok(!v.text().includes(name), `${name} never shows to this investor`);
     for (const id of ['closing-tiles', 'closing-lines', 'closing-needs-you', 'closing-account']) assert.ok(!v.has(id), id);
     assert.ok(!v.asked.some((a) => /commitments|closing-checklist|transfers|reporting/.test(a.path)), 'no read of other lines, the checklist, the transfers or the desk');
@@ -546,7 +548,8 @@ test('mounted CP19: an Explorer or Advisor meets the card and no read is made; a
 test('mounted CP20: on a phone, the investor’s room is one column, the step is one line, and actions run the full width', async () => {
   const v = await mount({ role: 'investor', phone: true, routes: INVESTOR_ROUTES() });
   try {
-    assert.match(v.text('closing-steps'), /^Step 4 of 7 · Pay · 1 line not sent$/);
+    // D8926: DE40a's step card: the step that is now, then what it waits on.
+    assert.match(v.text('closing-steps'), /^Step 4 of 7 · Pay Your line is signed; it is not sent yet\.$/);
     assert.match(v.props('closing-review-sign').className, /w-full/);
     assert.match(v.props('closing-see-instructions').className, /min-h-\[48px\] w-full/);
     assert.match(v.props('closing-match-open-p1').className, /w-full/);

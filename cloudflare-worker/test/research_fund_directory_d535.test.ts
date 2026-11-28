@@ -45,6 +45,8 @@ function fixture(funds: Fund[] = FUNDS) {
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT);`);
   db.exec(ddl('365_research_eurotech_fund_directory.sql'));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   // D597: each list's terms review; the route serves fund rows only through it.
   db.exec(readFileSync(resolve(here, '../sql/migrations/406_research_fund_sources.sql'), 'utf8'));
   db.exec(readFileSync(resolve(here, '../sql/migrations/376_research_taxonomy.sql'), 'utf8'));

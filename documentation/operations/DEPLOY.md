@@ -26,7 +26,23 @@ This queues a release of the dispatched `main` SHA. Follow the Actions run for t
 
 ### 1.1 Admission before production writes
 
-For a push or dispatch, the admission job verifies the six required jobs from their expected Actions workflows on the exact landed `main` SHA. A missing or pending result can wait up to 95 minutes, outside the shared production release lock. Failure, an untrusted result, or a newer `main` prevents production writes. A completed CI push can use the merge-queue result through CI's exact-SHA reuse logic. A different merge-group SHA provides no proof for this candidate.
+For a push or dispatch, the admission job verifies the six required jobs from their expected Actions workflows on the landed `main` SHA. A missing or pending result can wait up to 95 minutes, outside the shared production release lock. Failure or an untrusted result prevents production writes.
+
+The candidate need not be the exact `main` tip ([D8932](../architecture/decisions/D8932.md), changing D5501). Both admission checks also accept an ancestor of the tip, provided it:
+
+- is at most 30 commits and 6 hours behind the tip;
+- is not older than the version production serves, the `sha` from `GET https://axal.vc/api/public/version`.
+
+The candidate is refused in these cases:
+
+| Case | Status |
+| --- | --- |
+| Further behind the tip than the bound | `superseded` |
+| Diverged from `main`, or ahead of it | `untrusted` |
+| Older than the deployed version | `stale` |
+| Deployed version unreadable (non-tip candidate) | `unreadable` |
+
+The initial job skips a `superseded` or `stale` candidate; under the lock, every refusal stops the release. The evidence records `main`, `behind_by` and `deployed`. A completed CI push can use the merge-queue result through CI's exact-SHA reuse logic. A different merge-group SHA provides no proof for this candidate.
 
 Under the lock, the release job revalidates eligibility, builds the SPA from the pinned checkout, verifies the production queue inventory, and measures the production-shaped dry-run bundle. It records the migration plan and previous Worker deployment and rechecks `main` immediately before migrations. A missing DLQ must be provisioned by the Cloudflare account owner. An inconclusive queue lookup or startup profile blocks the release. See [D5535](../architecture/decisions/D5535.md) and [D5532](../architecture/decisions/D5532.md).
 
@@ -437,7 +453,8 @@ rehearses; it does not gate the deploy.
 
 ## 4. If a migration fails
 
-`migrate-d1.mjs` aborts loudly and names the offending file. Three cases:
+`migrate-d1.mjs` aborts loudly and names the offending file. Five cases, and
+one, (e), the runner now handles itself:
 
 **(a) A genuinely new migration has bad SQL.**
 Fix the `.sql` file and re-run. The ledger only records files that applied
@@ -496,6 +513,37 @@ which checks each marked file's tables and columns against the live schema and
 un-marks the ones that are absent. Then `--dry-run` shows exactly what a plain
 run will apply. Un-marking a row a baseline wrote without executing is the one
 exception to the rule below: it corrects a claim the ledger never earned.
+
+**(e) `duplicate column name` on a NEW migration whose columns the Worker
+already added at runtime (D8936).**
+Lazy bootstraps such as `services/market_intel/schema.ts` add a column the
+moment code needs it, so production can hold a migration's columns before the
+ledger holds the migration. That stopped every deploy from 2026-11-21 to
+2026-11-27 at `202611191833_7707_market_intel_row_dates_runs.sql`
+(`duplicate column name: observed_period`). The runner adopts that shape
+itself. A plain apply run handles a failed file this way:
+- it reads the live `PRAGMA table_info` of each table the file alters;
+- if **every** `ADD COLUMN` in the file names a column already present, with
+  the same declared type and NOT NULL-ness, it prints those columns;
+- it runs the file's other statements as one batch, all or nothing like the
+  `--file` it replaces;
+- it records the file exactly as an applied file (same checksum).
+
+Nothing changes for a file that applies normally. The runner never adopts in
+these cases, and fails as before, with the original error and a
+`not adopted (D8936): <reason>` line:
+- **partial state**, where some of the columns are present and some absent;
+- a column of a different type;
+- an `ADD` it cannot read;
+- another statement in the file that writes an adopted column (a backfill);
+- any other error, including `table/index already exists`.
+
+Those cases are yours. Inspect the live schema and write a forward migration;
+the files on main stay as they are. `--dry-run` shows the outcome before you
+run: `adopt <file> (will adopt present columns: …)` or
+`apply <file> ⚠ will FAIL … partial state`. After an adopting run the summary
+lists every file adopted and its columns. That list is what to check against
+the code that added them.
 
 ### Two rules with no exceptions
 
