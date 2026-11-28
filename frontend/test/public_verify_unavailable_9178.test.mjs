@@ -41,7 +41,7 @@ async function mounted(answers) {
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/verify/abc'] },
     h(Routes, null, h(Route, { path: '/verify/:token', element: h(PublicCertificateVerifyPage) })))));
-  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(document.body); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
