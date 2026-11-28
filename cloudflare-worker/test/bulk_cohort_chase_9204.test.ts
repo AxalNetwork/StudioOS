@@ -35,16 +35,6 @@ async function call(db: DatabaseSync, path: string, body?: unknown, expectedStat
   assert.equal(res.status, expectedStatus, JSON.stringify(data));
   return { data, prepares, batches };
 }
-test('SQLite D1 fake keeps bound statements independent and returns batched reads', async () => {
-  const db = new DatabaseSync(':memory:');
-  const d1 = d1Over(db);
-  const template = d1.prepare('SELECT ? AS value');
-  const first = template.bind(1), second = template.bind(2);
-  const result = await d1.batch([first, second]);
-  assert.deepEqual(result.map(r => r.results?.[0]?.value), [1,2]);
-  assert.equal((await first.first()).value, 1);
-  db.close();
-});
 test('timeline prepares stay constant for one and twelve cycles, with isolated child rows', async () => {
   const db = fixture();
   const cycle = db.prepare("INSERT INTO cohort_cycles(id,year,month,start_at,end_at) VALUES(?,2026,?, ?, ?)");
@@ -53,10 +43,11 @@ test('timeline prepares stay constant for one and twelve cycles, with isolated c
     cycle.run(id,id,start,`${2026 + (id === 12 ? 1 : 0)}-${String(id === 12 ? 1 : id+1).padStart(2,'0')}-01 00:00:00`);
     db.prepare('INSERT INTO users(id,role,name,email,spinout_lab_active,spinout_lab_started_at) VALUES(?,\'founder\',\'Founder\',?,1,?)').run(100+id,`u${id}@example.test`,start);
     db.prepare('INSERT INTO week_windows(cohort_cycle_id,week_number,unlock_at,deadline_at) VALUES(?,1,?,?)').run(id,start,start);
+    db.prepare('INSERT INTO company_week_status(user_id,cohort_cycle_id,week_number,status) VALUES(?,?,1,?)').run(100+id,id,id%2 ? 'failed' : 'passed');
   }
   const twelve = await call(db,'/api/admin/cohort/timeline');
   assert.equal(twelve.data.cycles.length,12);
-  assert.deepEqual(twelve.data.cycles.map((c: any) => [c.id,c.participant_count,c.windows.length,c.status_counts]), Array.from({length:12},(_,i)=>[12-i,1,1,[]]));
+  assert.deepEqual(twelve.data.cycles.map((c: any) => [c.id,c.participant_count,c.windows.length,c.status_counts]), Array.from({length:12},(_,i)=>[12-i,1,1,[{week_number:1,status:(12-i)%2 ? 'failed' : 'passed',n:1}]]));
   db.exec('DELETE FROM cohort_cycles WHERE id <> 1');
   const one = await call(db,'/api/admin/cohort/timeline');
   assert.equal(twelve.prepares,one.prepares,'twelve cycles must not prepare per-cycle queries');
@@ -86,19 +77,20 @@ test('twenty chase targets use fixed prepares and one write batch; repeats never
 
 test('review batches participants and milestones without mixing windows or people', async () => {
   const db = fixture();
-  const now = Date.now(); // clock-ok: fixtures relative to the request clock
+  const now = Date.now(); // clock-ok: relative
   const stamp = (ms: number) => new Date(ms).toISOString().replace('T',' ').slice(0,19);
   const start = stamp(now - 86400000), end = stamp(now + 86400000);
   db.prepare('INSERT INTO cohort_cycles(id,year,month,start_at,end_at) VALUES(1,2026,1,?,?)').run(start,end);
   db.prepare('INSERT INTO week_windows(cohort_cycle_id,week_number,unlock_at,deadline_at) VALUES(1,1,?,?)').run(start,end);
   const insert = db.prepare("INSERT INTO users(id,role,name,email,spinout_lab_active,spinout_lab_started_at) VALUES(?,'founder','Founder',?,1,?)");
   insert.run(101,'one@example.test',start);
+  db.prepare("INSERT INTO spinout_lab_milestones(user_id,week,milestone_key,completed_at) VALUES(101,1,'project_created',?)").run(start);
   const one = await call(db,'/api/admin/cohort/review');
   for (let id=102;id<=120;id++) insert.run(id,`${id}@example.test`,start);
   const many = await call(db,'/api/admin/cohort/review');
   assert.equal(many.prepares,one.prepares);
   assert.deepEqual(many.data.at_risk.map((r:any)=>r.user_id).sort((a:number,b:number)=>a-b),Array.from({length:20},(_,i)=>101+i));
-  assert.ok(many.data.at_risk.every((r:any)=>r.cycle_id===1 && r.week===1 && r.done===0 && r.required>0 && r.missing.length>0));
+  assert.ok(many.data.at_risk.every((r:any)=>r.cycle_id===1 && r.week===1 && r.done===(r.user_id===101?1:0) && r.required===4 && r.missing.length===(r.user_id===101?3:4)));
   db.close();
 });
 
@@ -150,5 +142,17 @@ test('chase batch rolls back all targets when one insert is refused', async () =
   assert.match(refused.data.detail,/synthetic refusal/);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM portfolio_update_chases').get() as any).n,0);
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM notifications_inbox WHERE type='portfolio_update_chase'").get() as any).n,0);
+  db.close();
+});
+
+test('ineligible targets do not depend on the chase log being readable', async () => {
+  const db = fixture();
+  db.exec("INSERT INTO projects(id,uid,name,founder_id) VALUES(1,'p1','Synthetic',101)");
+  db.exec('DROP TABLE portfolio_update_chases');
+  const result = await call(db,'/api/portfolio/chase',{project_ids:[1]});
+  assert.deepEqual(result.data.chased,[]);
+  assert.deepEqual(result.data.skipped,[1]);
+  assert.deepEqual(result.data.skips.map((row:any)=>[row.project_id,row.reason,row.period,row.due_date]),[[1,'no_obligation',null,null]]);
+  assert.equal(result.batches,0);
   db.close();
 });

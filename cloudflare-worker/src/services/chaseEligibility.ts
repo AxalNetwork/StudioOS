@@ -68,37 +68,50 @@ export async function chaseObligations(
   const result = new Map<number, ChaseObligation>(ids.map(id => [id, skip(scope ? 'unreadable' : 'no_obligation', scope ? period : null)]));
   if (!scope || !period || !bounds || !ids.length) return result;
   try {
-    const heldStmt = env.DB.prepare(`SELECT 1 AS held FROM portfolio_positions p
-      WHERE p.project_id = ? AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
-        OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0) LIMIT 1`);
-    const held = await env.DB.batch(ids.map(id => heldStmt.bind(id, scope.heldCsv, scope.heldCsv, scope.fundCsv)));
-    const heldIds = ids.filter((id, i) => {
-      if (failed(held[i])) throw new ReadFailed('held read failed');
-      if (held[i].results?.length) return true;
+    const selected = JSON.stringify(ids);
+    const held = await env.DB.prepare(`SELECT DISTINCT p.project_id FROM portfolio_positions p
+      WHERE p.project_id IN (SELECT value FROM json_each(?))
+        AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
+          OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)`)
+      .bind(selected, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<{ project_id: number }>();
+    if (failed(held)) throw new ReadFailed('held read failed');
+    const heldSet = new Set((held.results || []).map(row => row.project_id));
+    const heldIds = ids.filter(id => {
+      if (heldSet.has(id)) return true;
       result.set(id, skip('no_obligation')); return false;
     });
     if (!heldIds.length) return result;
-    const dutiesStmt = env.DB.prepare(`SELECT MIN(due_days) AS due_days FROM reporting_duties
-      WHERE status = 'active' AND due_rule = 'after_end' AND cadence = ? AND (? IS NULL OR holder_user_id = ?) AND project_id = ?`);
-    const updatesStmt = env.DB.prepare(`SELECT DISTINCT period FROM portfolio_updates WHERE project_id = ? AND status = 'submitted'`);
-    const reads = await env.DB.batch<{ due_days?: unknown; period?: string }>(heldIds.flatMap(id => [dutiesStmt.bind(cadence, scope.heldCsv, Number(userId), id), updatesStmt.bind(id)]));
+    const heldJson = JSON.stringify(heldIds);
+    const duties = await env.DB.prepare(`SELECT project_id, MIN(due_days) AS due_days FROM reporting_duties
+      WHERE status = 'active' AND due_rule = 'after_end' AND cadence = ? AND (? IS NULL OR holder_user_id = ?)
+        AND project_id IN (SELECT value FROM json_each(?)) GROUP BY project_id`)
+      .bind(cadence, scope.heldCsv, Number(userId), heldJson).all<{ project_id: number; due_days: unknown }>();
+    if (failed(duties)) throw new ReadFailed('duty read failed');
+    const updates = await env.DB.prepare(`SELECT DISTINCT project_id, period FROM portfolio_updates
+      WHERE project_id IN (SELECT value FROM json_each(?)) AND status = 'submitted'`)
+      .bind(heldJson).all<{ project_id: number; period: string }>();
+    if (failed(updates)) throw new ReadFailed('update read failed');
+    const dutyById = new Map((duties.results || []).map(row => [row.project_id, row.due_days]));
+    const reported = new Set((updates.results || []).filter(row => periodCounts(cadence, period, row.period)).map(row => row.project_id));
     const dueDates = new Map<number, string>();
-    for (const [i, id] of heldIds.entries()) {
-      const duties = reads[i * 2], updates = reads[i * 2 + 1];
-      if (failed(duties) || failed(updates)) throw new ReadFailed('obligation read failed');
-      const n = duties.results?.[0]?.due_days;
+    for (const id of heldIds) {
+      const n = dutyById.get(id);
       const dutyDays = n != null && Number.isInteger(Number(n)) && Number(n) >= 0 ? Number(n) : null;
-      if (updates.results?.some(u => periodCounts(cadence, period, u.period || ''))) { result.set(id, skip('already_reported', period)); continue; }
+      if (reported.has(id)) { result.set(id, skip('already_reported', period)); continue; }
       const dueDate = reportDue(bounds.until, dutyDays, false, today).due_date;
       if (dueDate) dueDates.set(id, dueDate);
     }
-    const pending = [...dueDates];
-    const clockStmt = env.DB.prepare(`SELECT CASE WHEN datetime(?) <= datetime('now') THEN 1 ELSE 0 END AS due`);
-    const clocks = pending.length ? await env.DB.batch<{ due: number | null }>(pending.map(([, date]) => clockStmt.bind(date))) : [];
-    for (const [i, [id, due_date]] of pending.entries()) {
-      const due = clocks[i].results?.[0]?.due;
-      result.set(id, failed(clocks[i]) || due == null ? skip('unreadable', period, due_date)
-        : Number(due) !== 1 ? skip('not_due', period, due_date) : { eligible: true, period, due_date });
+    if (dueDates.size) {
+      const clocks = await env.DB.prepare(`SELECT json_extract(value, '$.id') AS project_id,
+        CASE WHEN datetime(json_extract(value, '$.date')) <= datetime('now') THEN 1 ELSE 0 END AS due
+        FROM json_each(?)`).bind(JSON.stringify([...dueDates].map(([id, date]) => ({ id, date }))))
+        .all<{ project_id: number; due: number | null }>();
+      if (failed(clocks)) throw new ReadFailed('clock read failed');
+      for (const { project_id, due } of clocks.results || []) {
+        const due_date = dueDates.get(project_id)!;
+        result.set(project_id, due == null ? skip('unreadable', period, due_date)
+          : Number(due) !== 1 ? skip('not_due', period, due_date) : { eligible: true, period, due_date });
+      }
     }
     return result;
   } catch {

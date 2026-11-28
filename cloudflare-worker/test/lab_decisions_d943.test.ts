@@ -156,13 +156,8 @@ test('D943: two decisions on the same previously read applicant save only one ve
     w.env.DB = { ...db, prepare(sql: string) {
       const st = db.prepare(sql);
       if (sql.startsWith('SELECT ca.*')) {
-        const bind = st.bind.bind(st);
-        st.bind = (...args: any[]) => {
-          const bound = bind(...args);
-          const first = bound.first.bind(bound);
-          bound.first = async () => { const row = await first();if(++arrived===2){clearTimeout(timer);release();}await barrier;return row; };
-          return bound;
-        };
+        const first = st.first.bind(st);
+        st.first = async () => { const row = await first();if(++arrived===2){clearTimeout(timer);release();}await barrier;return row; };
       }
       return st;
     } };

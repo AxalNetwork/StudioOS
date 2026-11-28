@@ -114,20 +114,16 @@ function shape(stmt, binds, sql = '', db = null) {
  */
 export function d1Over(db) {
   return {
-    prepare(sql, initialBinds = []) {
+    prepare(sql) {
       // Prepared lazily: a statement the route builds but never binds (or one
       // referencing a table this fixture omits) must not throw at prepare
       // time, because the routes wrap several reads in try/catch and treat a
       // throw as "table absent", which would silently pass the wrong test.
       let stmt = null;
-      const binds = initialBinds;
+      let binds = [];
       const get = () => (stmt ??= db.prepare(sql));
       const api = {
-        // D1 bindings are immutable: one prepared template may be reused in
-        // a batch without every entry receiving the last entry's parameters.
-        bind(...a) {
-          return d1Over(db).prepare(sql, a);
-        },
+        bind(...a) { binds = a; return api; },
         all: async () => shape(get(), binds, sql, db).all(),
         first: async (col) => shape(get(), binds, sql, db).first(col),
         run: async () => shape(get(), binds, sql, db).run(),
@@ -136,7 +132,6 @@ export function d1Over(db) {
         runSync: () => {
           const st = get();
           if (RETURNING.test(sql)) return returningWrite(db, st, binds);
-          if (st.columns().length) return { success: true, results: st.all(...binds) };
           try {
             return { success: true, meta: meta(st.run(...binds)) };
           } catch (e) {

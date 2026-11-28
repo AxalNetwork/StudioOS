@@ -512,16 +512,16 @@ r.post('/chase', async (c) => {
     ).bind(selected).all<any>() : { results: [] };
     const projectById = new Map((projects.results || []).map(p => [Number(p.id), p]));
     const obligations = scopeRead ? await chaseObligations(c.env, scope, Number(user.id), [...projectById.keys()], cadence, today) : new Map();
-    const recentRows = readable.length ? await c.env.DB.prepare(
+    const eligibleIds = [...projectById.keys()].filter(pid => obligations.get(pid)?.eligible);
+    const recentRows = eligibleIds.length ? await c.env.DB.prepare(
       `SELECT project_id, uid, created_at FROM (
         SELECT project_id, uid, created_at, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY datetime(created_at) DESC) AS rank
         FROM portfolio_update_chases WHERE project_id IN (SELECT value FROM json_each(?))
         AND chased_by = ? AND datetime(created_at) > datetime('now', '-1 hour')
       ) WHERE rank = 1`,
-    ).bind(selected, user.id).all<any>() : { results: [] };
+    ).bind(JSON.stringify(eligibleIds), user.id).all<any>() : { results: [] };
     const recentById = new Map((recentRows.results || []).map(row => [Number(row.project_id), row]));
-    const insert = c.env.DB.prepare('INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at) VALUES (?, ?, ?, ?)');
-    const writes: D1PreparedStatement[] = [];
+    const writes: Array<{ uid: string; project_id: number; chased_by: number; created_at: string }> = [];
     const notifications: Array<{ pid: number; project: any }> = [];
     for (const pid of targets) {
       if (visible != null && !visible.includes(pid)) { skipAs(pid, 'no_obligation'); continue; }
@@ -536,11 +536,15 @@ r.post('/chase', async (c) => {
       }
       const uid = newUid();
       const at = nowIso();
-      writes.push(insert.bind(uid, pid, user.id, at));
+      writes.push({ uid, project_id: pid, chased_by: Number(user.id), created_at: at });
       chased.push({ project_id: pid, uid, created_at: at, already: false, period: due.period, due_date: due.due_date });
       notifications.push({ pid, project });
     }
-    if (writes.length) await c.env.DB.batch(writes);
+    if (writes.length) await c.env.DB.batch([c.env.DB.prepare(
+      `INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at)
+       SELECT json_extract(value, '$.uid'), json_extract(value, '$.project_id'),
+              json_extract(value, '$.chased_by'), json_extract(value, '$.created_at') FROM json_each(?)`,
+    ).bind(JSON.stringify(writes))]);
     // Notifications remain best-effort and follow the successful write batch.
     let founders: Array<{ id: number; founder_id: number }> = [];
     try {
