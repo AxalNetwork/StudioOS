@@ -74,6 +74,8 @@ export const CRON_TRIGGERS: ReadonlyArray<{ name: string; expr: string }> = [
   { name: 'mi_snapshot', expr: '0 4 * * *' },
   { name: 'daily_digest', expr: '0 9 * * *' },
   { name: 'weekly_digest', expr: '0 9 * * 2' },
+  // D5586-p5: the swarm admission retention (services/agents/swarmRetentionSchedule.ts).
+  { name: 'swarm_retention', expr: '17 3 * * *' },
 ];
 
 /**

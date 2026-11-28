@@ -2856,6 +2856,20 @@ const studioos = {
             else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
           } catch (e) { taskFailed('cron_run_history prune', e); }
         }
+        // D5586 part 5 — the swarm admission retention, daily at 03:17 UTC (the
+        // owner's answer C1). One bounded call on the WorkspaceAdmission
+        // coordinator retires settled and withdrawn tickets past their age; a
+        // pass that does not finish carries on tomorrow. D1's audit is never
+        // pruned (B1). NOT GATED ON `hqCadences`: each deployment has its own
+        // coordinator, and one with no binding logs nothing.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 17) {
+          try {
+            const { scheduledSwarmRetention } = await import('./services/agents/swarmRetentionSchedule');
+            const r = await scheduledSwarmRetention(env);
+            if (r.level === 'warn') console.warn(r.line);
+            else if (r.level === 'info') console.info(r.line);
+          } catch (e) { taskFailed('swarm retention', e); }
+        }
         // D358 — the Profiling v2 evolution loop (PROFILING_V2.md §7.8). Every
         // minute of 03:00–03:59 UTC except :15 and :45 (heavier jobs), one
         // bounded tick: Session 8's evidence pass once a day, then each person
