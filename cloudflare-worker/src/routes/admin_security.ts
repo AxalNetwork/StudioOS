@@ -87,6 +87,7 @@ import { absent, type Absent } from '../services/adminSecurity/contract';
 import { loadSecurityOverview } from '../services/adminSecurity/overview';
 import { parseFeedQuery } from '../services/adminSecurity/feedQuery';
 import { feedFilterOf, loadGovernance } from '../services/adminSecurity/governanceFeed';
+import { eraseAccountAgents } from '../agents/erasure';
 
 /** D4708 — the ledger's query contract, still importable from the route that serves it. */
 export {
@@ -723,6 +724,8 @@ r.post('/dsr/:userId/close', async (c) => {
     result = await closeDsrRequest(c.env, {
       userId: uid, actorUserId: actor.id, actorEmail: actor.email, outcome, reason,
       requestedAt, requestId, closeKey,
+      // D9046: `fulfilled` runs the platform's own erasure before it records.
+      erase: () => eraseAccountAgents(c.env, uid),
     });
   } catch (e) {
     return c.json({
@@ -733,6 +736,14 @@ r.post('/dsr/:userId/close', async (c) => {
     }, 503);
   }
 
+  if (result.status === 'erasure_failed') {
+    return c.json({
+      error: 'Nothing was recorded. The platform’s erasure of this account’s agent data (runtime, memory notes, '
+        + 'run summaries and queued tasks) did not complete, so the request is still open and its clock still '
+        + 'runs. Close it again: the erasure is safe to repeat.',
+      code: 'erasure_step_failed',
+    }, 503);
+  }
   if (result.status === 'unconfirmed') {
     return c.json({
       ok: false,
@@ -773,13 +784,15 @@ r.post('/dsr/:userId/close', async (c) => {
     email: target.email,
     outcome,
     requested_at: result.row.requested_at,
-    // THE RESPONSE SAYS WHAT WAS AND WAS NOT DONE. `fulfilled` records that
-    // the manual erasure happened; this platform performs none, and a message
-    // implying otherwise would be the false claim the outcome list exists to
+    // THE RESPONSE SAYS WHAT WAS AND WAS NOT DONE. `fulfilled` ran the one
+    // erasure the platform has (D9046: the account's agent data) and records
+    // that the rest of the manual erasure happened; a message implying the
+    // platform erased more would be the false claim the outcome list exists to
     // avoid.
     message: (result.replayed ? 'Already on record from your earlier attempt. ' : '') + (outcome === 'fulfilled'
       ? `Recorded: ${subject}'s erasure request was fulfilled. This stops the statutory clock and records who `
-        + 'closed it and why. It does not itself erase anything — the erasure is the manual act you are recording.'
+        + 'closed it and why. The platform erased the agent data this account holds (its agents’ runtime, memory '
+        + 'notes, run summaries and queued tasks); it erases nothing else — the rest is the manual act you are recording.'
       : `Recorded: ${subject}'s erasure request was denied, with your reason stored against it. The statutory `
         + 'clock has stopped; they can make a new request.'),
   });

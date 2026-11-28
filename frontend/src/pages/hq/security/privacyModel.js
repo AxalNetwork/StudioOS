@@ -224,6 +224,11 @@ export function closeResultOf(res, err) {
       now: { ...st, line: [by && `${st.word} ${by}`, at && `at ${whenOf(at)}`].filter(Boolean).join(' ') || 'No request is open for this account now' },
     };
   }
+  // D9046: the platform's erasure step failed before anything was recorded. The server knows
+  // nothing landed, so this is not "unconfirmed": the request is open and closing again is safe.
+  if (code === 'erasure_step_failed') {
+    return { result: 'refused', message: err.message || 'Nothing was recorded. The erasure step did not complete; the request is still open. Close it again.' };
+  }
   if (code === 'ledger_unavailable' || (!err?.status || err.status >= 500)) {
     return { result: 'unconfirmed', message: `${err?.message || 'No answer from the server.'} Whether it was recorded is not confirmed. Try again: the same close is recorded at most once.` };
   }

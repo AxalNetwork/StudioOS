@@ -17,7 +17,7 @@ export const DEPLOYMENT_OUTCOMES: readonly ['done', 'failed', 'unreachable', 'no
 export type DeploymentOutcomeWord = (typeof DEPLOYMENT_OUTCOMES)[number];
 export const ACT_OUTCOMES: readonly ['done', 'partial', 'failed'];
 export type ActOutcome = (typeof ACT_OUTCOMES)[number];
-export const DSR_CLOSE_STATUSES: readonly ['closed', 'stale', 'not_open', 'key_conflict', 'unconfirmed'];
+export const DSR_CLOSE_STATUSES: readonly ['closed', 'stale', 'not_open', 'key_conflict', 'unconfirmed', 'erasure_failed'];
 export type DsrCloseStatus = (typeof DSR_CLOSE_STATUSES)[number];
 
 export const MUTATION_RESULTS: readonly [

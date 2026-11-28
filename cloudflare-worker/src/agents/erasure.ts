@@ -74,7 +74,9 @@ export async function eraseAccountRuntime(env: Env, userId: number, rt: Rt = () 
  * D1530 (#3849, E5): an account's erasure, both halves: the runtime above,
  * then the D1 rows (`eraseAgentData`: memory notes, run summaries, queued
  * tasks). The platform has no account delete (D168: erasure is manual); this
- * is what that manual erasure runs.
+ * is what that manual erasure runs. Since D9046, HQ's close of a data-subject
+ * request as `fulfilled` runs it before it records the outcome
+ * (`closeDsrRequest`'s `erase` step), and a throw here leaves the request open.
  */
 export async function eraseAccountAgents(env: Env, userId: number, rt: Rt = () => agentRuntime(env)) {
   await eraseAccountRuntime(env, userId, rt);
