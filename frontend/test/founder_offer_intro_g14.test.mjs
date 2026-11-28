@@ -1,7 +1,7 @@
 /**
  * #9106 (gap g14 of #7675): a founder on /network/introductions offers an introduction between two accepted ties
  * through the sheet D6637 built. The header op is live only when the page supplies it, stays secondary (the canvas,
- * NID01, keeps the primary for Request an introduction, still unbuilt), works while the ledger loads or has failed,
+ * NID01, keeps the primary for Request an introduction), works while the ledger loads or has failed,
  * and a sent offer says so without reloading the ledger: the propositions go to the two ties, not the founder.
  * Sample names only.
  *
@@ -20,7 +20,7 @@ const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
 const props = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
 const text = (n) => (n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
 
-test('Offer one is live only when the page supplies its handler; it is not the primary; Request an intro stays unbuilt', () => {
+test('Offer one is live only when the page supplies its handler; it is not the primary; Request an intro opens the request through Axal', () => {
   const calls = [];
   const ops = founderZoneActions('network/introductions', { handlers: { offerIntroduction: { onClick: () => calls.push('open'), title: 'Offer an introduction between two of your accepted ties.' } } });
   const offer = ops.find((a) => a.label === 'Offer one');
@@ -33,8 +33,8 @@ test('Offer one is live only when the page supplies its handler; it is not the p
   assert.doesNotMatch(offer.title, /#\d+/);
   assert.equal(founderZoneActions('network/introductions').find((a) => a.label === 'Offer one'), undefined, 'no handler, no op');
   const request = founderZoneActions('network/introductions').find((a) => a.label === 'Request an intro');
-  assert.ok(request?.disabled, 'Request an intro is still held');
-  assert.match(request.title, /no screen requests an introduction/);
+  assert.ok(request && !request.disabled, 'Request an intro is live after D9068');
+  assert.equal(request.to, '/network/introductions/requests/new');
 });
 
 async function mountPage(listIntroductions, run) {
