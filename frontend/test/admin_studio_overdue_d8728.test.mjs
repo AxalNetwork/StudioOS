@@ -21,15 +21,17 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 
 import {
-  FROM_STUDIO, OVERDUE_TO, RETURN_KEY, fromStudio, laneTo, overdueView, rememberStudioExit, takeStudioExit,
+  FROM_STUDIO, OVERDUE_TO, RETURN_KEY, fromStudio, keepStudio, laneTo, overdueView, rememberStudioExit, takeStudioExit,
 } from '../src/pages/admin/studioOverdue.js';
-import StudioOverdueCard, { REVIEW_ID } from '../src/pages/admin/StudioOverdueCard.jsx';
+import StudioOverdueCard, { OPEN_IDS, REVIEW_ID, laneLinkId } from '../src/pages/admin/StudioOverdueCard.jsx';
 import { StudioNeedsDecisionView, glanceExceptions } from '../src/pages/admin/StudioNeedsDecision.jsx';
 import { StudioSetupRow } from '../src/pages/admin/StudioSetup.jsx';
 import StudioSetup from '../src/pages/admin/StudioSetup.jsx';
 import { StudioPostureView } from '../src/pages/admin/StudioPosture.jsx';
 import { hiddenByFilter, inboxRows } from '../src/pages/admin/approvals/inboxModel.js';
 import { ApprovalsPage } from '../src/pages/admin/approvals/AdminApprovals.jsx';
+import { resultCount } from '../src/pages/admin/approvals/ApprovalsInbox.jsx';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -381,4 +383,161 @@ test('back on Studio, the card restores the scroll and puts focus on the action 
     globalThis.scrollTo = prev.st;
     restore();
   }
+});
+
+// ------------------------------------------------------------------ part 3 (D8728-p3)
+
+/** A live card in the fake DOM, with sessionStorage and getElementById wired to it. */
+async function mountCard(read, extra = {}) {
+  const restore = installDocument('', { focus: true });
+  const store = memoryStore();
+  const prev = { ss: globalThis.sessionStorage, st: globalThis.scrollTo };
+  globalThis.sessionStorage = store;
+  globalThis.scrollTo = () => {};
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => (n ? Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {} : {});
+  document.getElementById = (id) => walk(container).find((n) => props(n).id === id) || null;
+  const root = createRoot(container);
+  const at = { path: null, state: null };
+  function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}`; at.state = l.state; return null; }
+  return {
+    store, at, props,
+    byId: (id) => walk(container).find((n) => props(n)['data-testid'] === id),
+    async render() { await act(async () => { root.render(h(MemoryRouter, { initialEntries: ['/studio'] }, h(StudioOverdueCard, { read, scope: TERR, ...extra }), h(Probe))); }); },
+    async click(id) {
+      const p = props(walk(container).find((n) => props(n)['data-testid'] === id));
+      assert.ok(p.onClick, `no ${id}`);
+      await act(async () => { p.onClick({ button: 0, defaultPrevented: false, preventDefault() {}, stopPropagation() {}, metaKey: false, altKey: false, ctrlKey: false, shiftKey: false, currentTarget: { target: '' } }); });
+    },
+    async unmount() {
+      await act(async () => root.unmount());
+      globalThis.sessionStorage = prev.ss;
+      globalThis.scrollTo = prev.st;
+      restore();
+    },
+  };
+}
+
+const TWO_LANES = {
+  ...PAST,
+  items: [OVERDUE_ITEM, { lane: 'kyc', lane_label: 'KYC', id: 4, who: 'X', what: 'KYC', age_hours: 73, sla: 'past', assignee: null }],
+  total: 2,
+  unfiltered_total: 3,
+  lanes: [LANES[0], { ...LANES[1], bands: { ok: 0, due_soon: 0, past: 1, unknown: 0 } }, LANES[2]],
+};
+
+test('part 3: every way from the card into Approvals sends Studio\'s state and notes itself, so Back returns to that control', async () => {
+  const cases = [
+    [TWO_LANES, laneLinkId('kyc'), '/admin/approvals?age=past&lane=kyc'],
+    [PAST, OPEN_IDS.onTime, '/admin/approvals'],
+    [{ ...PAST, items: [], total: 0, unfiltered_total: 2, lanes: LANES.map((l) => ({ ...l, bands: { ...l.bands, past: 0 } })) }, OPEN_IDS.zero, '/admin/approvals'],
+    [{ ...PAST, items: [], total: 0, unfiltered_total: 0, lanes: EMPTY_LANES }, OPEN_IDS.decided, '/admin/approvals/decided'],
+  ];
+  for (const [reply, id, path] of cases) {
+    const v = await mountCard(ready(reply));
+    try {
+      await v.render();
+      assert.equal(v.props(v.byId(id)).id, id, `${id} carries no id to return focus to`);
+      await v.click(id);
+      assert.equal(v.at.path, path, `${id} opened the wrong place`);
+      assert.ok(fromStudio(v.at.state), `${id} did not tell Approvals that Studio opened it`);
+      assert.equal(takeStudioExit({ store: v.store })?.target, id, `${id} left no note, so Back cannot return to it`);
+    } finally { await v.unmount(); }
+  }
+  const failed = await mountCard({ status: 'error', reply: null });
+  try {
+    await failed.render();
+    await failed.click(OPEN_IDS.unavailable);
+    assert.equal(takeStudioExit({ store: failed.store })?.target, OPEN_IDS.unavailable);
+  } finally { await failed.unmount(); }
+});
+
+test('part 3: back from a lane line, focus lands on that lane line, not on the primary action', async () => {
+  const v = await mountCard(ready(TWO_LANES));
+  try {
+    rememberStudioExit(laneLinkId('kyc'), { scrollY: 0, store: v.store });
+    await v.render();
+    assert.equal(v.props(document.activeElement).id, laneLinkId('kyc'));
+  } finally { await v.unmount(); }
+});
+
+test('part 3: keepStudio passes on Studio\'s marker only', () => {
+  assert.equal(keepStudio(FROM_STUDIO), FROM_STUDIO);
+  assert.equal(keepStudio({ from: '/studio', other: 1 }), FROM_STUDIO);
+  assert.equal(keepStudio(null), undefined);
+  assert.equal(keepStudio({ moved: true }), undefined, 'unrelated router state was carried into an item');
+});
+
+test('part 3: opening and closing an item keeps Studio\'s crumb; a direct visit still has none', async () => {
+  const v = await mountLanding({ pathname: '/admin/approvals', search: '?age=past', state: FROM_STUDIO });
+  try {
+    await v.click('approvals-open-cohort:219');
+    assert.equal(v.at.path, '/admin/approvals/items/cohort-219?age=past');
+    assert.ok(fromStudio(v.at.state), 'opening the item dropped the visit Studio opened');
+    assert.ok(v.has('admin-page-crumb'), 'the crumb went when the item opened');
+    await v.click('approvals-item-close');
+    assert.equal(v.at.path, '/admin/approvals?age=past');
+    assert.ok(fromStudio(v.at.state), 'closing the item dropped the visit Studio opened');
+    assert.ok(v.has('admin-page-crumb'), 'the crumb went when the item closed');
+  } finally { await v.unmount(); }
+  const direct = await mountLanding('/admin/approvals?age=past');
+  try {
+    await direct.click('approvals-open-cohort:219');
+    assert.ok(!fromStudio(direct.at.state), 'a direct visit gained Studio\'s state by opening an item');
+    assert.ok(!direct.has('admin-page-crumb'));
+  } finally { await direct.unmount(); }
+  // The phone card, the Review cell and the item's own steps pass the same state.
+  const inbox = codeOnly(read('frontend/src/pages/admin/approvals/ApprovalsInbox.jsx'));
+  assert.match(inbox, /<RowCard [^>]*state=\{studioState\}/);
+  assert.match(inbox, /<ReviewCell [^>]*state=\{studioState\}/);
+  const assign = codeOnly(read('frontend/src/pages/admin/approvals/ApprovalsAssign.jsx'));
+  assert.equal((assign.match(/to=\{`\/admin\/approvals\/items\/[^`]+`\} state=\{state\}/g) || []).length, 5, 'an item link drops the state');
+});
+
+test('part 3: the result count is a live status: Reading…, the count, and the lanes read when one did not answer', async () => {
+  assert.equal(resultCount({ status: 'loading' }), 'Reading…');
+  assert.equal(resultCount(ready(PAST)), '1 result');
+  assert.equal(resultCount(ready({ ...PAST, total: 3 })), '3 results');
+  assert.equal(resultCount(ready({ ...PAST, unreadable: ['Events'] })), '1 result · 2 of 3 lanes');
+  assert.equal(resultCount(ready({ ...PAST, total: null })), null, 'a withheld total was drawn');
+  assert.equal(resultCount({ status: 'error', reply: null }), null);
+  const v = await mountLanding({ pathname: '/admin/approvals', search: '?age=past', state: FROM_STUDIO });
+  try {
+    assert.equal(v.props('approvals-result-count').role, 'status');
+    assert.equal(v.of('approvals-result-count'), '1 result');
+  } finally { await v.unmount(); }
+});
+
+test('part 3: removing the last chip, or Clear all, puts focus on Filters', async () => {
+  const onFilters = () => Object.entries(document.activeElement || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.['data-testid'] === 'approvals-filters-open';
+  const v = await mountLanding({ pathname: '/admin/approvals', search: '?age=past', state: FROM_STUDIO });
+  try {
+    document.activeElement = null;
+    await v.click('approvals-chip-remove-age');
+    assert.ok(onFilters(), 'focus fell to the page when the last chip went');
+  } finally { await v.unmount(); }
+  const two = await mountLanding({ pathname: '/admin/approvals', search: '?age=past&lane=cohort', state: FROM_STUDIO });
+  try {
+    document.activeElement = null;
+    await two.click('approvals-chip-remove-age');
+    assert.ok(!onFilters(), 'a chip that was not the last moved focus to Filters');
+    await two.click('approvals-chips-clear');
+    assert.ok(onFilters(), 'Clear all left focus nowhere');
+  } finally { await two.unmount(); }
+});
+
+test('part 3 (⚑2 A): on a branch the Approvals row lights on /admin/approvals, where Studio\'s count lands', () => {
+  const row = SIDEBAR_GROUPS.branch_admin[0].items.find((i) => i.label === 'Approvals');
+  assert.equal(row.to, '/branch/approvals');
+  assert.ok(row.match?.includes('/admin/approvals'), 'the branch row stays dark on the landing');
+  assert.ok(row.match?.includes('/branch/approvals'), 'the row no longer lights on its own page');
+});
+
+test('part 3 (SAD21): "past the window" is retired on Studio in any case, At a glance and Admin pages included', () => {
+  const m = text(html(h(StudioNeedsDecisionView, { user: BRANCH_USER, glance: BRANCH_GLANCE, overdue: ready(PAST) })));
+  const glance = m.slice(m.indexOf('At a glance'));
+  assert.match(glance, /Spin-Out Lab applications · oldest 4 days · 1 open/);
+  assert.doesNotMatch(glance, /past the window|due within 24h/i, 'At a glance carries an urgency word');
 });

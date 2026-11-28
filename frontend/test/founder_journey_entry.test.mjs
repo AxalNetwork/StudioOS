@@ -166,7 +166,7 @@ test('a decision is looked up by id alone, not pinned to the default fund', () =
 
 test('the page fetches per fund and refetches when it changes', () => {
   const src = code(LPQ);
-  assert.match(src, /api\.adminLpApplications\(fund \|\| undefined\)/);
+  assert.match(src, /spinoutLab\.adminLpApplications\(fund \|\| undefined\)/);
   assert.match(src, /\}, \[fund\]\);/, 'load must depend on fund or the queue never refreshes');
 });
 

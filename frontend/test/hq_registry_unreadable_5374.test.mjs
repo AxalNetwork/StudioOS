@@ -120,7 +120,7 @@ test('HQ Home draws an unreadable registry as Unreadable, and keeps the empty-re
     // Each use, so a surviving one is a test gap.
     ['if (!branches.length && registryDown) {', 'if (false) {'],
     ['    if (registryDown) {\n      return {\n        value: sum,', '    if (false) {\n      return {\n        value: sum,'],
-    ['{registryDown && (\n          <div className="mt-4" data-testid="hq-home-registry-unreadable">', '{false && (\n          <div className="mt-4" data-testid="hq-home-registry-unreadable">'],
+    ['{registryDown && (\n            <div data-testid="hq-home-registry-unreadable">', '{false && (\n            <div data-testid="hq-home-registry-unreadable">'],
     ['if (!b && registryDown) return', 'if (false) return'],
     // The other direction: the readable-but-empty page must keep its sentences.
     ['const registryDown = ready && registryUnreadable(data);', 'const registryDown = ready;'],

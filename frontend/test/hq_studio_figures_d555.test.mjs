@@ -107,7 +107,9 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /Exploring 2 · Projects in Trash 0/);
   assert.match(t, /1 deactivated, not counted above/);
   assert.match(t, /No total: a lane could not be read/);
-  assert.match(t, /KYC · 4 pending · oldest 4 days · past the window/);
+  // D8728 part 3 (SAD21): the Inbox's word for the same 72 hours.
+  assert.match(t, /KYC · 4 pending · oldest 4 days · overdue/);
+  assert.doesNotMatch(t, /past the window/);
   assert.match(t, /Jobs · 1 pending · oldest created 5h/);
   assert.match(t, /LP applications could not be read/);
   assert.doesNotMatch(t, /Events · 0 pending/, 'an empty lane is not listed on the card');

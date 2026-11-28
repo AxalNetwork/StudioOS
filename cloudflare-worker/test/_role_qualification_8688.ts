@@ -60,7 +60,7 @@ const BRANCH_SECRET: Record<string, string> = {
   qa8688b: 'd8688-branch-b-fixture-signing-key-'.repeat(2),
 };
 /** The territory fund the local applicants apply to (synthetic). */
-const FUND_SLUG = 'qualification-fund-i';
+export const FUND_SLUG = 'qualification-fund-i';
 /** HQ's clock for the licence copy: a fixed instant, never the real clock. */
 const PUSHED_AT = '2026-11-26T12:00:00.000Z';
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
@@ -122,9 +122,9 @@ export function guard(db: Db, environment: string) {
   assertIsolatedTarget({ environment, database: {}, remote: false, accounts: accounts(db) }, production);
 }
 
-type World = { db: Db; env: any; secret: string };
+export type World = { db: Db; env: any; secret: string };
 
-async function tokenFor(w: World, userId: number) {
+export async function tokenFor(w: World, userId: number) {
   return new SignJWT({ user_id: userId }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('30m')
     .sign(new TextEncoder().encode(w.secret));
 }
@@ -160,7 +160,7 @@ async function me(w: World, who: number) {
 
 // ───────────────────────────────────────────────────────────── HQ world
 
-function hqWorld(): World {
+export function hqWorld(): World {
   const db = migratedDatabase();
   guard(db, 'development');
   const e = syntheticEmail;
@@ -240,7 +240,7 @@ function branchUrls(code: string) {
   return { APP_URL: own, PUBLIC_BASE_URL: own, OAUTH_CALLBACK_BASE_URL: own, PUBLIC_MARKETING_URL: own };
 }
 
-function branchWorld(code: string, applicant: string, applicantKey: string): World & { principal: number; applicationId: number } {
+export function branchWorld(code: string, applicant: string, applicantKey: string): World & { principal: number; applicationId: number } {
   const db = migratedDatabase();
   guard(db, 'development');
   // D.3: the licence principal is the one account a branch starts with, inserted by provisioning.
@@ -259,6 +259,27 @@ function branchWorld(code: string, applicant: string, applicantKey: string): Wor
   };
 }
 
+/**
+ * The test territory: a DRAFT licence per branch of `BRANCHES`, issued through HQ's own routes by the synthetic Super
+ * Admin, then HQ's push in its two halves. `branches[i]` is the world of `BRANCHES[i]`; a missing one is skipped.
+ * Throws on a refusal. The 390 px browser pass's server (`frontend/tests/qualification/server.ts`) provisions with it too.
+ */
+export async function provisionTerritory(hq: World, branches: Array<World | undefined>) {
+  for (const [i, br] of BRANCHES.entries()) {
+    const branch = branches[i];
+    if (!branch) continue;
+    const made = await call(hq, HQ.superAdmin, 'POST', '/api/admin/licences', {
+      licence_ref: br.licenceRef, legal_entity_name: `Territory Holder ${br.code} (synthetic)`, kind: 'subsidiary',
+    });
+    check(made.status === 201 && made.json?.status === 'draft', `HQ refused the draft licence ${br.licenceRef} (${made.status})`);
+    const t = await call(hq, HQ.superAdmin, 'PUT', `/api/admin/licences/${made.json.uid}/territories`, { countries: [br.territory] });
+    check(t.status === 200, `HQ refused territory ${br.territory} (${t.status})`);
+    const row = hq.db.prepare('SELECT * FROM territory_licences WHERE uid = ?').get(made.json.uid) as Record<string, unknown>;
+    const copy = await applyLicenceCopy(branch.env, await assembleLicenceRecord(hq.env, row, PUSHED_AT));
+    check(copy.applied !== false, `branch ${br.code} did not take HQ's licence copy`);
+  }
+}
+
 // ───────────────────────────────────────────────────────────── scenarios
 
 const notRun = (why: string): Row['phone_390'] => ({ result: 'not run', evidence: why });
@@ -271,18 +292,7 @@ async function admin(hq: World): Promise<Row> {
   const [a, b] = [branchWorld(BRANCHES[0].code, BRANCHES[0].applicant, 'applicant-a'), branchWorld(BRANCHES[1].code, BRANCHES[1].applicant, 'applicant-b')];
   let authenticated = 'unreadable';
   try {
-    // The test territory: a DRAFT licence per branch, issued through HQ's own routes by the synthetic Super Admin.
-    for (const [i, br] of BRANCHES.entries()) {
-      const made = await call(hq, HQ.superAdmin, 'POST', '/api/admin/licences', {
-        licence_ref: br.licenceRef, legal_entity_name: `Territory Holder ${br.code} (synthetic)`, kind: 'subsidiary',
-      });
-      check(made.status === 201 && made.json?.status === 'draft', `HQ refused the draft licence ${br.licenceRef} (${made.status})`);
-      const t = await call(hq, HQ.superAdmin, 'PUT', `/api/admin/licences/${made.json.uid}/territories`, { countries: [br.territory] });
-      check(t.status === 200, `HQ refused territory ${br.territory} (${t.status})`);
-      const row = hq.db.prepare('SELECT * FROM territory_licences WHERE uid = ?').get(made.json.uid) as Record<string, unknown>;
-      const copy = await applyLicenceCopy([a, b][i].env, await assembleLicenceRecord(hq.env, row, PUSHED_AT));
-      check(copy.applied !== false, `branch ${br.code} did not take HQ's licence copy`);
-    }
+    await provisionTerritory(hq, [a, b]);
     evidence.push('two draft territory licences issued on HQ (user-assigned codes XQ and XZ); each branch holds its pushed copy');
     authenticated = await me(a, a.principal);
   } catch (e) {

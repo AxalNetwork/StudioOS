@@ -1,5 +1,11 @@
 /**
  * D5882 (#5882): the Inbox (D4814, AP-01 to AP-05), moved out of AdminApprovals.jsx unchanged: Waiting on HQ, the filters panel, the urgency strip, the queue and Workload's decided-this-week line.
+ *
+ * D8728 part 3 (canvas SAD13, SAD20): the result count beside the chips is a
+ * live status ("Reading…" while the read runs, "1 result · 19 of 20 lanes" when
+ * a lane did not answer); removing the last chip, or Clear all, puts focus on
+ * Filters instead of letting it fall to the page; and an item opened from a
+ * view Studio opened keeps Studio's crumb (`keepStudio`).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -16,6 +22,22 @@ import { FOOT } from './boardParts';
 import { debounceApprovalSearch } from './approvalReads';
 import { BTN, BTN_PRIMARY, BTN_SM, CARD, CHIP, CHIP_OFF, CHIP_ON, ChartCard, EYE, FailedCard, H2, LINK, MONO, SELECT, SUB, TD, TH, UrgencyPill } from './approvalsUi';
 import { OwnerCell, ReviewCell, RowActions, RowCard, RowSheet } from './ApprovalsAssign';
+import { keepStudio } from '../studioOverdue';
+
+/**
+ * D8728 part 3 (SAD13 L1, L4): the count read after the chips. Null when there
+ * is nothing to say (a failed read says so in its own card).
+ */
+export function resultCount(inbox) {
+  if (inbox?.status === 'loading') return 'Reading…';
+  const reply = inbox?.status === 'ready' ? inbox.reply : null;
+  if (reply?.total == null || !Number.isFinite(Number(reply.total))) return null;
+  const n = Number(reply.total);
+  const base = `${n.toLocaleString('en-US')} ${n === 1 ? 'result' : 'results'}`;
+  const unread = Array.isArray(reply.unreadable) ? reply.unreadable.filter(Boolean).length : 0;
+  const all = Array.isArray(reply.lanes) ? reply.lanes.length : 0;
+  return unread && all ? `${base} · ${Math.max(0, all - unread).toLocaleString('en-US')} of ${all.toLocaleString('en-US')} lanes` : base;
+}
 
 /** Waiting on HQ (APR1): what this studio asked HQ and still waits on. */
 export function WaitingOnHq({ read }) {
@@ -117,6 +139,10 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
   const [typed, setTyped] = useState(q.typed);
   // D1047 (APR15): the bottom sheets — the filters, or one card's ⋯.
   const [sheet, setSheet] = useState(null);
+  const filtersRef = useRef(null);
+  const studioState = keepStudio(loc.state);
+  // SAD20: the chip (or the whole row) is about to go; focus moves to Filters, which stays.
+  const focusFilters = () => { if (typeof filtersRef.current?.focus === 'function') filtersRef.current.focus(); };
   const setParams = (patch) => {
     const p = new URLSearchParams(loc.search);
     for (const [k, v] of Object.entries(patch)) { if (v) p.set(k, v); else p.delete(k); }
@@ -249,7 +275,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
                   className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-search" />
               </label>
               <div className="ml-auto flex gap-2 max-sm:w-full max-sm:*:flex-1">
-                <button type="button" aria-expanded={sheet?.kind === 'filters'} className={`${BTN} ${nFilters ? CHIP_ON : ''}`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
+                <button ref={filtersRef} type="button" aria-expanded={sheet?.kind === 'filters'} className={`${BTN} ${nFilters ? CHIP_ON : ''}`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
                   {nFilters ? <>Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{nFilters}</span></> : 'Filters'}
                 </button>
                 <label className="flex">
@@ -267,11 +293,11 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
                   <span key={c.key} className="inline-flex items-center gap-1 rounded-full border border-axal-violet bg-axal-lavender py-0.5 pl-2.5 pr-1 text-[12px] font-bold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100" data-testid={`approvals-chip-${c.key}`}>
                     {c.text}
                     <button type="button" aria-label={`Remove ${c.text}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-gray-800"
-                      onClick={() => { if (c.key === 'q') { search.cancel(); setTyped(''); } setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
+                      onClick={() => { if (c.key === 'q') { search.cancel(); setTyped(''); } if (chips.length === 1) focusFilters(); setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
                   </span>
                 ))}
-                <button type="button" className={LINK} onClick={clearFilters} data-testid="approvals-chips-clear">Clear all</button>
-                {reply?.total != null ? <span className={`ml-auto ${SUB} ${MONO}`}>{`${Number(reply.total).toLocaleString('en-US')} ${reply.total === 1 ? 'result' : 'results'}`}</span> : null}
+                <button type="button" className={LINK} onClick={() => { focusFilters(); clearFilters(); }} data-testid="approvals-chips-clear">Clear all</button>
+                <span role="status" className={`ml-auto ${SUB} ${MONO}`} data-testid="approvals-result-count">{resultCount(inbox)}</span>
               </div>
             ) : null}
             {unread.length ? (
@@ -298,7 +324,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
               : rows.length ? (
                 <>
                   <ul className="m-0 list-none p-0 md:hidden" data-testid="approvals-cards">
-                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onAssign={onAssign} onMore={(row) => setSheet({ kind: 'row', row })} />)}
+                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} state={studioState} onAssign={onAssign} onMore={(row) => setSheet({ kind: 'row', row })} />)}
                   </ul>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[760px]" data-testid="approvals-table">
@@ -325,13 +351,13 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
                             <tr key={r.key} aria-selected={selected.has(r.key)} className={`border-b border-axal-hairline last:border-0 dark:border-gray-700 ${selected.has(r.key) ? 'bg-axal-lavender dark:bg-violet-950/30' : ''}`} data-testid={`approvals-row-${r.key}`}>
                               <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
                               <td className={TD}>
-                                <Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link>
+                                <Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} state={studioState} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link>
                                 <div className="text-[12.5px] text-axal-ink dark:text-gray-100">{r.what}</div>
                                 <div className={SUB}>{r.laneLabel}{r.group ? ` · ${r.group}` : ''}</div>
                               </td>
                               <td className={TD}><span className={MONO}>{r.age}</span><UrgencyPill sla={r.sla} /></td>
                               <td className={TD}><OwnerCell row={r} callerId={callerId} onAssign={onAssign} /></td>
-                              <td className={TD}><ReviewCell row={r} search={loc.search} /></td>
+                              <td className={TD}><ReviewCell row={r} search={loc.search} state={studioState} /></td>
                               <td className={TD}><RowActions row={r} onAssign={onAssign} onCopy={copy} /></td>
                             </tr>
                           );

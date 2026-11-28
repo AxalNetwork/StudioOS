@@ -233,7 +233,8 @@ test('My tasks is placed in every licence\'s workspace, and the item sheet\'s As
     ['frontend/src/pages/studio/MultiLicenceStudio.jsx', /!held\.includes\('founder'\) && <MyTasks licence="investor" testId="studio-investor-my-tasks" \/>/],
     ['frontend/src/pages/advisor/practice/EngagementsZone.jsx', /<MyTasks licence="advisor" testId="practice-my-tasks" \/>/],
     ['frontend/src/pages/partner/delivery/BoardZone.jsx', /<MyTasks licence="partner" testId="delivery-my-tasks" \/>/],
-    ['frontend/src/pages/hq/HqHomePage.jsx', /<MyTasks licence="admin" testId="hq-my-tasks" \/>/],
+    // D8727 (#8727): HQ's says Work is off in its own words, and draws no filters while it is.
+    ['frontend/src/pages/hq/HqHomePage.jsx', /<MyTasks licence="admin" testId="hq-my-tasks" offReason=\{HQ_WORK_OFF\} hideControlsWhenOff \/>/],
   ];
   for (const [p, re] of places) assert.match(codeOnly(read(p)), re, p);
   const page = codeOnly(read('frontend/src/pages/work/WorkPage.jsx'));

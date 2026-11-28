@@ -133,7 +133,12 @@ test('approvals say nothing is waiting only when every lane answered empty', () 
   ]);
   assert.match(urgent.text, /Cohort application/);
   assert.match(urgent.text, /6 days/);
-  assert.match(urgent.text, /past the window/);
+  // D8728 part 3 (SAD21): the line is a total; its urgency rides along as `sla` only.
+  assert.doesNotMatch(urgent.text, /past the window|due within/);
+  assert.equal(urgent.sla, 'past');
+  const soon = approvalsGlance([{ key: 'kyc', label: 'KYC', count: 2, oldest_age_hours: 30, sla: 'due_soon' }]);
+  assert.equal(soon.text, 'KYC · oldest 30h · 2 open', 'a lane due soon carries an urgency word on Studio');
+  assert.equal(soon.sla, 'due_soon');
   assert.match(urgent.text, /5 open/);
   assert.doesNotMatch(urgent.text, /^New work/);
 });
@@ -385,7 +390,7 @@ test('a branch with a real read renders seats, the oldest queue, and the zoned d
   assert.match(html, /no seats of this type licensed/);
   assert.match(html, /Cohort application/);
   assert.match(html, /6 days/);
-  assert.match(html, /past the window/);
+  assert.doesNotMatch(html, /past the window/, 'D8728 part 3: the retired band word is back on Studio');
   assert.match(html, /America\/New_York/);
   assert.match(html, /1 HQ template ready to instantiate/);
   assert.match(html, /35% share on this licence/);

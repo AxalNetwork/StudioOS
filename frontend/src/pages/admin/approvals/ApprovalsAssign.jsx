@@ -125,7 +125,7 @@ export function AssignDialog({ items, title, line, inbox, callerId, onClose, onD
  * the queue with the rows before and after it; and the action names where
  * review continues ("Continue review in KYC & KYB →") with why it is there.
  */
-export function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
+export function ItemDrawer({ at, step, search, state, canTake, onClose, onAssign, onTake }) {
   const read = useRead(() => adminApprovalsApi.item(at.lane, at.id), `${at.lane}-${at.id}`);
   const v = itemView(read);
   const ready = v.state === 'ready';
@@ -135,9 +135,9 @@ export function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTak
   const stepper = step ? (
     <div className="flex items-center gap-1.5" data-testid="approvals-item-step">
       <span className={`${SUB} ${MONO}`} data-testid="approvals-item-pos">{step.pos}</span>
-      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={STEP_BOX} data-testid="approvals-item-prev">‹</Link>
+      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} state={state} aria-label="Previous item" className={STEP_BOX} data-testid="approvals-item-prev">‹</Link>
         : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>‹</span>}
-      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={STEP_BOX} data-testid="approvals-item-next">›</Link>
+      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} state={state} aria-label="Next item" className={STEP_BOX} data-testid="approvals-item-next">›</Link>
         : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>›</span>}
     </div>
   ) : null;
@@ -217,13 +217,13 @@ export function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTak
  * lane, its age with the band in words, who owns it (Unassigned in amber),
  * then Open, Assign when nobody owns it, and ⋯. Every target is 44px.
  */
-export function RowCard({ row, search, onMore, onAssign }) {
+export function RowCard({ row, search, state, onMore, onAssign }) {
   const age = cardAge(row);
   const a = row.assignee;
   return (
     <li className="flex flex-col gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[44px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} state={state} className="inline-flex min-h-[44px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
         <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what} · {row.laneLabel}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
@@ -236,7 +236,7 @@ export function RowCard({ row, search, onMore, onAssign }) {
         <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Review in {reviewDestination(row.lane)}</span>
       </div>
       <div className="flex gap-2">
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={`${BTN_PRIMARY} flex-1`} data-testid={`approvals-card-review-${row.key}`}>Open</Link>
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} state={state} className={`${BTN_PRIMARY} flex-1`} data-testid={`approvals-card-review-${row.key}`}>Open</Link>
         {a.kind === 'none' ? <button type="button" className={`${BTN} flex-1`} onClick={() => onAssign([row])} data-testid={`approvals-card-assign-${row.key}`}>Assign</button> : null}
         <button type="button" aria-label={`More actions for ${row.who}`} onClick={() => onMore(row)}
           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
@@ -283,10 +283,10 @@ export function OwnerCell({ row, callerId, onAssign, prefix = 'approvals' }) {
 }
 
 /** D4814: Review opens the item here; the line under it says where review continues. */
-export function ReviewCell({ row, search }) {
+export function ReviewCell({ row, search, state }) {
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={BTN_SM} data-testid={`approvals-review-${row.key}`}>Review</Link>
+      <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} state={state} className={BTN_SM} data-testid={`approvals-review-${row.key}`}>Review</Link>
       <span className="text-[11px] text-axal-muted dark:text-gray-400" data-testid={`approvals-review-in-${row.key}`}>in {reviewDestination(row.lane)}</span>
     </div>
   );

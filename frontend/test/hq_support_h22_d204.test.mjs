@@ -299,10 +299,12 @@ test('the page makes two reads and three writes — the Support route and its HQ
   assert.equal((api.match(/hqSupport: \(\) => request\('\/admin\/hq-support'\)/g) || []).length, 1);
 });
 
-test('HQ Home’s Queue backlog points at the desk that splits it', () => {
-  const home = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
-  const at = home.indexOf('label="Queue backlog"');
+test('HQ Home’s ticket queue points at the desk that splits it', () => {
+  // D8727 (#8727): the Queue backlog tile became the "HQ ticket queue" row of
+  // Other signals, in HQ home's first section; the link to Support stays.
+  const home = codeOnly(read('frontend/src/pages/hq/HqAttention.jsx'));
+  const at = home.indexOf("label: 'HQ ticket queue'");
   assert.ok(at > 0);
-  const tile = home.slice(at, home.indexOf('/>', home.indexOf('tone=', at)));
-  assert.match(tile, /<Link to="\/admin\/hq-support"/);
+  const row = home.slice(at, home.indexOf('},', at));
+  assert.match(row, /<Link to="\/admin\/hq-support"[^>]*>By queue on Support →<\/Link>/);
 });
