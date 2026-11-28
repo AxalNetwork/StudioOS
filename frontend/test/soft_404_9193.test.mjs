@@ -6,6 +6,7 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/soft_404_9193.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { register } from 'node:module';
@@ -16,7 +17,6 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { OG_ROUTES, SITE_NAME, ogTagsFor, prerenderedRoutes } from '../src/lib/ogRegistry.js';
-import { waitUntil } from './_waitUntil.mjs';
 
 const h = React.createElement;
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -49,10 +49,14 @@ async function appAt(route) {
   let shown; let left;
   try {
     await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route] }, h(App))); });
-    // The lazy route chunk loads on its own time: wait for the heading against a deadline, not a fixed sleep (D5614).
-    await waitUntil(() => select(doc, 'h1').length > 0, {
-      label: `a heading at ${route}`, timeoutMs: 15000, advance: () => act(() => new Promise((r) => setImmediate(r))),
-    });
+    // The lazy route chunk loads on its own time. Give the app at least one short tick to settle its head, then
+    // poll for the heading until a real deadline (D5614: a bounded poll, not a fixed sleep). Checking before that
+    // first tick let the 404 unmount before the head had settled under CI load.
+    const deadline = performance.now() + 15000;
+    do {
+      await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
+    } while (!select(doc, 'h1').length && performance.now() < deadline);
+    assert.ok(select(doc, 'h1').length, `a heading at ${route} within 15 s`);
     shown = { ...headNow(), h1s: select(doc, 'h1').map((n) => n.textContent.trim()) };
   } finally {
     await act(async () => root.unmount());
