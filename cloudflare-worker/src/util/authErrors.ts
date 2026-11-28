@@ -26,6 +26,10 @@ import { BRANCH_ONLY, BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './bra
  *  handler already imports, because `index.ts` is a frozen hub (D5615) and takes
  *  no new import. */
 export { reportPrivateError } from './errorPrivacy';
+/** D9186, #9184: `app.onError`'s last two branches (the malformed-body 400 and the
+ *  413/409/500 fallback) reach `index.ts` the same way, for the same reason. */
+export { edgeFallback } from './edgeError';
+export { invalidJson, isMalformedJsonBody } from './jsonBody';
 
 /** The sentence `requireStepUp` throws. A constant so the two readers below
  *  cannot drift from it the way a typed-in copy would. */
@@ -227,4 +231,44 @@ export function stepUpRefusalBody(err: unknown): {
     code: STEP_UP_REQUIRED,
     ttl_minutes: Number.isFinite(ttl) && ttl > 0 ? ttl : 15,
   };
+}
+
+/**
+ * D9192 — the ONE body an anonymous request to a signed-in API gets.
+ *
+ * Before this there were five: `{detail:'Unauthorized'}` from `app.onError`,
+ * `{error:'Unauthorized'}` from events and jobs, `{error:'unauthorized'}` from
+ * event recommendations, and fund notices told a caller with no session that
+ * "This account cannot use fund notices" — a sentence about an account they had
+ * not signed in to. A client could key on none of them. `error` is the code,
+ * `message` and `detail` the sentence (`detail` kept because older readers print
+ * it), as `refusalBody` shapes every other refusal.
+ */
+export const UNAUTHENTICATED_CODE = 'unauthenticated';
+export const UNAUTHENTICATED_SENTENCE = 'Sign in to continue.';
+
+export function unauthenticatedBody(): { error: string; message: string; detail: string } {
+  return { error: UNAUTHENTICATED_CODE, message: UNAUTHENTICATED_SENTENCE, detail: UNAUTHENTICATED_SENTENCE };
+}
+
+/** The sentence `requireAuth` throws when there is no session. */
+export function isUnauthenticated(err: unknown): boolean {
+  return (err as { message?: unknown } | null)?.message === 'Unauthorized';
+}
+
+type JsonContext = { json: (body: unknown, status: any) => Response };
+
+/**
+ * For a route that catches its own `requireAuth` throw: no session answers the
+ * shared 401; a mapped refusal (403, 423) keeps its own status, as `app.onError`
+ * answers it; anything else is not a refusal and is thrown again, so a failed
+ * session read is a server error rather than a 401 that sends a signed-in
+ * member to the sign-in page.
+ */
+export function authRefusal(c: JsonContext, err: unknown): Response {
+  if (isUnauthenticated(err)) return c.json(unauthenticatedBody(), 401);
+  const msg = (err as { message?: unknown } | null)?.message;
+  const status = typeof msg === 'string' ? AUTH_ERROR_STATUSES[msg] : undefined;
+  if (status) return c.json({ detail: msg }, status);
+  throw err;
 }

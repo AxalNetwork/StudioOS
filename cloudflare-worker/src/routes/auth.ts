@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
@@ -528,7 +529,9 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
 }));
 
 auth.post('/resend-verification', async (c) => {
-  const { email } = await c.req.json().catch(() => ({} as any));
+  const jsonBody = await readJsonObject(c, { allowEmpty: true });
+  if (jsonBody instanceof Response) return jsonBody;
+  const { email } = jsonBody;
   const genericMsg = 'If an account exists with that email, a verification link has been sent.';
 
   if (!email || typeof email !== 'string') {

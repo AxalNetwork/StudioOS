@@ -507,7 +507,7 @@ import { CronTaskLog, leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, reportPrivateError, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, edgeFallback, invalidJson, isMalformedJsonBody, stepUpRefusalBody } from './util/authErrors';
 import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
@@ -1839,7 +1839,7 @@ app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 // to the right HTTP status. Without this, RBAC failures surface as 500s and
 // the frontend can't distinguish "log in again" from "the server crashed".
 
-app.onError((err: any, c) => {
+app.onError(async (err: any, c) => {
   const msg = (err?.message ?? '') as string;
   // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
   // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
@@ -1861,8 +1861,10 @@ app.onError((err: any, c) => {
   }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);
-  reportPrivateError('edge_unhandled', err);
-  return c.json({ detail: 'Internal server error' }, 500);
+  // #9184 — a bare `c.req.json()` on a malformed body is the caller's mistake: 400, not 500.
+  if (err instanceof SyntaxError && await isMalformedJsonBody(c)) return invalidJson(c);
+  // D9186: an HTTPException's own answer, 409 for a constraint failure, else 500; logged with method and route.
+  return edgeFallback(c, err);
 });
 
 // JWT_SECRET strength check runs at the very top of every request handler.

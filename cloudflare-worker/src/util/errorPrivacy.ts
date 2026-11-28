@@ -31,7 +31,21 @@ export function errorDiagnostic(error: unknown): { kind: string } {
 
 export type ErrorEvent = 'edge_unhandled' | 'map_error' | 'schema_mismatch' | 'refusal' | 'import_row' | 'visual_request';
 
-export function reportPrivateError(event: ErrorEvent, error: unknown, code?: string): void {
+/**
+ * D9186 (#9186): where a failure happened, as fixed shapes only: the HTTP method and the matched route
+ * PATTERN (`c.req.routePath`, `/api/x/:id`), never the request path, so no id or path parameter is logged.
+ */
+export type ErrorWhere = { method?: string; route?: string };
+
+function whereFields(where?: ErrorWhere): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!where) return out;
+  if (typeof where.method === 'string') out.method = /^[A-Z]{3,7}$/.test(where.method) ? where.method : 'other';
+  if (typeof where.route === 'string' && /^\/[\w\-./:*{}+?]{0,199}$/.test(where.route)) out.route = where.route;
+  return out;
+}
+
+export function reportPrivateError(event: ErrorEvent, error: unknown, code?: string, where?: ErrorWhere): void {
   let text = '';
   try {
     const value = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
@@ -39,7 +53,7 @@ export function reportPrivateError(event: ErrorEvent, error: unknown, code?: str
   } catch { /* A diagnostic getter must never replace the original failure. */ }
   // Fixed classifications retain actionable provider evidence without copying its response.
   const providerCode = ['card_declined', 'rate_limit_exceeded', 'insufficient_funds'].find(value => text.includes(value));
-  console.error('[error]', JSON.stringify({ event, ...errorDiagnostic(error),
+  console.error('[error]', JSON.stringify({ event, ...whereFields(where), ...errorDiagnostic(error),
     ...(code && /^[a-z][a-z0-9_]{0,63}$/.test(code) ? { code } : {}),
     ...(providerCode ? { provider_code: providerCode } : {}) }));
 }

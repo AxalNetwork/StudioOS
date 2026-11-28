@@ -73,6 +73,7 @@ import {
 } from '../services/eventBadges';
 import { archetypeAccess } from '../services/archetypeEntitlement';
 import { refuse } from '../util/refusal';
+import { authRefusal } from '../util/authErrors';
 import { scheduleCalendarCancellation } from './_eventCalendar';
 import { memberEventLink } from '../services/eventLinks';
 import { onEventCancelled, onEventEdited } from '../services/eventSyndication/hooks';
@@ -84,8 +85,9 @@ const ACTIVE_REG = ['registered', 'confirmed', 'attended', 'waitlisted'];
 async function auth(c: any): Promise<User | Response> {
   try {
     return await requireAuth(c);
-  } catch {
-    return c.json({ error: 'Unauthorized' }, 401);
+  } catch (err) {
+    // D9192: the shared unauthenticated body; 403/423 keep their status.
+    return authRefusal(c, err);
   }
 }
 

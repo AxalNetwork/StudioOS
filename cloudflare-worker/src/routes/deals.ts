@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { dealActivitySources } from '../services/dealActivitySources';
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { investorPreviewRefusal } from '../util/investorPreview';
@@ -437,7 +438,8 @@ deals.get('/screening', async (c) => {
 
 deals.post('/', async (c) => {
   const user = await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   // Bank proof and receipt matching still operate in USD; no FX is implied.
@@ -478,7 +480,8 @@ deals.post('/', async (c) => {
 // ---------------------------------------------------------------------------
 deals.post('/draft', async (c) => {
   const user = await requireAdmin(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   // Bank proof and receipt matching still operate in USD; no FX is implied.
@@ -688,7 +691,8 @@ deals.put('/:id', async (c) => {
   // are limited to commitments + invitation responses.
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
@@ -1198,7 +1202,8 @@ deals.post('/:id/commitments', async (c) => {
   if (previewRefusal) return previewRefusal;
   await requireApprovedKyc(c);
   const id = Number(c.req.param('id'));
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const amount = Number(data.amount);
   if (!Number.isFinite(amount) || amount <= 0) return c.json({ detail: 'Commitment amount must be positive' }, 400);
   const db = c.env.DB;
@@ -1896,7 +1901,8 @@ deals.get('/:id/invitations', async (c) => {
 deals.post('/:id/invitations', async (c) => {
   const admin = await requireAdmin(c);
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.status, p.name AS project_name FROM deals d LEFT JOIN projects p ON p.id = d.project_id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
@@ -1943,7 +1949,8 @@ deals.post('/:id/invitations/respond', async (c) => {
   const previewRefusal = investorPreviewRefusal(c, user);
   if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const resp = data.response;
   if (resp !== 'interested' && resp !== 'passed') return c.json({ detail: "response must be 'interested' or 'passed'" }, 400);
   const sql = getSQL(c.env);

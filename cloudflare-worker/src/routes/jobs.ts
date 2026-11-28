@@ -18,6 +18,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { authRefusal } from '../util/authErrors';
 import { ensureJobBoardSchema } from '../services/jobBoardSchema';
 import {
   canManagePosting,
@@ -37,8 +38,9 @@ const jobs = new Hono<{ Bindings: Env }>();
 async function auth(c: any): Promise<User | Response> {
   try {
     return await requireAuth(c);
-  } catch {
-    return c.json({ error: 'Unauthorized' }, 401);
+  } catch (err) {
+    // D9192: the shared unauthenticated body; 403/423 keep their status.
+    return authRefusal(c, err);
   }
 }
 

@@ -16,6 +16,8 @@ belongs in `../services/`.
 | `zip.ts` | Zip assembly for exports. |
 | `hashEmail.ts` | Email hashing for privacy-preserving lookups. |
 | `refusal.ts` | D278 — `refuse` / `refusalBody` build a refusal body when something we did not write failed: a code in `error`, our sentence in `message` and `detail`, the raw text logged beside the code and, for an owner or an admin console, clipped on `upstream`. `rowFailureSentence` does the same for an import row. `scripts/check-refusal-bodies.mjs` holds the routes to it. |
+| `edgeError.ts` | D9186 — `edgeFallback`, the last branch of `index.ts`'s `app.onError`: an `HTTPException`'s own answer (a `bodyLimit` 413), 409 with a fixed refusal body for a D1 UNIQUE or FOREIGN KEY failure, else the generic 500. It logs `edge_unhandled` with the method, the route pattern and a fixed D1 class (`d1ErrorClass`), never the message or the request path. |
+| `jsonBody.ts` | #9184 — `readJsonObject(c)` reads a route's JSON body as a plain object, or returns the 400 to send: `invalid_json` when it does not parse, `body_not_object` for `null`, an array or a scalar (`allowEmpty` reads no body as `{}`). `isMalformedJsonBody` is `app.onError`'s test for answering a bare read's SyntaxError with 400. `scripts/check-json-body.mjs` keeps raw c.req.json reads in `routes/` from growing. |
 | `stripeError.ts` | Parses Stripe errors into a status/code/type shape. |
 | `stripeTax.ts` | Tax handling. |
 | `paymentMode.ts` | Live vs test mode resolution. |

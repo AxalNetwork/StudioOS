@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -1015,7 +1016,8 @@ legal.get('/documents/:id', async (c) => {
 
 legal.post('/documents', async (c) => {
   const user = await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
   // IDOR guard: founders can only create documents under their own project.
   if (data.project_id) {
@@ -1052,7 +1054,9 @@ legal.put('/documents/:id/sign', async (c) => {
   // are blocked; admins still pass through.
   const user = await requireApprovedKyc(c);
   const id = parseInt(c.req.param('id'));
-  const { signed_by } = await c.req.json();
+  const jsonBody = await readJsonObject(c);
+  if (jsonBody instanceof Response) return jsonBody;
+  const { signed_by } = jsonBody;
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, p.founder_id as project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Document not found' }, 404); }

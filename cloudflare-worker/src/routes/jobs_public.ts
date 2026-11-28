@@ -13,6 +13,7 @@
  * public only after an admin approves it — there is no by-slug admittance for
  * un-approved roles.
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
@@ -101,7 +102,8 @@ jobsPublic.get('/jobs/:slug', async (c) => {
 // ── POST /jobs/:slug/apply — public application (Turnstile) ─────────────────
 jobsPublic.post('/jobs/:slug/apply', async (c) => {
   const slug = c.req.param('slug');
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = await readJsonObject(c, { allowEmpty: true });
+  if (body instanceof Response) return body;
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const ok = await verifyTurnstile(c.env, String(body.turnstile_token || body.turnstileToken || ''), clientIp);
   if (!ok) return c.json({ error: 'turnstile_failed', code: 'turnstile_failed' }, 403);

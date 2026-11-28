@@ -43,6 +43,8 @@ import { requireAuth, requireAdmin } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { hashEmail } from '../util/hashEmail';
 import { bindingKey } from '../util/schemaBootstrap';
+import { reportPrivateError } from '../util/errorPrivacy';
+import { refusalBody } from '../util/refusal';
 
 const assistant = new Hono<{ Bindings: Env }>();
 
@@ -120,6 +122,13 @@ async function ensureSchema(env: Env): Promise<void> {
     console.error('[assistant] schema:', (e as Error).message);
   }
 }
+
+// D9189 (#9189): what a stream's `error` event and a failed tool say. The
+// exception or provider text goes to `reportPrivateError`, never to the browser
+// or into the tool result Eadwyn reads and the conversation stores.
+export const ASSISTANT_FAILED = 'Eadwyn could not finish this answer. Try again in a moment.';
+export const ASSISTANT_UPSTREAM_FAILED = 'Eadwyn could not reach its model just now. Try again in a moment.';
+export const TOOL_FAILED = 'tool_failed';
 
 function newUid(): string {
   // 16-byte uid; matches the rest of the worker's `uid` columns.
@@ -503,7 +512,7 @@ function safeJson<T>(s: string): T | null {
 //   tool_result { name, ok }
 //   delta { text }
 //   done { conversation_uid, message_id, usage, cost_usd_micros, model }
-//   error { message }
+//   error { error, message, detail, upstream? }  (D9189: a fixed code and sentence; `upstream` for admins only)
 // ---------------------------------------------------------------------------
 assistant.post('/message', async (c) => {
   const user = await requireAuth(c);
@@ -603,7 +612,12 @@ assistant.post('/message', async (c) => {
           });
           if (!res.ok || !res.body) {
             const errText = await res.text().catch(() => '');
-            send('error', { message: `assistant upstream ${res.status}`, detail: errText.slice(0, 400) });
+            // D9189 (#9189): the provider's body is logged as a classification;
+            // only an admin sees it, clipped, on `upstream`.
+            send('error', refusalBody({
+              code: 'assistant_upstream_failed', message: ASSISTANT_UPSTREAM_FAILED, raw: errText,
+              audience: user.role === 'admin' ? 'admin' : 'member', extra: { status: res.status },
+            }));
             close();
             return;
           }
@@ -714,7 +728,8 @@ assistant.post('/message', async (c) => {
             let resultJson: unknown;
             let ok = true;
             try { resultJson = await execTool(c.env, user, t.name, t.input, await activeCompanyFor(c, user)); }
-            catch (e) { ok = false; resultJson = { error: (e as Error).message }; }
+            // D9189: Eadwyn is given a fixed code, never the exception's text.
+            catch (e) { ok = false; reportPrivateError('refusal', e, TOOL_FAILED); resultJson = { error: TOOL_FAILED }; }
             const resultText = sanitiseToolText(JSON.stringify(resultJson));
             send('tool_result', { name: t.name, ok });
             toolResultBlocks.push({ type: 'tool_result', tool_use_id: t.id, content: `<tool_result>${resultText}</tool_result>` });
@@ -742,7 +757,10 @@ assistant.post('/message', async (c) => {
           model: usedModel,
         });
       } catch (e) {
-        send('error', { message: (e as Error).message || 'assistant failed' });
+        send('error', refusalBody({
+          code: 'assistant_failed', message: ASSISTANT_FAILED, raw: e,
+          audience: user.role === 'admin' ? 'admin' : 'member',
+        }));
       } finally {
         // Hashed-actor activity log (T22.1) — never log plaintext email.
         // `entity_type` / `entity_id`, not `target_*`: those are the columns

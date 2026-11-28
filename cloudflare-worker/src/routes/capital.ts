@@ -8,6 +8,7 @@
  * Response shapes preserve legacy keys (`committed_capital`, `called_capital`,
  * `fund_name`, `lp_investor_id`) so the existing frontend continues to work.
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -90,7 +91,8 @@ capital.post('/investors', async (c) => {
   // something an LP does for themselves. Admin-only (investors keep read +
   // pay-own-call access). Inlined to match the role checks in the scoped reads.
   if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
   const fundName = data.fund_name || 'Axal Fund I';
 
@@ -166,7 +168,8 @@ capital.post('/calls', async (c) => {
   if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
   // D714: issuing is a Super Admin act, here as on the fund routes.
   await assertAdminAct(c, __u, 'capital_call.issue');
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   // Accept either canonical or legacy field name.
   const lpId = data.limited_partner_id ?? data.lp_investor_id;
   if (!lpId) return c.json({ error: 'limited_partner_id is required' }, 422);
