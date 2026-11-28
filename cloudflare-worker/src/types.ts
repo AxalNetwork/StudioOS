@@ -573,6 +573,9 @@ export interface Env {
   // GET /api/public/release-sites/:tenant/:company/:site). Unset (the default) or any other value, it refuses 404
   // `release_sites_off` before any D1 or R2 read. The owner sets it.
   WORK_GRAPH_RELEASE_SITES?: string;
+  // D5585 part 20 (#5585): the HMAC-SHA256 key that signs release webhooks (services/workGraphReleaseWebhooks.ts).
+  // A Worker secret the owner sets (at least 32 characters). Unset, the webhook distribution channel is not offered.
+  RELEASE_WEBHOOK_SIGNING_KEY?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test

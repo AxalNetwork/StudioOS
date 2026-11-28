@@ -15,6 +15,8 @@
  *   POST /manifests/:manifest/takedown  { tenant_id, company_id, digest, component?: { revision_uid, digest }, reason_code, evidence_ref, authority, idempotency_key }
  *   POST /lines/:line/repin             { tenant_id, company_id, target_manifest_uid, expected_manifest_uid, idempotency_key }
  *   PUT  /lines/:line/name              part 16: { tenant_id, company_id, name, expected_seq, idempotency_key }   name or rename a line
+ *   GET  /webhooks?tenant_id&company_id   part 20: the company's signed-webhook destinations, and whether signing is set
+ *   POST /webhooks                      part 20: { tenant_id, company_id, op: register|disable, name, url?, audiences?, expected_seq, idempotency_key }
  *   POST /drain                         { limit? }   one bounded drain of the release outbox (at most 25 effects)
  *   GET  /authorities?tenant_id&company_id[&user_id][&history=1]   part 8: who holds which release authority, and the history
  *   POST /authorities/grant             { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
@@ -74,6 +76,7 @@ import {
 } from '../services/workGraphReleaseDirectory';
 import type { ReleaseState } from '../services/workGraphReleases';
 import { UNNAMED, lineNameFields, lineNamesOf, setReleaseLineName } from '../services/workGraphReleaseLineNames';
+import { changeWebhook, webhookDestination, webhooksOf } from '../services/workGraphReleaseWebhooks';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -300,6 +303,46 @@ r.put('/lines/:line/name', async (c) => {
   }
   await out('named', { name: res.name, seq: res.seq, replayed: res.replayed });
   return c.json({ ok: true, scope, lineAssetUid: lineUid, lineName: res.name, lineNameSeq: res.seq, replayed: res.replayed, cost: res.cost });
+});
+
+// Part 20 (D5585-p20): the company's signed-webhook destinations for external distribution. A webhook's effect ref is
+// `webhook:<destination>`. `signing` says whether the Worker holds the signing key: without it nothing is sent.
+r.get('/webhooks', async (c) => {
+  await requireSuperAdmin(c);
+  const scope = queryScope(c);
+  if (!scope) return badScope(c);
+  const m = new Meter(c.env);
+  const list = await webhooksOf(c.env, m, scope);
+  const names = await named(c.env, list.map((w) => w.changedByUserId));
+  const key = c.env.RELEASE_WEBHOOK_SIGNING_KEY;
+  return c.json({
+    ok: true, scope, signing: typeof key === 'string' && key.length >= 32,
+    webhooks: list.map((w) => ({ ...w, ref: `webhook:${webhookDestination(scope, w.name)}` })), people: names.people, cost: addCost(m.cost, names.cost),
+  });
+});
+
+r.post('/webhooks', async (c) => {
+  const user = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const scope = b && scopeFrom(b.tenant_id, b.company_id);
+  if (!b || !scope) return badScope(c);
+  if ((b.op !== 'register' && b.op !== 'disable') || typeof b.name !== 'string' || !Number.isSafeInteger(b.expected_seq) || b.expected_seq < 0
+    || typeof b.idempotency_key !== 'string') {
+    return refuse(c, 400, { code: 'malformed', message: 'A change names op (register or disable), the webhook name, the seq you saw (0 for a new name), and an idempotency key.' });
+  }
+  const base = { tenant_id: scope.tenantId, company_id: scope.companyId, op: b.op, name: b.name.slice(0, 40), expected_seq: b.expected_seq, idempotency_key: b.idempotency_key.slice(0, 160),
+    url: typeof b.url === 'string' ? b.url.slice(0, 500) : null };
+  const out = async (outcome: string, extra: Record<string, unknown> = {}) => audit(c, user, 'work_graph_release_webhook', { ...base, outcome, ...extra });
+  const res = await changeWebhook(c.env, {
+    scope, op: b.op, name: b.name, url: b.url ?? null, audiences: Array.isArray(b.audiences) ? b.audiences : undefined,
+    expectedSeq: b.expected_seq, actorUserId: Number(user.id), idempotencyKey: b.idempotency_key,
+  });
+  if (!res.ok) {
+    await out(res.code, { ids: res.ids.slice(0, 20) });
+    return refused(c, { code: res.code, ids: res.ids, cost: res.cost, ...(res.current !== undefined ? { current: res.current } : {}) });
+  }
+  await out(res.op === 'register' ? 'registered' : 'disabled', { seq: res.seq, replayed: res.replayed });
+  return c.json({ ok: true, scope, op: res.op, name: res.name, seq: res.seq, ref: `webhook:${webhookDestination(scope, res.name)}`, replayed: res.replayed, cost: res.cost });
 });
 
 r.post('/drain', async (c) => {
