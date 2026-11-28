@@ -134,10 +134,10 @@
       "bucket": "studioos-files",
       "prefix": "accreditation-evidence/",
       "class": "record",
-      "purpose": "Investor accreditation verification letters (D6139 part 1)",
+      "purpose": "Investor accreditation verification letters (D6139 part 1; which letters are kept is owner answer A on #6139, 2026-11-27)",
       "retention_period": "the 12-month accreditation period plus the investor-record retention period #5510 sets; that figure is not set (INVESTOR_RECORD_RETENTION_MONTHS is null in services/accreditationEvidence.ts)",
       "retention_days": null,
-      "retention_basis": "owner answer A on #6139 (2026-11-27); legal basis not recorded",
+      "retention_basis": "not recorded",
       "locked_copy": "no",
       "policy_sources": [
         "documentation/architecture/decisions/D6139-p1.md"
