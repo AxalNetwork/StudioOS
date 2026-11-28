@@ -93,7 +93,8 @@ test('the bot host answers health with its deployed commit, and serves one /diag
   assert.deepEqual(await (await call('/health')).json(), { running: false, version: 'a1b2c3d4e5f6' });
   env.MEETING_BOT_VERSION = 'not a sha';
   assert.equal(((await (await call('/health')).json()) as any).version, null);
-  assert.equal((await call('/diagnose', { uid: ID, platform: 'teams', meeting_url: MEET })).status, 400);
+  // D5814: Teams is diagnosed too; a platform the bot does not join is refused.
+  assert.equal((await call('/diagnose', { uid: ID, platform: 'webex', meeting_url: MEET })).status, 400);
   const ok = await call('/diagnose', { uid: ID, platform: 'google_meet', meeting_url: MEET });
   assert.equal(ok.status, 202);
   assert.equal(new URL(commands[0].url).pathname, '/diagnose');
@@ -135,7 +136,9 @@ test('the whole Meet table: the site, the container’s reports, a screenshot an
     assert.equal(read.stops_at, 'join');
     const join = read.rows.find((r: any) => r.stage === 'join')!;
     assert.equal(join.fix, DIAGNOSE_FIXES.signin_wall);
-    assert.deepEqual(read.rows.map((r: any) => r.stage), ['site', 'config', 'container', 'browser', 'egress', 'join', 'admission', 'audio', 'last_run']);
+    assert.deepEqual(read.rows.map((r: any) => r.stage), ['site', 'config', 'container', 'browser', 'egress', 'join', 'admission', 'notice', 'audio', 'last_run']);
+    // D5814: Meet posts no notice; the Worker says so itself.
+    assert.deepEqual(read.rows.filter((r: any) => r.stage === 'notice').map((r: any) => [r.result, r.code]), [['skipped', 'not_used_by_platform']]);
     assert.deepEqual([read.screenshot, read.probe_bytes], [true, 108]);
     // Only the size of the probe is kept, and the link never.
     assert.equal([...w.files.objects.keys()].sort().join(','), `meeting-bot-diagnostics/${ID}.json,meeting-bot-diagnostics/${ID}.png`);
@@ -215,8 +218,12 @@ test('the site and container stops: no binding, Containers off, a refused image;
     const r = await startDiagnosis(refused.env, { id: 1 }, MEET, { id: ID });
     assert.deepEqual([r.stops_at, r.rows[2].code, r.rows[3].code], ['container', 'runtime_no_answer', 'container_failed']);
   } finally { refused.db.close(); }
+  // D5814: a Teams link starts the Teams check (its own stages are in meeting_bot_diagnose_teams_5814.test.ts).
   const teams = world();
-  try { await assert.rejects(startDiagnosis(teams.env, { id: 1 }, 'https://teams.microsoft.com/meet/synthetic', { id: ID }), /The diagnostic covers/); } finally { teams.db.close(); }
+  try {
+    await startDiagnosis(teams.env, { id: 1 }, 'https://teams.microsoft.com/meet/synthetic', { id: ID });
+    assert.deepEqual(teams.container.sent.map((c: any) => c.platform), ['teams']);
+  } finally { teams.db.close(); }
 });
 
 test('Google’s setup: each requirement set or missing, and the Meet API’s own codes', async () => {

@@ -191,29 +191,41 @@ Already accepted research findings may remain after the source is deleted.
 
 Before changing more code, find the stage that fails. HQ › Platform ›
 Meeting bots › **Diagnose Eadwyn AI** (`POST /api/admin/platform/meeting-bots/diagnose`,
-Super Admin, TOTP and a recent step-up) takes the link of a Google Meet or
-Zoom call **you host and are in**. It is not a meeting run: no session,
-consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
+Super Admin, TOTP and a recent step-up) takes the link of a Google Meet,
+Zoom or Microsoft Teams call **you host and are in**. It is not a meeting
+run: no session, consent, AI tokens or recording, and on Meet and Zoom no
+notice. It works with `MEETING_BOT = "off"` and, for Teams, with
+`MEETING_BOT_TEAMS = "off"` (D5814).
 
 | # | Stage | Read by | Passes when | Typical failures |
 |---|---|---|---|---|
 | 1 | The site reaches the bot | Worker | `MEETING_BOT_CONTAINER` bound, `MEETING_BOT_SECRET` set, `APP_URL` https, the host's `/health` answers with its commit | `binding_missing`, `secret_missing`, `containers_disabled`, `binding_no_answer` |
-| 2 | Google or Zoom setup | Worker | Meet: the OAuth client, your Google connection and its scopes, the Meet REST API answering. Zoom: the Meeting SDK app, your Zoom connection, an OBF mint for this meeting | `oauth_client_missing`, `not_connected`, `meet_api_disabled` (Google's `SERVICE_DISABLED`), `meet_api_scope_missing`, `zoom_waiting_for_host`, `zoom_obf_scope_missing` |
+| 2 | Google, Zoom or Teams setup | Worker | Meet: the OAuth client, your Google connection and its scopes, the Meet REST API answering. Zoom: the Meeting SDK app, your Zoom connection, an OBF mint for this meeting. Teams: always passes; says `teams_switch` (`on`/`off`), `link_kind` (`work`/`personal`) and `link_host` | `oauth_client_missing`, `not_connected`, `meet_api_disabled` (Google's `SERVICE_DISABLED`), `meet_api_scope_missing`, `zoom_waiting_for_host`, `zoom_obf_scope_missing` |
 | 3 | The container starts | container host | the image boots and the runtime holds the signed command | `image_unavailable`, `container_start_failed`, `runtime_no_answer` (no boot in 20 s), `runtime_refused` (secrets differ) |
-| 4 | The browser launches | container | Chromium starts (Meet only) | `launch_failed` |
-| 5 | Egress | container | `meet.google.com` and `accounts.google.com` (Zoom: `zoom.us`, `api.zoom.us`) answer | `host_unreachable` |
-| 6 | Join attempt | container | the bot asked to join (lobby) or is in | `signin_wall`, `cannot_join` ("You can't join this video call"), `page_unread`, `page_unsupported`, `join_click_unanswered` |
-| 7 | Admission | container | you admit it within 3 minutes | `admission_timed_out`, `not_admitted` |
-| 8 | Audio | container | frames arrive within 20 s and one probe chunk uploads | `no_frames`, `upload_failed` |
-| 9 | Your last real run | Worker | its stored `failure_code` and D1368's `failure_detail` | `last_run_failed` |
+| 4 | The browser launches | container | Chromium starts (Meet and Teams) | `launch_failed` |
+| 5 | Egress | container | `meet.google.com` and `accounts.google.com` (Zoom: `zoom.us`, `api.zoom.us`; Teams: `teams.microsoft.com`, `teams.cloud.microsoft`, `teams.live.com`) answer | `host_unreachable` |
+| 6 | Join attempt | container | the bot asked to join (lobby) or is in; Teams says `link_kind` | Meet: `signin_wall`, `cannot_join` ("You can't join this video call"), `page_unread`, `page_unsupported`, `join_click_unanswered`. Teams: `teams_captcha`, `teams_anonymous_blocked`, `teams_bot_blocked`, `teams_not_found`, `meeting_ended`, `teams_join_timed_out`, `teams_page_unread`, with the screen as `step` |
+| 7 | Admission | container | you admit it within 3 minutes | `admission_timed_out`, `not_admitted` (Teams: `step: teams_denied`), `teams_bot_blocked` |
+| 8 | Recording notice (Teams only) | container | the published notice posts in the meeting chat (up to 3 tries); Meet and Zoom read `skipped` `not_used_by_platform` | `notice_failed`, `notice_unpublished` |
+| 9 | Audio | container | frames arrive within 20 s and one probe chunk uploads; on Teams the bot listens only after row 8 passed | `no_frames`, `upload_failed` |
+| 10 | Your last real run | Worker | its stored `failure_code` and D1368's `failure_detail` | `last_run_failed` |
 
-- **Where it stops** is the first failing row among 1 and 3–8. Rows 2 and 9 are
+- **Where it stops** is the first failing row among 1 and 3–9. Rows 2 and 10 are
   read beside it: Google's setup does not gate a guest join, and the consent
   screen's verification state is not readable through an API (check it in
   the Cloud console). The Workspace guest policy is answered by row 6.
 - **Zoom** joins through the native SDK with a run's own credentials, so its
-  container rows stop after egress; row 2's OBF mint and row 9's last Zoom
+  container rows stop after egress; row 2's OBF mint and row 10's last Zoom
   run (with D1381's detail) say where Zoom fails.
+- **Teams** (D5814) joins as the guest Eadwyn AI with the packaged Teams
+  driver (D5812). Because Teams' capture is gated on the recording notice,
+  the check posts the same published notice a run posts once admitted, and
+  listens only after it is posted: everyone in your test meeting sees it.
+  Denied (`admission` `not_admitted`), never admitted
+  (`admission_timed_out`), silent (`audio` `no_frames`), a notice that fails
+  (`notice` `notice_failed`), a passing canary (no stop) and a startup
+  failure (`site`, `container` or `browser`) each read differently. Each
+  container row also says `after N s`, when it ran after the start.
 - **Each failing row names its fix** (`DIAGNOSE_FIXES` in
   `services/meetingBotDiagnose.ts`). A code with none says so.
 - **Privacy:** codes and counts only. The probe chunk is silence the length

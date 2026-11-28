@@ -1,11 +1,13 @@
 /**
  * #3708: the owner's staged meeting-bot diagnostic.
  *
- * Super Admin only, against a Meet or Zoom call the owner hosts. One table, in
+ * Super Admin only, against a Meet, Zoom or Teams call the owner hosts. One table, in
  * order; each row passes or fails with a code and, when it fails, its fix:
  * - `site`: the Worker reaches the bot host (binding, secret, origin, health, version);
  * - `config`: Google's (or Zoom's) setup, each requirement set or missing, with the API's own error code;
+ *   for Teams (D5814), the Teams switch and whether the link is a work or a personal one;
  * - `container` … `audio`: reported by the container itself (`meeting-bot/src/diagnose.ts`);
+ *   `notice` is Teams' own (D5814): the recording notice it posts before it listens, skipped elsewhere;
  * - `last_run`: the owner's latest real run on that platform, its stored failure and detail (D1368).
  *
  * The container's reports are cumulative snapshots (#4857, D4857): every one
@@ -33,10 +35,12 @@ import { zoomConnection, mintObfToken } from './channels/zoom';
 import { MeetingProviderError } from './channels/meetings';
 import { meetSignInConfigured } from './meetBotGoogle';
 
-export const DIAGNOSE_STAGES = ['site', 'config', 'container', 'browser', 'egress', 'join', 'admission', 'audio', 'last_run'] as const;
+export const DIAGNOSE_STAGES = ['site', 'config', 'container', 'browser', 'egress', 'join', 'admission', 'notice', 'audio', 'last_run'] as const;
 export type DiagnoseStage = typeof DIAGNOSE_STAGES[number];
-/** The stages only the container reports. */
-export const RUNTIME_STAGES = ['container', 'browser', 'egress', 'join', 'admission', 'audio'] as const;
+/** The stages only the container reports. `notice` is Teams' alone (D5814). */
+export const RUNTIME_STAGES = ['container', 'browser', 'egress', 'join', 'admission', 'notice', 'audio'] as const;
+/** D5814: the container stages a platform runs; Meet and Zoom never post a notice, so the Worker writes that row itself. */
+export const runtimeStagesFor = (platform: BotPlatform) => RUNTIME_STAGES.filter((s) => platform === 'teams' || s !== 'notice');
 export type DiagnoseResult = 'pass' | 'fail' | 'skipped' | 'running';
 /** What the console is told: the stored results, or `unrecorded` for a stage whose report never arrived. */
 export type ViewResult = DiagnoseResult | 'unrecorded';
@@ -95,7 +99,7 @@ export const DIAGNOSE_FIXES: Record<string, string> = {
   not_admitted: 'The host denied the request. Admit Eadwyn AI when it asks.',
   meeting_ended: 'The call ended before the bot was admitted. Keep it open during the check.',
   admission_timed_out: 'No one admitted the bot within 3 minutes. Admit Eadwyn AI from the call’s People panel.',
-  no_frames: 'Admitted, but no audio frames arrived in 20 s. Speak in the call; if it still fails, the capture hook (meet/capture.ts) is not reading Meet’s audio.',
+  no_frames: 'Admitted, but no audio frames arrived in 20 s. Speak in the call; if it still fails, the capture hook (adapters/capture.ts, shared by Meet and Teams) is not reading the call’s audio.',
   upload_failed: 'Frames arrived but the probe chunk did not upload. Check the Worker’s /api/meeting-bots/diagnostics route and its log.',
   oauth_client_missing: 'Set GOOGLE_CAL_CLIENT_ID and GOOGLE_CAL_CLIENT_SECRET (or GOOGLE_CLIENT_*) on the studioos Worker.',
   not_connected: 'Connect Google Calendar from your own account (Settings › Connections).',
@@ -117,6 +121,17 @@ export const DIAGNOSE_FIXES: Record<string, string> = {
   signin_unknown_page: 'Google showed a sign-in page the bot does not recognise. Open the screenshot and correct meet/signin.ts against it.',
   signin_unavailable: 'The bot could not fetch its Google account from the Worker. Read the Worker log around this time.',
   signin_not_kept: 'The bot signed in, but Meet showed the guest name field: Google did not keep the session. Open the screenshot.',
+  // D5814 (#5814): Teams' own stops. Each names the Teams screen, never its words.
+  teams_captcha: 'Teams showed a captcha, which the bot never solves. The meeting’s organiser or tenant treats Eadwyn AI as a suspected bot: let anonymous users join without verification (Teams admin: Meetings › Meeting policies), then try again.',
+  teams_anonymous_blocked: 'The organiser’s tenant does not let anonymous users join meetings. Turn on “Anonymous users can join a meeting” in the Teams admin centre (Meetings › Meeting policies), or use a meeting from a tenant that allows it.',
+  teams_bot_blocked: 'Teams blocked Eadwyn AI as a detected bot (the tenant blocks external bots). Allow it in the Teams admin centre, or approve it from the “Suspected threats” lobby when it asks.',
+  teams_not_found: 'Teams says the link names no meeting. Use the link of a Teams meeting that is open now.',
+  teams_link_unread: 'The bot could not read the link as a Teams meeting. Use a teams.microsoft.com, teams.cloud.microsoft or teams.live.com meeting link.',
+  teams_navigation_failed: 'The Teams page did not load. Check egress to the three Teams hosts, then try again.',
+  teams_join_timed_out: 'Teams never moved past its launcher or pre-join screen within a minute. Open the screenshot; the join hooks in teamsSelectors.ts may be out of date.',
+  teams_page_unread: 'Teams showed a page none of the bot’s hooks match. Open the screenshot and correct teamsSelectors.ts against it.',
+  notice_failed: 'Admitted, but the recording notice could not be posted in the meeting chat after three tries, so the bot did not listen. Check that the meeting’s chat is on for guests, then try again.',
+  notice_unpublished: 'The recording notice is not published in this build (notice.mjs), so the bot did not post it or listen. Deploy a build whose notice is approved.',
   never_reported: 'This step’s report did not arrive, so whether the check ran is unknown. It is a reporting gap, not a failed check: press Try again. If it repeats, read the meeting-bot host’s log for diagnose_delivery_failed or runtime_failed around this time.',
   last_run_failed: 'Your last real run failed with the code shown. Its detail says where it stopped (D1368).',
 };
@@ -284,6 +299,17 @@ export async function lastRunStage(env: Env, userId: number, platform: BotPlatfo
     : { stage: 'last_run', result: 'pass', code: `last_run_${facts.status}`, facts, at: now };
 }
 
+/** D5814: Teams needs no member grant for a guest join; the row says the switch and the link's kind, never the link. */
+export function teamsStage(env: Env, meetingUrl: string, now: number): DiagnoseRow {
+  const host = new URL(meetingUrl).hostname.toLowerCase();
+  const facts: Record<string, Fact> = {
+    teams_switch: env.MEETING_BOT_TEAMS === 'on' ? 'on' : 'off',
+    link_kind: host === 'teams.live.com' ? 'personal' : 'work',
+    link_host: FACT_TEXT.test(host) ? host : 'unknown',
+  };
+  return { stage: 'config', result: 'pass', code: 'configured', facts, at: now };
+}
+
 // ── start, report, read ──
 
 export interface DiagnoseDeps { now?: number; fetch?: typeof fetch; id?: string }
@@ -291,14 +317,15 @@ export interface DiagnoseDeps { now?: number; fetch?: typeof fetch; id?: string 
 export async function startDiagnosis(env: Env, actor: Pick<User, 'id'>, meetingUrl: unknown, deps: DiagnoseDeps = {}) {
   store(env);
   const { platform, url } = botPlatform(meetingUrl);
-  if (platform === 'teams') throw new BotError(400, 'diagnose_platform', 'The diagnostic covers Google Meet and Zoom.');
   const now = deps.now ?? Date.now(), id = deps.id ?? crypto.randomUUID();
   const rec: DiagnoseRecord = { id, owner_id: actor.id, platform, created_at: now, rows: [], screenshot: false, probe_bytes: null };
   const site = await siteStage(env, id, now);
   put(rec, site);
-  put(rec, platform === 'google_meet' ? await googleStage(env, actor.id, now, deps.fetch) : await zoomStage(env, actor.id, url, now));
+  put(rec, platform === 'google_meet' ? await googleStage(env, actor.id, now, deps.fetch) : platform === 'teams' ? teamsStage(env, url, now) : await zoomStage(env, actor.id, url, now));
   put(rec, await lastRunStage(env, actor.id, platform, now));
-  if (site.result !== 'pass') for (const stage of RUNTIME_STAGES) put(rec, { stage, result: 'skipped', code: 'site_failed', at: now });
+  const stages = runtimeStagesFor(platform);
+  if (platform !== 'teams') put(rec, { stage: 'notice', result: 'skipped', code: 'not_used_by_platform', at: now });
+  if (site.result !== 'pass') for (const stage of stages) put(rec, { stage, result: 'skipped', code: 'site_failed', at: now });
   // Written before the container starts, so its first report has a record to land on.
   await update(env, id, () => {}, rec);
   if (site.result !== 'pass') return view(rec, now);
@@ -317,7 +344,7 @@ export async function startDiagnosis(env: Env, actor: Pick<User, 'id'>, meetingU
       put(r, { stage: 'container', result: 'running', code, at: now });
     } else {
       put(r, { stage: 'container', result: 'fail', code, at: now });
-      for (const stage of RUNTIME_STAGES.slice(1)) put(r, { stage, result: 'skipped', code: 'container_failed', at: now });
+      for (const stage of stages.slice(1)) put(r, { stage, result: 'skipped', code: 'container_failed', at: now });
     }
   });
   return view(after ?? rec, now);
@@ -423,7 +450,9 @@ export function view(rec: DiagnoseRecord, now = Date.now()) {
     // `unrecorded` is a reporting problem, so it is never `stops_at`; the console says so in its own words (`unrecorded`).
     unrecorded: rows.filter((r) => r.result === 'unrecorded').map((r) => r.stage),
     rows: rows.map((r) => ({ stage: r.stage, result: r.result, code: r.code, facts: r.facts ?? {}, fix: r.result === 'fail' || r.result === 'unrecorded' ? fixFor(r.code) : null,
-      delivery: delivery(r), ...(r.attempts ? { attempts: r.attempts } : {}) })),
+      delivery: delivery(r), ...(r.attempts ? { attempts: r.attempts } : {}),
+      // D5814: when the container ran the stage, in whole seconds after the start; a count, never a clock reading.
+      ...(typeof r.ran_at === 'number' ? { elapsed_s: Math.max(0, Math.round((r.ran_at - rec.created_at) / 1000)) } : {}) })),
     screenshot: rec.screenshot, probe_bytes: rec.probe_bytes,
   };
 }
