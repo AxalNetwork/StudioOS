@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { holdsLicence, holdsOnlyLicence, heldLicences } from '../services/accountLicences';
 import { Hono } from 'hono';
 import { seatEndStatements } from '../services/agents/teamRoster';
@@ -551,7 +552,8 @@ export async function resolveFounderIdForCreate(
 
 async function createProjectHandler(c: any) {
   const user = await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   // Task #17 — name is required. Without this an empty form silently
   // creates a blank "" project that founders then can't filter / find.
   const name = typeof data?.name === 'string' ? data.name.trim() : '';
@@ -854,7 +856,8 @@ projects.post('/submit', async (c) => {
 projects.put('/:id', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
 
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;

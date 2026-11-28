@@ -5,6 +5,7 @@
  * own deal terms, granted tiers, referral code, and redemption count.
  * No admin scope; the row is matched by `user_id = caller.id`.
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -181,7 +182,8 @@ portal.get('/my-deal', async (c) => {
 
 portal.patch('/accepting-intros', async (c) => {
   const user = await requireAuth(c);
-  const body = await c.req.json();
+  const body = await readJsonObject(c);
+  if (body instanceof Response) return body;
   const value = body.accepting_intros === true || body.accepting_intros === 1 ? 1 : 0;
   const row: any = await c.env.DB.prepare(
     `UPDATE partners SET accepting_intros = ? WHERE id = (SELECT partner_id FROM users WHERE id = ?) RETURNING id, accepting_intros`,

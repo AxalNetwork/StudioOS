@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { holdsLicence } from '../services/accountLicences';
 /**
  * VC Funds + Limited Partners + LPAs + Distributions.
@@ -808,7 +809,8 @@ const FUND_CONTROL_FIELDS = ['gp_user_id', 'carried_interest', 'management_fee']
 funds.patch('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const gp = await requireFundGp(c, id);
-  const body = await c.req.json();
+  const body = await readJsonObject(c);
+  if (body instanceof Response) return body;
   // D1161 (#3068): the console sends why a fund's economics change. Optional,
   // so a GP's own edit and every earlier caller keep working; when sent it is
   // checked before the gate, so a bad reason never costs a step-up, and it is
@@ -1029,7 +1031,8 @@ funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   const gp = await requireFundGp(c, fundId);
   const { user } = gp;
-  const body = await c.req.json();
+  const body = await readJsonObject(c);
+  if (body instanceof Response) return body;
   // D714: an LP with a first call issues a call — a Super Admin act — so a
   // plain Admin's request is refused whole, and nothing is written.
   const firstCall = !!(body?.first_call_cents && body.first_call_cents > 0);

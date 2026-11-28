@@ -40,6 +40,7 @@
  * version of this comment said there was a 3/hour one; rateLimit.ts has never
  * declared it).
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
@@ -137,12 +138,9 @@ export function contactLink(input: unknown): string | null {
 }
 
 contact.post('/contact', async (c) => {
-  let body: Record<string, unknown> = {};
-  try {
-    body = await c.req.json<Record<string, unknown>>();
-  } catch {
-    return c.json({ error: 'invalid_json' }, 400);
-  }
+  // #9184: a body that does not parse stays `invalid_json`; null, an array or a scalar is `body_not_object`.
+  const body = await readJsonObject<Record<string, unknown>>(c);
+  if (body instanceof Response) return body;
 
   // Honeypot — bots fill every input. Pretend success so they don't retry.
   const hp = sanitize(body.hp, 100);
