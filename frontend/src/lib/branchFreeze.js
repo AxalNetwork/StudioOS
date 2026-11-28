@@ -89,8 +89,10 @@ export const FROZEN = [
     // verdict, so it freezes as KYC's do. Sending a KYC case to HQ is in kyc.ts,
     // already on the Access row; HQ's own decision is HQ's, not the branch's.
     row: 'Compliance',
-    note: 'No review of a sanctions match is recorded, and no KYC case is sent to HQ. Screenings already recorded stay readable.',
-    gatedIn: ['trust.ts', 'kyc.ts'],
+    // D6139 (#6139): deciding an investor's accreditation letter is a
+    // compliance verdict too, so a suspended branch cannot record one.
+    note: 'No review of a sanctions match is recorded, no KYC case is sent to HQ, and no accreditation letter is accepted or sent back. Screenings and letters already recorded stay readable.',
+    gatedIn: ['trust.ts', 'kyc.ts', 'trust_accreditation.ts'],
   },
   {
     // D303 — Wellbeing joined the other three Community consoles behind
