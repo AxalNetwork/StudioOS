@@ -20,6 +20,8 @@ import { createJWT } from '../src/auth.ts';
 import { registerProvider } from '../src/integrations/registry.ts';
 // The tables exactly as migration 444 creates them: the test reads the file.
 const EADWYN_SCHEMA_SQL = readFileSync(new URL('../sql/migrations/444_eadwyn_conversations.sql', import.meta.url), 'utf8');
+// D9277: and the space columns, from their own migration.
+const EADWYN_SPACE_SQL = readFileSync(new URL('../sql/migrations/202611281314_9277_eadwyn_space.sql', import.meta.url), 'utf8');
 import {
   readableConnectors,
   validateSend,
@@ -109,12 +111,13 @@ function world(opts: { reply?: string; verdict?: string } = {}) {
     CREATE TABLE project_members (id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, role TEXT, status TEXT);
     CREATE TABLE user_company_links (user_id INTEGER, company_id INTEGER);
     -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
-    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, company_name TEXT, archived_at TEXT);
     INSERT INTO user_company_links VALUES (${ME}, ${COMPANY});
     CREATE TABLE integration_companies (integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     INSERT INTO integration_companies VALUES (1, ${COMPANY}, 1), (2, ${COMPANY}, 1);
   `);
   db.exec(EADWYN_SCHEMA_SQL);
+  db.exec(EADWYN_SPACE_SQL);
   const modelCalls: any[] = [];
   const guardCalls: string[] = [];
   const env: any = {
@@ -433,7 +436,7 @@ test('through the route: a switched-on connector is read, named under the answer
     await call(env, 'PUT', `/conversations/${conv}/connectors`, { keys: ['stripe'] });
     const on = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'And now?' });
     assert.deepEqual(reads, ['stripe']);
-    assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-09T11:48:00Z' }]);
+    assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-09T11:48:00Z', space: { scope: 'company', id: COMPANY } }]);
     assert.deepEqual(on.json.usage.connectors_read, ['stripe'], 'the receipt does not record the connector read');
     assert.match(lastMessage(modelCalls[1]), /\[Stripe\]\nBEGIN_CONNECTOR_ROW_UNTRUSTED_[0-9a-f]{32}\n- MRR 38400 USD\nEND_CONNECTOR_ROW_UNTRUSTED_/);
     assert.doesNotMatch(modelCalls[1].messages[0].content, /MRR 38400/, 'connector text sat in the system message');
@@ -566,12 +569,27 @@ test('a run and a Send both stop when the conversation\'s company is no longer t
   const { env, db, conv, shown, modelCalls } = await proposed();
   const before = modelCalls.length;
   db.prepare('DELETE FROM user_company_links WHERE user_id = ?').run(ME);
+  // D9277: leaving the company is losing the conversation's space.
   const ask = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'And now?' });
-  assert.equal(ask.status, 409);
-  assert.equal(ask.json.error, 'company_changed');
+  assert.equal(ask.status, 403);
+  assert.equal(ask.json.error, 'space_access_lost');
   assert.equal(modelCalls.length, before, 'the model ran for a company the member left');
   const send = await call(env, 'POST', `/actions/${shown.uid}/confirm`);
-  assert.equal(send.json.error, 'company_changed');
+  assert.equal(send.json.error, 'space_access_lost');
+  assert.deepEqual(pushes, []);
+});
+
+test('a run and a Send both stop when the member is still in the company but another one is active', async () => {
+  const { env, db, conv, shown, modelCalls } = await proposed();
+  const before = modelCalls.length;
+  db.prepare('INSERT INTO user_company_links VALUES (?, ?)').run(ME, 42);
+  const other = { ...(await auth(env)), 'x-company-id': '42' };
+  const ask = await eadwyn.request(`/conversations/${conv}/ask`, { method: 'POST', headers: other, body: JSON.stringify({ question: 'And now?' }) }, env);
+  assert.equal(ask.status, 409);
+  assert.equal((await ask.json() as any).error, 'company_changed');
+  assert.equal(modelCalls.length, before, 'the model ran while another company was active');
+  const send = await eadwyn.request(`/actions/${shown.uid}/confirm`, { method: 'POST', headers: other }, env);
+  assert.equal((await send.json() as any).error, 'company_changed');
   assert.deepEqual(pushes, []);
 });
 
@@ -624,7 +642,8 @@ test('confirm calls the same push guard /push calls, before it calls push', () =
   const ead = readFileSync(new URL('../src/routes/eadwyn.ts', import.meta.url), 'utf8');
   const confirm = ead.slice(ead.indexOf("eadwyn.post('/actions/:uid/confirm'"), ead.indexOf("eadwyn.post('/actions/:uid/cancel'"));
   const guardAt = confirm.indexOf('pushScopeRefusal(c, user, row, envelope.send)');
-  const targetAt = confirm.indexOf('targetAllowed(c.env, user, action.company_id, proposal)');
+  // D9277: the target is checked against the action's re-checked space.
+  const targetAt = confirm.indexOf('targetAllowed(c.env, user, space, proposal)');
   const claimAt = confirm.indexOf("SET status = \\'sending\\'");
   const pushAt = confirm.indexOf('impl.push(');
   assert.ok(guardAt > 0 && targetAt > guardAt && claimAt > targetAt && pushAt > claimAt, 'confirm checks out of order, or not at all');
@@ -726,7 +745,7 @@ test('through the route: the real Stripe reader feeds the run only with its swit
   await call(env, 'PUT', `/conversations/${conv}/connectors`, { keys: ['stripe'] });
   const on = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'MRR?' });
   assert.match(lastMessage(modelCalls[1]), /\[Stripe\]\nBEGIN_CONNECTOR_ROW_UNTRUSTED_[0-9a-f]{32}\n- Stripe for Mine on 2026-10-08: MRR 3,200/);
-  assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-08' }]);
+  assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-08', space: { scope: 'company', id: COMPANY } }]);
 });
 
 test('D763: a blocked question answers as before, checked once by the guard inside the run, and the model never runs', async () => {

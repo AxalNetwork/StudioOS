@@ -25,6 +25,8 @@ import railProposals from '../src/routes/ai_rail_proposals.ts';
 import { listRail, proposeRail } from '../src/services/railProposals.ts';
 
 const EADWYN_SQL = readFileSync(new URL('../sql/migrations/444_eadwyn_conversations.sql', import.meta.url), 'utf8');
+// D9277: and the space columns, from their own migration.
+const EADWYN_SPACE_SQL = readFileSync(new URL('../sql/migrations/202611281314_9277_eadwyn_space.sql', import.meta.url), 'utf8');
 const PROPOSALS_SQL = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const M694 = readFileSync(new URL('../sql/migrations/694_ai_rail_proposals_page_index.sql', import.meta.url), 'utf8');
 const SRC = readFileSync(new URL('../src/routes/eadwyn.ts', import.meta.url), 'utf8');
@@ -53,12 +55,13 @@ function world() {
     CREATE TABLE integration_companies (integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     INSERT INTO integration_companies VALUES (1, ${COMPANY}, 1);
     CREATE TABLE user_company_links (user_id INTEGER, company_id INTEGER);
-    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, company_name TEXT, archived_at TEXT);
     INSERT INTO user_company_links VALUES (${ME}, ${COMPANY}), (${OTHER}, ${COMPANY}), (${EXPLORER}, ${COMPANY});
     CREATE TABLE project_metrics (id INTEGER PRIMARY KEY, project_id INTEGER, snapshot_date TEXT, mrr REAL, arr REAL, monthly_churn_pct REAL, active_users INTEGER, source TEXT);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
   `);
   db.exec(EADWYN_SQL);
+  db.exec(EADWYN_SPACE_SQL);
   db.exec(PROPOSALS_SQL);
   const calls: string[] = [];
   const env: any = {

@@ -8,9 +8,10 @@
  * that name the connector they read, and the "Ready to send" card.
  *
  *   GET    /connectors                 the member's connections, for the "+" menu
- *   GET    /conversations?workspace=   the member's conversations on that workspace
+ *   GET    /conversations?scope=&id=   the member's conversations in that company or project (D9277)
+ *   GET    /conversations?workspace=   the member's conversations on that workspace (older clients)
  *   GET    /conversations/mine         every conversation the member has, for Studio's phone list (D701)
- *   POST   /conversations              start one (every switch off)
+ *   POST   /conversations              { scope, id, workspace? } start one in that space (every switch off)
  *   GET    /conversations/:uid         its messages and actions
  *   DELETE /conversations/:uid         delete it, with its messages and actions
  *   PUT    /conversations/:uid/connectors   the switches, as a whole set
@@ -30,10 +31,20 @@
  * build their run from one helper (`askRunOptions`), so the hold the panel
  * shows before Send is the hold the run places.
  *
- * A conversation belongs to the company that was active when it started. A
- * run, and a Send, happen only while that company is still the member's
- * active one (`company_changed` otherwise), and every reader re-reads the
- * member's link to it.
+ * D9277 (#9277): A CONVERSATION'S SPACE. Every conversation belongs to exactly
+ * one company or one project (`services/eadwynSpace.ts`), named when it starts
+ * and never moved. A project under a company is not in the company's space, and
+ * the company is not in the project's. Every read of a conversation, every
+ * switch change, quote, ask and Send re-reads the member's access to that space
+ * (403 `space_access_lost`); a pending action stores the space it was proposed
+ * in and confirm re-checks it. The connector readers and the run are given the
+ * space and read only its records; each source under an answer names it. A row
+ * from before spaces with no company stays readable by its owner, and is never
+ * run (409 `no_space`). Deleting a conversation and cancelling an action need
+ * no space: both are the owner's own, and neither reads or sends anything.
+ *
+ * A company space still runs only while that company is the member's active one
+ * (`company_changed` otherwise), as before.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -43,6 +54,18 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import { canAccessProject } from '../services/projectAccess';
 import { projectInActiveCompany } from '../services/tenancyScope';
+import {
+  SPACE_REFUSALS,
+  parseSpaceRef,
+  projectInSpace,
+  publicSpace,
+  recheckSpace,
+  resolveSpace,
+  spaceChecker,
+  spaceColumns,
+  type Space,
+  type SpaceCheck,
+} from '../services/eadwynSpace';
 import { run as aiRun, quoteRun, type RunOptions } from '../services/aiRouter';
 import { isExplorer } from '../services/fills/scopes';
 import { modelById, providerModelById } from '../services/ai/catalogue';
@@ -100,12 +123,14 @@ function safeJson<T>(s: string | null | undefined, def: T): T {
 
 interface ConversationRow {
   id: number; uid: string; user_id: number; company_id: number | null;
+  scope_kind: string | null; project_id: number | null;
   workspace: string; title: string; connectors_json: string;
   created_at: string; updated_at: string;
 }
 
 interface ActionRow {
   id: number; uid: string; conversation_id: number; user_id: number; company_id: number | null;
+  scope_kind: string | null; project_id: number | null;
   integration_id: number; provider_key: string; target_label: string; summary: string;
   payload_json: string; payload_hash: string; status: string; result_summary: string | null;
   created_at: string; decided_at: string | null;
@@ -130,10 +155,12 @@ async function loadConnections(env: Env, userId: number): Promise<IntegrationRow
   return rows.results ?? [];
 }
 
-function publicConversation(row: ConversationRow) {
+/** `space` is the one the member was just found to be in; null for a row with no company or project (D9277). */
+function publicConversation(row: ConversationRow, space: Space | null) {
   return {
     uid: row.uid,
     workspace: row.workspace,
+    space: publicSpace(space),
     title: row.title,
     connectors: parseConnectorKeys(row.connectors_json),
     created_at: row.created_at,
@@ -193,14 +220,50 @@ eadwyn.get('/connectors', async (c) => {
 
 // ────────────────────────────────────────────────────────────── conversations
 
+/** D9277: the refusal for a stored row whose space did not check out. */
+function spaceRefusal(c: Context<{ Bindings: Env }>, check: Extract<SpaceCheck, { ok: false }>) {
+  return check.reason === 'no_space'
+    ? refuse(c, 409, { code: 'no_space', message: SPACE_REFUSALS.no_space })
+    : refuse(c, 403, { code: 'space_access_lost', message: SPACE_REFUSALS.space_access_lost });
+}
+
+/**
+ * D9277: `?scope=company|project&id=` lists the member's conversations in that space, once the member is found to be
+ * in it (403 `space_not_member`). `?workspace=` keeps working for older clients: the rows on that workspace whose
+ * space the member is still in, plus their rows with no space.
+ */
 eadwyn.get('/conversations', async (c) => {
   const user = await requireAuth(c);
+  const scope = c.req.query('scope');
+  if (scope !== undefined || c.req.query('id') !== undefined) {
+    const ref = parseSpaceRef(scope, c.req.query('id'));
+    if (!ref) return refuse(c, 400, { code: 'space_invalid', message: SPACE_REFUSALS.space_invalid });
+    const space = await resolveSpace(c.env, user, ref);
+    if (!space) return refuse(c, 403, { code: 'space_not_member', message: SPACE_REFUSALS.space_not_member });
+    // A company row the previous Worker wrote has no scope_kind yet; it is still company scope.
+    const rows = ref.scope === 'company'
+      ? await c.env.DB.prepare(
+        'SELECT * FROM eadwyn_conversations WHERE user_id = ? AND (scope_kind = \'company\' OR scope_kind IS NULL) AND company_id = ? AND project_id IS NULL ' +
+        'ORDER BY updated_at DESC, id DESC LIMIT 20',
+      ).bind(user.id, ref.id).all<ConversationRow>()
+      : await c.env.DB.prepare(
+        'SELECT * FROM eadwyn_conversations WHERE user_id = ? AND scope_kind = \'project\' AND project_id = ? ORDER BY updated_at DESC, id DESC LIMIT 20',
+      ).bind(user.id, ref.id).all<ConversationRow>();
+    return c.json({ space: publicSpace(space), conversations: (rows.results ?? []).map((r) => publicConversation(r, space)) });
+  }
   const workspace = String(c.req.query('workspace') || '').trim().slice(0, 60);
   if (!workspace) return c.json({ error: 'workspace is required' }, 400);
   const rows = await c.env.DB.prepare(
     'SELECT * FROM eadwyn_conversations WHERE user_id = ? AND workspace = ? ORDER BY updated_at DESC, id DESC LIMIT 20',
   ).bind(user.id, workspace).all<ConversationRow>();
-  return c.json({ conversations: (rows.results ?? []).map(publicConversation) });
+  const check = spaceChecker(c.env, user);
+  const out: ReturnType<typeof publicConversation>[] = [];
+  for (const r of rows.results ?? []) {
+    const k = await check(r);
+    if (k.ok) out.push(publicConversation(r, k.space));
+    else if (k.reason === 'no_space') out.push(publicConversation(r, null));
+  }
+  return c.json({ conversations: out });
 });
 
 /**
@@ -227,6 +290,8 @@ interface MineRow {
   kind: 'eadwyn' | 'profiling';
   title: string;
   workspace: string | null;
+  /** D9277: the rail row's company or project; null for profiling and for a rail row with neither. */
+  space: { scope: 'company' | 'project'; id: number; name: string | null } | null;
   updated_at: string;
   messages: number;
   answered: number | null;
@@ -249,14 +314,21 @@ eadwyn.get('/conversations/mine', async (c) => {
 
   try {
     const rail = await c.env.DB.prepare(
-      `SELECT c.id, c.uid, c.workspace, c.title, c.updated_at,
+      `SELECT c.id, c.uid, c.workspace, c.title, c.updated_at, c.scope_kind, c.company_id, c.project_id,
               (SELECT COUNT(*) FROM eadwyn_messages m WHERE m.conversation_id = c.id) AS messages
          FROM eadwyn_conversations c
         WHERE c.user_id = ?
         ORDER BY c.updated_at DESC, c.id DESC
         LIMIT 20`,
-    ).bind(user.id).all<{ id: number; uid: string; workspace: string; title: string; updated_at: string; messages: number }>();
+    ).bind(user.id).all<{
+      id: number; uid: string; workspace: string; title: string; updated_at: string; messages: number;
+      scope_kind: string | null; company_id: number | null; project_id: number | null;
+    }>();
+    // D9277: a row whose space the member lost is left out; a row with no space is the owner's own and stays.
+    const check = spaceChecker(c.env, user);
     for (const r of rail.results ?? []) {
+      const k = await check(r);
+      if (!k.ok && k.reason === 'space_access_lost') continue;
       const title = String(r.title ?? '').trim();
       rows.push({
         _id: Number(r.id),
@@ -264,6 +336,7 @@ eadwyn.get('/conversations/mine', async (c) => {
         kind: 'eadwyn',
         title: title || `${r.workspace} conversation`,
         workspace: r.workspace,
+        space: k.ok ? publicSpace(k.space) : null,
         updated_at: r.updated_at,
         messages: Number(r.messages),
         answered: null,
@@ -300,6 +373,7 @@ eadwyn.get('/conversations/mine', async (c) => {
         kind: 'profiling',
         title: 'Profiling questions',
         workspace: null,
+        space: null,
         updated_at: row.updated_at,
         messages: Number(row.messages),
         answered: Number(row.answered_count),
@@ -318,21 +392,37 @@ eadwyn.get('/conversations/mine', async (c) => {
   return c.json({ conversations: rows.map(({ _id, ...r }) => r), unreadable });
 });
 
+/**
+ * D9277: `{ scope, id, workspace? }` starts a conversation in that company or project, once the member is found to be
+ * in it (403 `space_not_member`). An older client's `{ workspace }` alone starts one in the active company; with no
+ * active company there is no space to start it in (400 `space_required`).
+ */
 eadwyn.post('/conversations', async (c) => {
   const user = await requireAuth(c);
   const no = await askRefusal(c, user);
   if (no) return no;
-  const body = await c.req.json<{ workspace?: string }>().catch(() => null);
+  const body = await c.req.json<{ workspace?: string; scope?: unknown; id?: unknown }>().catch(() => null);
   const workspace = String(body?.workspace || '').trim().slice(0, 60);
-  if (!workspace) return c.json({ error: 'workspace is required' }, 400);
-  const companyId = await activeCompanyFor(c, user);
+  let space: Space | null;
+  if (body?.scope !== undefined || body?.id !== undefined) {
+    const ref = parseSpaceRef(body?.scope, body?.id);
+    if (!ref) return refuse(c, 400, { code: 'space_invalid', message: SPACE_REFUSALS.space_invalid });
+    space = await resolveSpace(c.env, user, ref);
+    if (!space) return refuse(c, 403, { code: 'space_not_member', message: SPACE_REFUSALS.space_not_member });
+  } else {
+    if (!workspace) return c.json({ error: 'workspace is required' }, 400);
+    const companyId = await activeCompanyFor(c, user);
+    space = companyId === null ? null : await resolveSpace(c.env, user, { scope: 'company', id: companyId });
+    if (!space) return refuse(c, 400, { code: 'space_required', message: SPACE_REFUSALS.space_required });
+  }
+  const cols = spaceColumns(space);
   const uid = newUid();
   // Every switch starts off: `connectors_json` takes its default, '[]'.
   await c.env.DB.prepare(
-    'INSERT INTO eadwyn_conversations (uid, user_id, company_id, workspace) VALUES (?, ?, ?, ?)',
-  ).bind(uid, user.id, companyId, workspace).run();
+    'INSERT INTO eadwyn_conversations (uid, user_id, scope_kind, company_id, project_id, workspace) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(uid, user.id, cols.scope_kind, cols.company_id, cols.project_id, workspace || space.scope).run();
   const row = await loadConversation(c.env, uid, user.id);
-  return c.json({ conversation: row ? publicConversation(row) : null }, 201);
+  return c.json({ conversation: row ? publicConversation(row, space) : null }, 201);
 });
 
 /**
@@ -357,6 +447,9 @@ eadwyn.get('/conversations/:uid', async (c) => {
   const user = await requireAuth(c);
   const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
   if (!conv) return c.json({ error: 'not_found' }, 404);
+  // D9277: read only while the member is still in its space; a row with no space is its owner's to read.
+  const check = await recheckSpace(c.env, user, conv);
+  if (!check.ok && check.reason === 'space_access_lost') return spaceRefusal(c, check);
   await releaseStranded(c.env, conv.id);
   const [messages, actions] = await Promise.all([
     c.env.DB.prepare('SELECT id, role, content, sources_json, action_uid, created_at FROM eadwyn_messages WHERE conversation_id = ? ORDER BY id')
@@ -365,7 +458,7 @@ eadwyn.get('/conversations/:uid', async (c) => {
       .bind(conv.id).all<ActionRow>(),
   ]);
   return c.json({
-    conversation: publicConversation(conv),
+    conversation: publicConversation(conv, check.ok ? check.space : null),
     messages: (messages.results ?? []).map((m) => ({
       id: m.id, role: m.role, content: m.content,
       sources: safeJson<ConnectorSource[]>(m.sources_json, []),
@@ -393,6 +486,8 @@ eadwyn.put('/conversations/:uid/connectors', async (c) => {
   const user = await requireAuth(c);
   const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
   if (!conv) return c.json({ error: 'not_found' }, 404);
+  const check = await recheckSpace(c.env, user, conv);
+  if (!check.ok) return spaceRefusal(c, check);
   const body = await c.req.json<{ keys?: unknown }>().catch(() => null);
   const keys = normaliseConnectorKeys(body?.keys);
   await c.env.DB.prepare(
@@ -439,19 +534,24 @@ export async function readForRun(
   user: User,
   enabledKeys: readonly string[],
   connections: readonly IntegrationRow[],
-  companyId: number | null,
+  space: Space | number | null,
   readers = CONNECTOR_READERS,
 ): Promise<{ readable: IntegrationRow[]; reads: AskedRead[] }> {
+  // D9277: a run is given its space. A bare number is a company (the shape before spaces).
+  const companyId = typeof space === 'number' ? space : space?.companyId ?? null;
+  const projectId = typeof space === 'number' ? null : space?.projectId ?? null;
+  const named = space !== null && typeof space === 'object' ? { scope: space.scope, id: space.id } : null;
   const readable = readableConnectors(enabledKeys, connections);
   const reads: AskedRead[] = [];
   for (const row of readable) {
     const reader = readers[row.provider_key];
     if (!reader) continue;
     try {
-      const out = await reader(env, user, row, companyId);
+      const out = await reader(env, user, row, companyId, projectId);
+      const source = sourceFor(row.provider_key, out.as_of ?? row.last_synced_at ?? null);
       reads.push({
         key: row.provider_key,
-        source: sourceFor(row.provider_key, out.as_of ?? row.last_synced_at ?? null),
+        source: named ? { ...source, space: named } : source,
         facts: out.facts.slice(0, 20).map((f) => String(f).slice(0, 300)),
       });
     } catch (e) {
@@ -468,15 +568,26 @@ function companyChanged(c: Context<{ Bindings: Env }>) {
   });
 }
 
-/** The target must be the member's to write and in the conversation's company. */
-async function targetAllowed(env: Env, user: User, companyId: number | null, p: SendProposal): Promise<boolean> {
+/**
+ * D9277: the space a run, or a Send, happens in, re-checked now; or the refusal. A company space also runs only while
+ * that company is the member's active one (`company_changed`), as before spaces.
+ */
+async function runSpace(c: Context<{ Bindings: Env }>, user: User, row: ConversationRow | ActionRow): Promise<Space | Response> {
+  const check = await recheckSpace(c.env, user, row);
+  if (!check.ok) return spaceRefusal(c, check);
+  if (check.space.scope === 'company' && (await activeCompanyFor(c, user)) !== check.space.id) return companyChanged(c);
+  return check.space;
+}
+
+/** The target must be the member's to write and inside the space (D9277): its own project, or a project of its company. */
+async function targetAllowed(env: Env, user: User, space: Space, p: SendProposal): Promise<boolean> {
   const project = p.field === 'project_id'
     ? await env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
       .bind(p.target_id).first<{ id: number; founder_id: number | null; company_id: number | null }>()
     : await env.DB.prepare('SELECT p.id, p.founder_id, p.company_id FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ?')
       .bind(p.target_id).first<{ id: number; founder_id: number | null; company_id: number | null }>();
   if (!project) return false;
-  if (!projectInActiveCompany(companyId, project)) return false;
+  if (!projectInSpace(space, project)) return false;
   return canAccessProject(env, user, project, { write: true });
 }
 
@@ -524,9 +635,11 @@ interface AskInputs {
   reads: AskedRead[];
   sendable: IntegrationRow[];
   turns: { role: 'user' | 'assistant'; content: string }[];
+  /** D9277: the conversation's space, re-checked for this request. */
+  space: Space;
 }
 
-async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskBody | null, question: string): Promise<AskInputs> {
+async function askInputs(env: Env, user: User, conv: ConversationRow, space: Space, body: AskBody | null, question: string): Promise<AskInputs> {
   const model = String(body?.model || '').trim().slice(0, 120) || undefined;
   const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
   const fileName = String(body?.file?.name || '').trim().slice(0, 120);
@@ -534,7 +647,7 @@ async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskB
 
   const enabled = parseConnectorKeys(conv.connectors_json);
   const connections = await loadConnections(env, user.id);
-  const { readable, reads } = await readForRun(env, user, enabled, connections, conv.company_id);
+  const { readable, reads } = await readForRun(env, user, enabled, connections, space);
 
   const history = await env.DB.prepare(
     'SELECT role, content FROM eadwyn_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?',
@@ -542,7 +655,7 @@ async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskB
   const turns = (history.results ?? []).reverse();
 
   const sendable = readable.filter((r) => SEND_TARGETS[r.provider_key] && getProviderImpl(r.provider_key)?.push && getProviderImpl(r.provider_key)?.preview);
-  return { question, model, page, fileName, fileText, readable, reads, sendable, turns };
+  return { question, model, page, fileName, fileText, readable, reads, sendable, turns, space };
 }
 
 /**
@@ -556,6 +669,9 @@ export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskI
   const canPropose = x.sendable.length
     ? `Can propose:\n${x.sendable.map((r) => `- ${r.provider_key}: payload field ${SEND_TARGETS[r.provider_key].map((t) => `${t.field} (${t.label})`).join(' or ')}`).join('\n')}`
     : 'Can propose: nothing.';
+  // D9277: the space is named by kind and id only (its name is member-typed text, so it stays out of this message).
+  const spaceLine = `Space: this conversation belongs to one ${x.space.scope} (${x.space.scope} ${x.space.id}). ` +
+    `The connector data is that ${x.space.scope}'s only. Never answer about another company or project.`;
   // D6420 (D1506): what a connector returned and what the member attached are outside text. They
   // leave the system message and travel with the question, each inside its own block. The file's
   // name is caller-typed and is not written here. The member's stored message keeps it
@@ -573,7 +689,7 @@ export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskI
     surface: x.page,
     // D765: the rail's page, else the page's workspace; asking Eadwyn is the option.
     rail: railFor(c, { page: pageFromPath(x.page, 'eadwyn'), option: 'ask:eadwyn' }),
-    systemPrompt: `${ASK_PROMPT}\n\n${canPropose}`,
+    systemPrompt: `${ASK_PROMPT}\n\n${spaceLine}\n\n${canPropose}`,
     messages: [...x.turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: `${data}\n\nQuestion:\n${x.question}` }],
     maxTokens: 600,
     temperature: 0.2,
@@ -599,8 +715,9 @@ const modelLabel = (id: string): string | null => modelById(id)?.name ?? provide
  *     → { ai: true, hold_microusd, model, model_label }
  *     | { ai: false, reason, message }   a refusal the run itself would give (the switch, the budget, the model)
  *
- * 400 `question_required`, 403 `support_session_refused` / `no_profile`,
- * 404 for a uid that is not the caller's, 409 `company_changed`.
+ * 400 `question_required`, 403 `support_session_refused` / `no_profile` /
+ * `space_access_lost`, 404 for a uid that is not the caller's, 409
+ * `company_changed` / `no_space`.
  */
 eadwyn.post('/conversations/:uid/quote', async (c) => {
   await ensureIntegrationsSchema(c.env);
@@ -612,8 +729,9 @@ eadwyn.post('/conversations/:uid/quote', async (c) => {
   const body = await c.req.json<AskBody>().catch(() => null);
   const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
   if (!question) return refuse(c, 400, { code: 'question_required', message: 'Type a question to see what it holds.' });
-  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
-  const q = await quoteRun(c.env, askRunOptions(c, user, await askInputs(c.env, user, conv, body, question)));
+  const space = await runSpace(c, user, conv);
+  if (space instanceof Response) return space;
+  const q = await quoteRun(c.env, askRunOptions(c, user, await askInputs(c.env, user, conv, space, body, question)));
   if (!q.ok) {
     const view = runRefusalView(q);
     return c.json({ ai: false, reason: view?.code ?? q.refusal, message: view?.message ?? 'The hold for this question could not be worked out. Nothing was run.' });
@@ -632,11 +750,12 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   const body = await c.req.json<AskBody>().catch(() => null);
   const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
   if (!question) return c.json({ error: 'question is required' }, 400);
-  // Membership, re-read on every run: the active company is resolved against
-  // the member's company links now, not when the conversation started.
-  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
+  // Membership, re-read on every run: the space is resolved against the
+  // member's access now, not when the conversation started.
+  const space = await runSpace(c, user, conv);
+  if (space instanceof Response) return space;
 
-  const inputs = await askInputs(c.env, user, conv, body, question);
+  const inputs = await askInputs(c.env, user, conv, space, body, question);
   const { reads, sendable, fileName, page } = inputs;
   const opts = askRunOptions(c, user, inputs);
   // D765's and D552's listings read each call's task, page and rail at the call: all three are the builder's, named here.
@@ -675,17 +794,19 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   // RULE 3: the content is resolved now, by the provider's own builder, and
   // stored with the payload. A target the provider cannot preview (gone, or
   // in a company switched off for it) gives no card.
-  const content = proposal && integration && await targetAllowed(c.env, user, conv.company_id, proposal)
+  const content = proposal && integration && await targetAllowed(c.env, user, space, proposal)
     ? await previewFor(c.env, integration, proposal)
     : null;
   if (proposal && integration && content) {
     const payloadJson = actionEnvelope(proposal, content);
     const actionUid = newUid();
+    // D9277: the action records the space it was proposed in; confirm re-checks it.
+    const cols = spaceColumns(space);
     await c.env.DB.prepare(
-      'INSERT INTO eadwyn_pending_actions (uid, conversation_id, user_id, company_id, integration_id, provider_key, target_label, summary, payload_json, payload_hash) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO eadwyn_pending_actions (uid, conversation_id, user_id, scope_kind, company_id, project_id, integration_id, provider_key, target_label, summary, payload_json, payload_hash) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(
-      actionUid, conv.id, user.id, conv.company_id, integration.id, proposal.connector,
+      actionUid, conv.id, user.id, cols.scope_kind, cols.company_id, cols.project_id, integration.id, proposal.connector,
       content.target.slice(0, 200), proposal.summary, payloadJson, await payloadHash(payloadJson),
     ).run();
     action = await loadAction(c.env, actionUid, user.id);
@@ -730,11 +851,12 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
  *   - its stored envelope re-hashes to `payload_hash` (`action_changed`), and
  *     has content (a row from before content was stored has none);
  *   - the connection is still active, the provider can push and preview;
- *   - the conversation's company is still the member's active one
- *     (`company_changed`);
+ *   - the member is still in the space the action was proposed in
+ *     (`space_access_lost`, D9277), and a company space is still the
+ *     member's active company (`company_changed`);
  *   - the same company-and-project guard `/api/integrations/:uid/push` runs
  *     (`pushScopeRefusal`: `company_not_enabled`, `project_not_enabled`);
- *   - the target is still the member's to write, in that company
+ *   - the target is still the member's to write, in that space
  *     (`target_not_allowed`): `targetAllowed`, run again, not trusted from
  *     the proposal;
  *   - the provider's preview, rebuilt now, is byte-for-byte the content the
@@ -775,7 +897,8 @@ eadwyn.post('/actions/:uid/confirm', async (c) => {
     return refuse(c, 422, { code: 'push_not_supported', message: 'This connector cannot receive updates.' });
   }
 
-  if ((await activeCompanyFor(c, user)) !== action.company_id) return companyChanged(c);
+  const space = await runSpace(c, user, action);
+  if (space instanceof Response) return space;
   const scope = await pushScopeRefusal(c, user, row, envelope.send);
   if (scope) {
     return refuse(c, 403, {
@@ -786,8 +909,8 @@ eadwyn.post('/actions/:uid/confirm', async (c) => {
     });
   }
   const proposal = validateSend({ connector: row.provider_key, payload: envelope.send }, [row.provider_key]);
-  if (!proposal || !(await targetAllowed(c.env, user, action.company_id, proposal))) {
-    return refuse(c, 403, { code: 'target_not_allowed', message: 'That record is no longer yours to update in this company, so nothing was sent.' });
+  if (!proposal || !(await targetAllowed(c.env, user, space, proposal))) {
+    return refuse(c, 403, { code: 'target_not_allowed', message: 'That record is no longer yours to update in this company or project, so nothing was sent.' });
   }
   const now = await previewFor(c.env, row, proposal);
   if (!now || canonicalContent(now) !== canonicalContent(envelope.content)) return contentChanged(c);

@@ -103,6 +103,9 @@ const OVERRIDES: Record<string, (which: 'A' | 'B') => Record<string, unknown>> =
   work_graph_release_line_names: (w) => ({ seq: 1, tenant_id: 1, line_asset_uid: `s26-line-${w}` }),
   financial_events: () => ({ source: 's26-source' }), // its trigger needs a coverage row for the source
   build_plans: (w) => ({ scope: `s26-${w}` }), // one current plan per (project, scope)
+  // D9277: a project-scope row names its project and no company (its triggers).
+  eadwyn_conversations: () => ({ company_id: null }),
+  eadwyn_pending_actions: () => ({ company_id: null }),
 };
 const BEFORE: Record<string, (db: DatabaseSync) => void> = {
   work_graph_release_line_names: (db) => {

@@ -26,6 +26,8 @@ import { createJWT } from '../src/auth.ts';
 import eadwyn from '../src/routes/eadwyn.ts';
 
 const EADWYN_SCHEMA_SQL = readFileSync(new URL('../sql/migrations/444_eadwyn_conversations.sql', import.meta.url), 'utf8');
+// D9277: and the space columns, from their own migration.
+const EADWYN_SPACE_SQL = readFileSync(new URL('../sql/migrations/202611281314_9277_eadwyn_space.sql', import.meta.url), 'utf8');
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const A = 2, B = 3;
@@ -37,7 +39,8 @@ function world(opts: { noProfiling?: boolean; noRail?: boolean } = {}) {
     CREATE TABLE user_sessions (jti TEXT, user_id INTEGER, revoked_at TEXT, step_up_due_at TEXT, last_seen_at TEXT);
     INSERT INTO user_sessions (jti, user_id) VALUES ('jti-${A}', ${A}), ('jti-${B}', ${B});
   `);
-  if (!opts.noRail) db.exec(EADWYN_SCHEMA_SQL);
+  // D9277's project_id references projects; these rows name none.
+  if (!opts.noRail) { db.exec('CREATE TABLE projects (id INTEGER PRIMARY KEY)'); db.exec(EADWYN_SCHEMA_SQL); db.exec(EADWYN_SPACE_SQL); }
   if (!opts.noProfiling) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'advisor_conversations')));
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'advisor_messages')));
@@ -97,9 +100,9 @@ test('1. caller only: both stores, newest first, with the fields the page reads'
   assert.equal(r.status, 200);
   assert.deepEqual(r.json.unreadable, []);
   assert.deepEqual(r.json.conversations, [
-    { id: uid(1), kind: 'eadwyn', title: 'How do I price the pilot?', workspace: 'build', updated_at: '2026-10-14 09:00:00', messages: 4, answered: null, total: null, active: false },
-    { id: uid(1010), kind: 'profiling', title: 'Profiling questions', workspace: null, updated_at: '2026-10-13 09:00:00', messages: 3, answered: 8, total: 14, active: true },
-    { id: uid(2), kind: 'eadwyn', title: 'Who should I ask first?', workspace: 'raise', updated_at: '2026-10-12 09:00:00', messages: 2, answered: null, total: null, active: false },
+    { id: uid(1), kind: 'eadwyn', title: 'How do I price the pilot?', workspace: 'build', space: null, updated_at: '2026-10-14 09:00:00', messages: 4, answered: null, total: null, active: false },
+    { id: uid(1010), kind: 'profiling', title: 'Profiling questions', workspace: null, space: null, updated_at: '2026-10-13 09:00:00', messages: 3, answered: 8, total: 14, active: true },
+    { id: uid(2), kind: 'eadwyn', title: 'Who should I ask first?', workspace: 'raise', space: null, updated_at: '2026-10-12 09:00:00', messages: 2, answered: null, total: null, active: false },
   ]);
   // A's complete row is not listed: the active one is the one /start resumes.
   assert.ok(!r.json.conversations.some((x: any) => x.id === uid(1011)));

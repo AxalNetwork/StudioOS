@@ -199,7 +199,7 @@ export default function EadwynComposer({ workspace, model, page, onRan }) {
     eadwynApi.conversation(uid)
       .then((r) => {
         if (!live) return;
-        setConv({ messages: r.messages || [], actions: r.actions || [], connectors: r.conversation?.connectors || [] });
+        setConv({ messages: r.messages || [], actions: r.actions || [], connectors: r.conversation?.connectors || [], space: r.conversation?.space ?? null });
       })
       .catch(() => { if (live) remember(null); });
     return () => { live = false; };
@@ -218,7 +218,7 @@ export default function EadwynComposer({ workspace, model, page, onRan }) {
     const next = r?.conversation?.uid;
     if (!next) throw new Error('The conversation could not be started.');
     remember(next);
-    setConv({ messages: [], actions: [], connectors: [] });
+    setConv({ messages: [], actions: [], connectors: [], space: r?.conversation?.space ?? null });
     return next;
   }, [uid, workspace, remember]);
 
@@ -253,7 +253,7 @@ export default function EadwynComposer({ workspace, model, page, onRan }) {
       const id = await ensureConversation();
       const r = await eadwynApi.ask(id, { question: q, model: model || undefined, page: page || undefined, file: file ? { name: file.name, text: file.text } : undefined });
       const fresh = await eadwynApi.conversation(id);
-      setConv({ messages: fresh.messages || [], actions: fresh.actions || [], connectors: fresh.conversation?.connectors || [] });
+      setConv({ messages: fresh.messages || [], actions: fresh.actions || [], connectors: fresh.conversation?.connectors || [], space: fresh.conversation?.space ?? null });
       setQuestion('');
       setFile(null);
       setState({ asking: false, note: '', receipt: r?.usage || null });
@@ -298,6 +298,8 @@ export default function EadwynComposer({ workspace, model, page, onRan }) {
   return (
     <section className="fwr-block ead" data-testid="eadwyn-composer">
       <span>Ask Eadwyn</span>
+      {/* D9277: the one company or project this conversation belongs to. */}
+      {conv.space?.name && <span className="ead-space" data-testid="text-eadwyn-space">In {conv.space.name}</span>}
       {conv.messages.length > 0 && (
         <>
           <EadwynThread
