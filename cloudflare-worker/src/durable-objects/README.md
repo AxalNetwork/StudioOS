@@ -12,7 +12,7 @@ class only among the entry's module exports. Each file's header comment says wha
 | `meeting-bot-run.ts` | `MeetingBotRun` | `MEETING_BOT_RUN` | meeting bot run (D886) |
 | `deck-presence.ts` | `DeckPresence` | `DECK_PRESENCE` | deck (D1577) |
 | `deck-gen-room.ts` | `DeckGenRoom` | `DECK_GEN_ROOM` | deck's generation runs (D1502) |
-| `ai-governor.ts` | `AiGovernor` | `AI_GOVERNOR` | account, and upstream gateway lease (D1502, D5338) |
+| `ai-governor.ts` | `AiGovernor` | `AI_GOVERNOR` | account, upstream gateway lease, the cron queue lease and each fail-closed rate-limit counter (D1502, D5338, D9205) |
 | `deck-remote.ts` | `DeckRemote` | `DECK_REMOTE` | deck version's phone remote (D1581) |
 | `work-graph-lease.ts` | `WorkGraphLease` | `WORK_GRAPH_LEASE` | tenant, company and WorkGraph asset (D5581 part 2) |
 | `workspace-admission.ts` | `WorkspaceAdmission` | `WORKSPACE_ADMISSION` | provider quota shared by every tenant: #5570's admission coordinator and the audited swarm (D5586 part 3) |

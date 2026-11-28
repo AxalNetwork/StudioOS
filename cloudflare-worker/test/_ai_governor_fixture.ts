@@ -18,6 +18,7 @@ export function governorNamespace() {
     return {
       get: async (k: string) => (m!.has(k) ? structuredClone(m!.get(k)) : undefined),
       put: async (k: string, v: unknown) => { m!.set(k, structuredClone(v)); },
+      delete: async (k: string) => m!.delete(k),
     };
   };
   const instance = (name: string) => {

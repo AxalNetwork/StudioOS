@@ -13,6 +13,13 @@
  * finds every outstanding lease. Calls are applied one at a time (the storage
  * input gate, and `serial` below), so two admissions never read the same
  * state. Only `upstreamAdmission` reaches it.
+ *
+ * D9205 (#9205): the same class, in the same serial, durable way, holds the
+ * minute cron's queue lease (`cron-lease:<lease>`, on `/cron-lease/*`) and
+ * the counters of the fail-closed rate-limit buckets (`rate-counter:<key>`,
+ * on `/counter/bump`), so neither is a KV read followed by a KV write any
+ * more (`services/atomicLease.ts`). A counter's alarm clears it once its
+ * window has ended.
  */
 import type { Env } from '../types';
 import { Governor, type AcquireInput } from '../services/decks/aiGovernor';
@@ -20,6 +27,9 @@ import {
   acquireUpstream, attemptUpstream, readUpstreamState, releaseUpstream, upstreamHeld,
   type Completion, type UpstreamState,
 } from '../services/upstreamLease';
+import {
+  COUNTER_KEY, CRON_LEASE_KEY, CRON_LEASE_TTL_MS, bumpWindow, readCounter, readCronLease, releaseLease, takeLease,
+} from '../services/atomicLease';
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
 const UPSTREAM_KEY = 'upstream';
@@ -34,14 +44,49 @@ export class AiGovernor implements DurableObject {
   constructor(state: DurableObjectState, _env: Env) { this.state = state; }
 
   private upstream<T>(fn: (s: UpstreamState, now: number) => { state: UpstreamState; out: T }): Promise<T> {
+    return this.serialized(UPSTREAM_KEY, readUpstreamState, fn);
+  }
+
+  /** One read-modify-write of `key`, after every earlier one has finished. A `null` state deletes the key. */
+  private serialized<S, T>(key: string, read: (v: unknown) => S, fn: (s: S, now: number) => { state: S; out: T }, after?: (s: S) => Promise<void>): Promise<T> {
     const run = this.serial.then(async () => {
       const storage = this.state.storage;
-      const { state, out } = fn(readUpstreamState(await storage.get(UPSTREAM_KEY)), Date.now());
-      await storage.put(UPSTREAM_KEY, state);
+      const { state, out } = fn(read(await storage.get(key)), Date.now());
+      if (state === null) await storage.delete(key);
+      else await storage.put(key, state);
+      if (after) await after(state);
       return out;
     });
     this.serial = run.catch(() => undefined);
     return run;
+  }
+
+  /** D9205: the cron lease and the fail-closed counters (`services/atomicLease.ts`). */
+  private async atomicFetch(path: string, body: any): Promise<Response> {
+    if (!this.state?.storage) return json({ error: 'no_storage' }, 503);
+    if (path === '/cron-lease/take' || path === '/cron-lease/release') {
+      const holder = text(body?.holder, 400);
+      if (!holder) return json({ error: 'invalid_body' }, 400);
+      if (path === '/cron-lease/release') return json(await this.serialized(CRON_LEASE_KEY, readCronLease, (s) => releaseLease(s, holder)));
+      const ttl = Number(body?.ttlMs);
+      const ttlMs = Number.isSafeInteger(ttl) && ttl > 0 && ttl <= 15 * 60_000 ? ttl : CRON_LEASE_TTL_MS;
+      return json(await this.serialized(CRON_LEASE_KEY, readCronLease, (s, now) => takeLease(s, holder, now, ttlMs)));
+    }
+    if (path === '/counter/bump') {
+      const window = Number(body?.window); const windowSec = Number(body?.windowSec);
+      if (!Number.isSafeInteger(window) || window < 0 || !Number.isSafeInteger(windowSec) || windowSec <= 0) return json({ error: 'invalid_body' }, 400);
+      return json(await this.serialized(COUNTER_KEY, readCounter, (s) => bumpWindow(s, window, windowSec), async (s) => {
+        const storage: any = this.state.storage;
+        // The first count of a window sets the alarm that clears it; later counts leave it.
+        if (s && s.count === 1 && typeof storage.setAlarm === 'function') await storage.setAlarm(s.endsAt + 1000);
+      }));
+    }
+    return json({ error: 'not_found' }, 404);
+  }
+
+  /** D9205: a counter's window has ended, so its count can go. A newer window's count is kept. */
+  async alarm(): Promise<void> {
+    await this.serialized(COUNTER_KEY, readCounter, (s, now) => ({ state: s && s.endsAt <= now ? null : s, out: null }));
   }
 
   private async upstreamFetch(path: string, body: any): Promise<Response> {
@@ -74,6 +119,7 @@ export class AiGovernor implements DurableObject {
     let body: any;
     try { body = await req.json(); } catch { return json({ error: 'invalid_body' }, 400); }
     if (path.startsWith('/upstream/')) return this.upstreamFetch(path, body);
+    if (path.startsWith('/cron-lease/') || path === '/counter/bump') return this.atomicFetch(path, body);
     if (path === '/acquire') {
       const input: AcquireInput = { account: Number(body?.account), run: String(body?.run ?? ''), kind: String(body?.kind ?? 'text'), model: typeof body?.model === 'string' ? body.model : null };
       if (!Number.isSafeInteger(input.account) || input.account <= 0 || !input.run) return json({ error: 'invalid_body' }, 400);
