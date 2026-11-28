@@ -325,7 +325,12 @@ export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, i
                 </dl>
                 <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-gray-500">Members</h3>
                 {s.show_member_names === false
-                  ? <p className="mt-1 text-sm text-gray-500 dark:text-gray-400" data-testid="dr-syndicate-counted">{memberCountLine(s.member_count)}</p>
+                  ? (
+                    <>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400" data-testid="dr-syndicate-counted">{memberCountLine(s.member_count)}</p>
+                      <YourLine line={s.my_line} />
+                    </>
+                  )
                   : (s.members || []).length === 0
                   ? <p className="mt-1 text-sm text-gray-500">{STATES.syndicates.noMembers}</p>
                   : (
@@ -362,6 +367,44 @@ export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, i
             )}
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * D9018 (#9018, DL13l "As a member"): the signed-in member's own pledge, from
+ * the detail read's `my_line` (the caller's row only). The pill is the stored
+ * status: the Worker writes `committed` when a member joins, drawn "Pledged"
+ * because a join records a pledge and moves no money. A status this build does
+ * not know is drawn as stored. Without `my_line` nothing is drawn.
+ */
+export const YOUR_LINE_WHO = 'Only you and the lead see this line.';
+export const LINE_STATUS = { committed: { label: 'Pledged', tone: 'violet' } };
+
+export function yourLineParts(line) {
+  if (!line || typeof line !== 'object') return null;
+  const known = LINE_STATUS[line.status];
+  return {
+    amount: centsMoney(line.commitment_cents) || null,
+    status: known ? known.label : (line.status ? String(line.status) : null),
+    tone: known ? known.tone : 'grey',
+    since: whenLine(line.joined_at),
+  };
+}
+
+export function YourLine({ line }) {
+  const p = yourLineParts(line);
+  if (!p) return null;
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-gray-700" data-testid="dr-syndicate-your-line">
+      <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your line</span>
+        <span className="flex items-center gap-2">
+          <span className="font-mono text-sm font-bold text-gray-900 dark:text-gray-100">{p.amount || <NotRecorded reason="Not recorded: no amount is stored for your pledge." />}</span>
+          {p.status && <StatusPill tone={p.tone} testid="dr-syndicate-your-line-status">{p.status}</StatusPill>}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{p.since ? `Joined ${p.since} UTC. ` : ''}{YOUR_LINE_WHO}</p>
+    </div>
   );
 }
 

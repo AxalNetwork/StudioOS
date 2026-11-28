@@ -128,11 +128,8 @@ test('every other written heading and offer is the page\'s own text', () => {
     const entry = OG_ROUTES.find((r) => r.path === path);
     if (entry.primaryLink) assert.ok(src.includes(entry.primaryLink.label), `${path}: the action is in ${file}`);
   }
-  const demoDay = squash(read('frontend/src/pages/templates/SpinoutDemoDayPage.jsx'));
-  for (const part of ["name: 'Axal VC Spin-Out Demo Day'", "tagline: 'See what 28 days of focused, structured building really produces.'", "Find out if you're ready for the next cohort."]) {
-    assert.ok(demoDay.includes(part), part);
-  }
-  assert.equal(staticBodyFor('/lp/spinout-demo-day').heading, 'Axal VC Spin-Out Demo Day.');
+  // #6994 retired the Spin-Out Demo Day page: its address forwards to /events and has no social card or words.
+  assert.equal(OG_ROUTES.find((r) => r.path === '/lp/spinout-demo-day'), undefined);
 });
 
 test('a route with no words of its own falls back to its title and description, never another page\'s', () => {

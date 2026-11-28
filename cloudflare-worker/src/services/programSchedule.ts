@@ -8,10 +8,11 @@
  * `renderedBody`), so the bytes the studio signs are the terms the grant held
  * at the send. A term nobody set prints "Not recorded" (D797), never a zero.
  *
- * WHAT IS STORED. `program_grants.schedule_contract_uid` holds the envelope's
- * `envelope_uuid`: the envelope is the schedule's contract, and no
- * `licence_contracts` row is written, because that table is the licence's
- * master agreement and an instantiation there supersedes the others.
+ * WHAT IS STORED. The envelope is the schedule's contract: its
+ * `envelope_uuid` is named on the grant's `program_schedule` agreement
+ * version (D5048), and no `licence_contracts` row is written, because that
+ * table is the licence's master agreement and an instantiation there
+ * supersedes the others.
  *
  * WHAT SIGNS IT. `onProgramScheduleEnvelopeCompleted` runs when an envelope
  * completes, on the in-house signing route and on the DocuSign poller. It sets
@@ -30,7 +31,9 @@
  * THE CANONICAL AGREEMENT (D5048, #5048). Each send also writes a
  * `licence_program_agreements` version (kind `program_schedule`) and each
  * completion executes it, in the same batches (`services/programAgreements.ts`).
- * `schedule_contract_uid` stays as the read-through until its callers move.
+ * D9026: the completion guard below matches the envelope on the grant's
+ * current schedule version (`program_grant_schedule_envelopes`), not on the
+ * grant's column, which the send still writes for the Worker one version back.
  */
 import type { Env } from '../types';
 import { programOf, termsHashOf, termsOf, type LicenceLite } from './programGrants';
@@ -207,10 +210,12 @@ export async function onProgramScheduleEnvelopeCompleted(
   const run = await runDecision(env, [
     env.DB.prepare('UPDATE program_grant_schedules SET signed_at = ? WHERE id = ? AND signed_at IS NULL').bind(signedAt, rec.sid),
     decisionGuard(env),
-    // The grant is marked only while its terms are still the revision this envelope showed.
+    // The grant is marked only while its terms are still the revision this envelope showed, and while this
+    // envelope is still its current schedule (D9026: read from its agreement version, before this batch executes it).
     env.DB.prepare(
       `UPDATE program_grants SET schedule_signed_at = ?, signed_revision = ?
-        WHERE id = ? AND terms_revision = ? AND schedule_contract_uid = ? AND schedule_signed_at IS NULL`,
+        WHERE id = ? AND terms_revision = ? AND schedule_signed_at IS NULL
+          AND ? = (SELECT v.envelope_uuid FROM program_grant_schedule_envelopes v WHERE v.grant_id = program_grants.id)`,
     ).bind(signedAt, rec.revision, rec.grant_id, rec.revision, envelopeUuid),
     event('schedule_signed', 'The studio signed the program schedule.', { revision: Number(rec.revision) }),
     // D5048: the canonical version becomes executed, with its signed document's hash, in the same batch.

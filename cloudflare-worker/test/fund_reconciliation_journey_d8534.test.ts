@@ -81,6 +81,7 @@ const LP_A = 10;      // investor A: account exists, address not yet verified at
 const LP_B = 20;      // investor B: verified account, bound at invite
 const GP = 40;        // the GP of record (institutional investor)
 const FA = 50;        // the fund administrator of the operational ledger
+const OTHER_GP = 60;  // an institutional investor who is not this fund's GP of record
 const FUND = 1;
 const COMMIT_A = 6000;  // dollars, as `limited_partners.commitment_amount` stores them
 const COMMIT_B = 4000;
@@ -109,6 +110,8 @@ const SCHEMA = [
   read('../sql/migrations/418_fund_ledger.sql'),
   read('../sql/migrations/473_fund_management_fees.sql'),
   read('../sql/migrations/202611152336_6238_capital_call_amendments.sql'),
+  // D9017: the bank-reversed state a person resolves.
+  read('../sql/migrations/202611272146_9017_capital_call_bank_reversals.sql'),
   ...['417_fund_position_valuations.sql', '472_entity_bank_accounts.sql', '474_mercury_entity_connections.sql',
     '476_fund_report_drafts.sql', '483_mercury_not_ours.sql'].map((m) => read(`../sql/migrations/${m}`)),
 ].join('\n');
@@ -121,7 +124,8 @@ INSERT INTO users (id, email, name, role, is_active, email_verified, investor_ti
   (${LP_A}, 'lp-a@example.test', 'Fixture LP A', 'investor', 1, 0, 'free', 'active', 'approved'),
   (${LP_B}, 'lp-b@example.test', 'Fixture LP B', 'investor', 1, 1, 'free', 'active', 'approved'),
   (${GP}, 'gp@example.test', 'Fixture GP', 'investor', 1, 1, 'institutional', 'active', 'approved'),
-  (${FA}, 'fa@example.test', 'Fixture Fund Administrator', 'investor', 1, 1, 'free', 'active', 'approved');
+  (${FA}, 'fa@example.test', 'Fixture Fund Administrator', 'investor', 1, 1, 'free', 'active', 'approved'),
+  (${OTHER_GP}, 'other-gp@example.test', 'Fixture Other GP', 'investor', 1, 1, 'institutional', 'active', 'approved');
 INSERT INTO super_admins (user_id) VALUES (${SUPER});
 INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES
   (${ADMIN}, 'totp-admin', 'totp', datetime('now')),
@@ -149,8 +153,8 @@ app.onError((err: any, c) => {
   throw err;
 });
 
-async function token(user: number): Promise<string> {
-  return new SignJWT({ user_id: user, ...(JTI[user] ? { jti: JTI[user] } : {}) })
+async function token(user: number, support = false): Promise<string> {
+  return new SignJWT({ user_id: user, ...(JTI[user] ? { jti: JTI[user] } : {}), ...(support ? { impersonated_by: SUPER } : {}) })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
@@ -173,10 +177,10 @@ async function world() {
   const bank: StubState = { accounts: [account('acc-fund-8534', 'checking', LAST4)], org: { id: 'org-fixture', legalBusinessName: 'Fixture Fund I LP' }, txns: { 'acc-fund-8534': [] } };
   const stub = mercuryStub(bank);
 
-  async function call(as: number, method: string, path: string, body?: unknown) {
+  async function call(as: number, method: string, path: string, body?: unknown, opts: { support?: boolean } = {}) {
     const res: Response = await (app.request(path, {
       method,
-      headers: { Authorization: `Bearer ${await token(as)}`, 'content-type': 'application/json' },
+      headers: { Authorization: `Bearer ${await token(as, opts.support)}`, 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }, env) as Promise<Response>).catch((e: unknown) => { if (e instanceof Response) return e; throw e; });
     let json: any = null;
@@ -398,6 +402,34 @@ const lineState = (w: World, id: number) => {
   return { status: x.status, received: x.received };
 };
 
+/* ── D9017: the bank-reversed state ─────────────────────────────────────── */
+
+/** The GP's read of the call that holds `lineId`: each line's `bank_reversed`, and the call's reversals in full. */
+async function gpCall(w: World, lineId: number, as = GP) {
+  const callId = w.one('SELECT fund_call_id FROM capital_calls WHERE id = ?', lineId).fund_call_id;
+  const r = await w.call(as, 'GET', `/api/funds/${FUND}/capital-calls/${callId}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const byLine = Object.fromEntries(r.body.call.lines.map((l: any) => [l.id, l.bank_reversed]));
+  assert.equal(r.body.bank_reversals.status, 'ready');
+  return { byLine, reversals: r.body.bank_reversals.rows as any[] };
+}
+
+/** What each investor's own portal says about bank reversals, by line id. */
+async function portalReversed(w: World, user: number) {
+  const view = await portal(w, user);
+  assert.equal(view.bank_reversals_recorded, true);
+  return Object.fromEntries(view.capital_calls.map((c: any) => [c.id, c.bank_reversed]));
+}
+
+/** The money a reversal must not move: every line, the receipts, paid-in, deployed capital, and each investor's DPI and TVPI. */
+async function money(w: World) {
+  const perf = async (u: number) => (await portal(w, u)).performance.map((p: any) => [p.invested_amount, p.dpi, p.tvpi]);
+  return JSON.stringify({ ledger: ledger(w), receipts: w.rows('SELECT * FROM capital_call_receipts ORDER BY id'), a: await perf(LP_A), b: await perf(LP_B) });
+}
+
+const resolvePath = (uid: string) => `/api/funds/${FUND}/capital-calls/bank-reversals/${uid}/resolve`;
+const NOTE = 'The bank returned the wire; LP A is re-sending it.';
+
 /** The operational ledger: a cash account, an LP capital account and the year's period, set up by the administrator. */
 async function books(w: World) {
   const ids: Record<string, number> = {};
@@ -605,13 +637,77 @@ test('reversed: a reconciled receipt whose bank line fails is flagged for review
   assert.equal((await portal(w, LP_A)).capital_calls[0].status, 'paid', 'the investor still reads paid');
   // The failed line is no longer a posted bank line, so it is not counted unmatched either.
   assert.equal(await fundUnmatchedCount(w.env, FUND, { start: TODAY, end: TODAY } as any), 0);
+  // D9017: the line now reads bank reversed, on the GP's call read and in A's own portal, and nowhere for B.
+  const rev = w.one('SELECT * FROM capital_call_bank_reversals');
+  assert.deepEqual([rev.capital_call_id, rev.cause, rev.bank_status, rev.receipt_cents, rev.resolved_at], [ctx.lineA, 'failed', 'failed', SHARE_A, null]);
+  const gpRead = await gpCall(w, ctx.lineA);
+  assert.deepEqual(gpRead.byLine[ctx.lineA], { detected_at: rev.detected_at, resolved_at: null }, "the GP reads A's line bank reversed");
+  assert.equal(gpRead.byLine[ctx.lineB], null, "B's line is not reversed");
+  assert.deepEqual(gpRead.reversals.map((r: any) => [r.uid, r.capital_call_id, r.cause, r.receipt_cents]), [[rev.uid, ctx.lineA, 'failed', SHARE_A]]);
+  assert.deepEqual(await portalReversed(w, LP_A), { [ctx.lineA]: { detected_at: rev.detected_at, resolved_at: null } }, "A reads it on A's own line");
+  assert.deepEqual(await portalReversed(w, LP_B), { [ctx.lineB]: null }, "B sees no reversal, and not A's line");
+  // A replayed sync, and a second change to the same bank line, record no second reversal.
+  await w.sync();
+  w.bank.txns['acc-fund-8534'][0] = { ...t, status: 'failed', amount: '5999.00' };
+  await w.sync();
+  assert.equal(w.one('SELECT COUNT(*) AS n FROM capital_call_bank_reversals').n, 1, 'one reversal per receipt');
   // A person can only reject the flagged match; that undoes nothing and the line can never be re-matched.
   const again = await w.call(ADMIN, 'POST', `/api/admin/mercury/matches/${m.uid}/confirm`);
   assert.deepEqual([again.status, again.body.code], [409, 'needs_review']);
   assert.equal((await w.call(ADMIN, 'POST', `/api/admin/mercury/matches/${m.uid}/reject`, { reason: 'The wire was returned by the bank.' })).status, 200);
   await w.sync();
   assert.equal(w.one(`SELECT COUNT(*) AS n FROM mercury_matches WHERE state <> 'rejected'`).n, 0);
-  assert.deepEqual(lineState(w, ctx.lineA), { status: 'paid', received: SHARE_A }, 'GAP: the receipt is not reversed');
+  assert.deepEqual(lineState(w, ctx.lineA), { status: 'paid', received: SHARE_A }, 'answer b: the receipt is not reversed');
+  // Rejecting the match does not clear the state.
+  assert.equal((await gpCall(w, ctx.lineA)).byLine[ctx.lineA].resolved_at, null, 'still bank reversed after the reject');
+  assert.equal((await portalReversed(w, LP_A))[ctx.lineA].resolved_at, null);
+  await agree(w, 'reversed (failed): flagged');
+  const before = await money(w);
+
+  // Only the GP of record or an Admin resolves it, outside a support session, with a note.
+  const refused: Array<[number, boolean, number, string | undefined]> = [];
+  for (const [as, support] of [[LP_A, false], [LP_B, false], [FA, false], [OTHER_GP, false], [GP, true], [ADMIN, true]] as Array<[number, boolean]>) {
+    const r = await w.call(as, 'POST', resolvePath(rev.uid), { note: NOTE }, { support });
+    refused.push([as, support, r.status, r.body?.code]);
+  }
+  assert.deepEqual(refused, [
+    [LP_A, false, 402, undefined], [LP_B, false, 402, undefined], [FA, false, 402, undefined], [OTHER_GP, false, 404, undefined],
+    [GP, true, 403, 'support_session_refused'], [ADMIN, true, 403, 'support_session_refused'],
+  ]);
+  const noNote = await w.call(GP, 'POST', resolvePath(rev.uid), { note: 'ok' });
+  assert.deepEqual([noNote.status, noNote.body.error], [400, 'note_required']);
+  assert.equal(w.one('SELECT resolved_at FROM capital_call_bank_reversals').resolved_at, null, 'no refused attempt resolved it');
+  assert.equal(w.one(`SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'capital_call_bank_reversal_resolved'`).n, 0);
+
+  // The GP of record resolves it: the person, the time and the note are kept, with an audit row.
+  const ok = await w.call(GP, 'POST', resolvePath(rev.uid), { note: `  ${NOTE}  ` });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.deepEqual([ok.body.bank_reversal.resolved_by_name, ok.body.bank_reversal.resolution_note], ['Fixture GP', NOTE]);
+  const done = w.one('SELECT * FROM capital_call_bank_reversals WHERE uid = ?', rev.uid);
+  assert.deepEqual([done.resolved_by, done.resolution_note, done.detected_at], [GP, NOTE, rev.detected_at]);
+  assert.ok(done.resolved_at, 'resolved_at is stamped');
+  const audit = w.rows(`SELECT user_id, details FROM activity_logs WHERE action = 'capital_call_bank_reversal_resolved'`);
+  assert.deepEqual(audit.map((a) => [a.user_id, JSON.parse(a.details)]), [[GP, { fund_id: FUND, reversal_uid: rev.uid }]]);
+  assert.deepEqual((await gpCall(w, ctx.lineA)).byLine[ctx.lineA], { detected_at: rev.detected_at, resolved_at: done.resolved_at });
+  assert.deepEqual((await portalReversed(w, LP_A))[ctx.lineA], { detected_at: rev.detected_at, resolved_at: done.resolved_at });
+  // Detection and resolution move no money: the lines, receipts, paid-in, deployed capital, DPI and TVPI are as they were.
+  assert.equal(await money(w), before, 'resolving moved money');
+
+  // The history is kept: a second resolve is refused, and the row cannot be rewritten or deleted.
+  const twice = await w.call(ADMIN, 'POST', resolvePath(rev.uid), { note: 'A second resolution attempt.' });
+  assert.deepEqual([twice.status, twice.body.error, twice.body.bank_reversal?.resolved_by_name], [409, 'bank_reversal_resolved', 'Fixture GP']);
+  assert.equal(w.one(`SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'capital_call_bank_reversal_resolved'`).n, 1, 'a refused resolve leaves no audit row');
+  assert.throws(() => w.db.prepare('UPDATE capital_call_bank_reversals SET resolution_note = ? WHERE uid = ?').run('Rewritten afterwards.', rev.uid), /resolution is final/);
+  assert.throws(() => w.db.prepare('DELETE FROM capital_call_bank_reversals WHERE uid = ?').run(rev.uid), /is kept/);
+  assert.deepEqual({ ...w.one('SELECT resolved_by, resolution_note FROM capital_call_bank_reversals') }, { resolved_by: GP, resolution_note: NOTE });
+  // The same reversal through another fund's path is not found.
+  const elsewhere = await w.call(ADMIN, 'POST', `/api/funds/999/capital-calls/bank-reversals/${rev.uid}/resolve`, { note: NOTE });
+  assert.equal(elsewhere.status, 404);
+  // A second call: A's new line reads no reversal beside the reversed one.
+  const second = await w.call(GP, 'POST', `/api/funds/${FUND}/capital-call`, { amount_cents: CALL_CENTS, due_date: DUE, purpose: 'Fixture call 2' });
+  assert.equal(second.status, 201, JSON.stringify(second.body));
+  const lineA2 = Number(w.one('SELECT MAX(id) AS id FROM capital_calls WHERE limited_partner_id = ?', ctx.lpA).id);
+  assert.deepEqual(await portalReversed(w, LP_A), { [ctx.lineA]: { detected_at: rev.detected_at, resolved_at: done.resolved_at }, [lineA2]: null });
   await agree(w, 'reversed (failed) end');
 });
 
@@ -636,6 +732,22 @@ test('reversed, amount changed: a receipted bank line that comes back as a small
   assert.deepEqual([refused.status, refused.body.code], [409, 'bank_line_already_receipted']);
   assert.deepEqual(lineState(w, ctx.lineB), { status: 'pending', received: 0 });
   assert.equal(matchOf(w, t.id).state, 'proposed');
+  // D9017: A's line reads bank reversed (restated); the new proposal to B's line reverses nothing on B's.
+  const rev = w.one('SELECT * FROM capital_call_bank_reversals');
+  assert.deepEqual([rev.capital_call_id, rev.cause, rev.bank_amount_cents, rev.receipt_cents], [ctx.lineA, 'restated', SHARE_B, SHARE_A]);
+  const gpRead = await gpCall(w, ctx.lineA);
+  assert.deepEqual([gpRead.byLine[ctx.lineA]?.resolved_at, gpRead.byLine[ctx.lineB]], [null, null]);
+  assert.deepEqual(await portalReversed(w, LP_B), { [ctx.lineB]: null });
+  assert.equal((await portalReversed(w, LP_A))[ctx.lineA].resolved_at, null);
+  await agree(w, 'reversed (restated): flagged');
+  const before = await money(w);
+  // An Admin resolves it: kept on the row, and the Admin's act is in the admin audit too.
+  const ok = await w.call(ADMIN, 'POST', resolvePath(rev.uid), { note: 'Restated by the bank; LP A owes the $2,000.00 balance.' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(w.one('SELECT resolved_by FROM capital_call_bank_reversals').resolved_by, ADMIN);
+  const adminAudit = w.rows(`SELECT admin_user_id FROM admin_audit_log WHERE action = 'fund_admin.capital_call.bank_reversal'`);
+  assert.deepEqual(adminAudit.map((a) => a.admin_user_id), [ADMIN]);
+  assert.equal(await money(w), before, 'resolving moved money');
   await agree(w, 'reversed (restated) end');
 });
 

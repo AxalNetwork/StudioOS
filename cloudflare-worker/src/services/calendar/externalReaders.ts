@@ -82,7 +82,7 @@ const READONLY = ['https://www.googleapis.com/auth/calendar.readonly', 'https://
 
 /** The member's access token for one provider, or null when not connected. A refused refresh is `reconnect`. */
 async function storedToken(env: Env, provider: ExternalProvider, userId: number) {
-  const { loadRefreshTokenExport, refreshGoogleAccessToken, refreshMicrosoftAccessToken, reencryptRefreshTokenExport } = await import('../calendar');
+  const { loadRefreshTokenExport, refreshGoogleAccessToken, refreshMicrosoftAccessTokenFor, reencryptRefreshTokenExport } = await import('../calendar');
   const table = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
   const row = provider === 'google'
     ? await env.DB.prepare('SELECT scope, google_email AS address FROM google_oauth_tokens WHERE user_id = ?').bind(userId).first<{ scope: string | null; address: string | null }>()
@@ -93,11 +93,12 @@ async function storedToken(env: Env, provider: ExternalProvider, userId: number)
   if (!stored?.raw) return null;
   let access: string;
   try {
-    access = provider === 'google' ? await refreshGoogleAccessToken(env, stored.raw) : await refreshMicrosoftAccessToken(env, stored.raw);
+    access = provider === 'google' ? await refreshGoogleAccessToken(env, stored.raw) : await refreshMicrosoftAccessTokenFor(env, userId, stored);
   } catch {
     throw new ExternalReadError('reconnect', 'refresh_refused');
   }
-  if (stored.wasPlaintext) await reencryptRefreshTokenExport(env, table, userId, stored.raw);
+  // #9028: the Microsoft refresh stores a rotated token and rolls a plaintext row forward itself.
+  if (provider === 'google' && stored.wasPlaintext) await reencryptRefreshTokenExport(env, table, userId, stored.raw);
   return { access, address: row.address ?? null };
 }
 

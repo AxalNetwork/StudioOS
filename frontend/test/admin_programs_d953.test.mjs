@@ -161,6 +161,9 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     // D5895 (#5895): AI-native Venture runs in the generic shell (PG03a): its six core sections, no module tab.
     'ai-native-venture': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
     'investor-cohorts': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
+    // D5894 (#5894): Product testing runs in the generic shell (PG03a): its six core sections and the Applications
+    // module, which opens its HQ page (a Super Admin's strip only).
+    'product-testing': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Applications', 'History', 'Settings'],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');
   assert.equal(movedNotice('/admin/programs/mentor-cohorts/people', '?moved=advisor-cohorts'), 'Advisor cohort access is now Mentor cohort access, under Programs.');
@@ -730,10 +733,10 @@ test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s throu
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
   // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client; D962 part 1's programsApi.
-  // D963 (#2796) adds parts 5 and 6's clients; D4298 (#4298) the Influencers client.
+  // D963 (#2796) adds parts 5 and 6's clients; D4298 (#4298) the Influencers client; D5894 (#5894) R11's client, for Product testing's Participation.
   assert.deepEqual([...new Set(clients)].sort(), ['adminInfluencers:adminInfluencersApi', 'adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'investorCohorts:investorCohortsApi',
     'learning:learningApi', 'licencePrograms:licenceProgramsApi', 'licenceRequests:licenceRequestsApi',
-    'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
+    'productTesting:adminTestingApi', 'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
   assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');

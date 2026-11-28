@@ -834,7 +834,7 @@ export default function ArticleAuthorPage() {
       toast.success('Image inserted');
     } catch (e) {
       reportError('ArticleAuthor:image', e);
-      setImageError(e?.data?.error || 'Image upload failed');
+      setImageError(e?.data?.message || e?.data?.error || 'Image upload failed');
     } finally {
       setImageUploading(false);
     }

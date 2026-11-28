@@ -16,6 +16,7 @@
  * "Not recorded" with its reason; a read that failed is "Unreadable".
  */
 import { dealMoney, roundAsk } from '../../components/deals/dealMoney.js';
+import { day, itemTitle } from '../cycles/evidence/evidenceView.js';
 
 export const STEPS = ['Invited', 'Reviewing', 'Diligence', 'IC', 'Terms', 'Committed', 'Signed', 'Funded'];
 export const YOU_PASSED = 'You passed';
@@ -290,49 +291,87 @@ export function scoreSummary(strip) {
   };
 }
 
-/** The scopes the scorecard has not enough recorded for: DE04's "Missing" line, from the same strip. */
-export function missingEvidence(strip) {
-  if (!strip || strip.state === 'loading') return { state: 'loading' };
-  if (strip.state === 'unreadable') return { state: 'unreadable' };
-  if (strip.state !== 'open') return { state: 'closed', line: 'The scorecard is not open to you, so what is missing is not read here.' };
-  const labels = (strip.scopes || []).filter((s) => s.state === 'not_enough').map((s) => s.label);
-  return labels.length ? { state: 'some', labels, line: `Missing: ${labels.join(', ')} (not enough recorded).` } : { state: 'none', line: 'No scope is short of evidence.' };
-}
-
 const CRITERION = { sector: 'Sector', stage: 'Stage', region: 'Market region', ticket: 'Ticket' };
 
-/**
- * Thesis fit (`GET /api/deals/fit`, D1239) for this deal: the investor's own comparison, with the
- * criteria it matched and the ones outside the thesis as its reasons. A criterion not set or not
- * recorded is not a reason. Never a fit the read did not compute.
- */
-export function thesisFitOf(read, dealId) {
-  if (!read || read.status === 'loading') return { state: 'loading' };
-  if (read.status === 'unreadable') return { state: 'unreadable' };
-  const f = (read.data?.items || []).find((x) => String(x?.deal_id) === String(dealId));
-  if (!f || f.state === 'unavailable') return { state: 'unavailable', line: 'Fit shows on deals you are invited to or have committed on.' };
-  if (f.state === 'unreadable') return { state: 'unreadable', line: f.reason || null };
-  if (f.state === 'not_set') return { state: 'not_set', line: 'Set your thesis to see how this deal fits it.' };
-  if (f.score == null) return { state: 'not_enough', line: 'Not enough of the venture is recorded to compare with your thesis.' };
-  const crit = Array.isArray(f.criteria) ? f.criteria : [];
-  const reasons = crit.filter((c) => c && (c.state === 'match' || c.state === 'outside') && CRITERION[c.key])
-    .map((c) => `${CRITERION[c.key]} ${c.state === 'match' ? 'matches your thesis' : 'is outside your thesis'}`);
-  return { state: 'scored', line: `Fit to my thesis ${f.score}${f.confidence_label ? ` (${f.confidence_label})` : ''}`, reasons };
+/** How many of the firm's Question and Risk notes the card shows before "{n} more in Firm notes". */
+export const CASE_NOTES_SHOWN = 3;
+/** The case read returns at most this many notes (`deal_case.ts`), so a full page may hold back more. */
+export const CASE_NOTES_CAP = 20;
+export const CASE_PARTIAL = 'Part of the shared evidence could not be read, so this list may be incomplete.';
+export const CASE_NO_THIN_SCOPE = 'No scope is below half its evidence.';
+export const CASE_WHY_UNREADABLE = 'Thesis fit and the main evidence could not be read. That is not a claim that there are none.';
+export const CASE_OPEN_UNREADABLE = 'Your firm’s questions and risks, and what the scorecard is missing, could not be read. That is not a claim that there are none.';
+export const CASE_FIRM_REQUIRED = 'Choose the firm this deal is for.';
+
+const BLOCK_WHAT = { thesis_fit: 'Thesis fit', main_evidence: 'The shared evidence', open_questions: 'Your firm’s notes', missing: 'The scorecard' };
+const tagWord = (t) => { const s = String(t ?? '').trim().toLowerCase(); return s ? s[0].toUpperCase() + s.slice(1) : 'Note'; };
+
+/** One block of the case read: its own state, the reason word for word when it has nothing, and a reload in flight. */
+function caseBlock(key, b, reloading, recorded) {
+  if (b?.state === 'not_recorded' && b.reason) return { state: 'not_recorded', line: String(b.reason) };
+  if (b?.state === 'recorded') { const v = recorded(b); if (v) return { state: 'recorded', ...v }; }
+  if (reloading) return { state: 'loading' };
+  return { state: 'unreadable', line: b?.state === 'unreadable' && b.reason ? String(b.reason) : `${BLOCK_WHAT[key]} could not be read. Try again.` };
 }
 
-/** Questions and risks the viewer's firm wrote down (notes tagged Question or Risk, DL14), newest first. */
-export const CASE_TAGS = ['Question', 'Risk'];
-export function caseNotes(reads) {
-  const all = CASE_TAGS.map((t) => reads?.[t]);
-  if (all.some((r) => !r || r.status === 'loading')) return { state: 'loading' };
-  if (all.some((r) => r.status === 'unreadable')) return { state: 'unreadable' };
-  const rows = CASE_TAGS.flatMap((tag) => (reads[tag].data?.items || []).filter((n) => n && String(n.body ?? '').trim()).map((n) => {
-    const first = String(n.body).trim().split('\n')[0].trim();
-    return { uid: n.uid ?? `${tag}-${n.id}`, tag, text: first.length > 140 ? `${first.slice(0, 139)}…` : first, at: n.updated_at || n.created_at || '' };
-  }));
-  rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
-  const total = CASE_TAGS.reduce((n, t) => n + (Number(reads[t].data?.total) || 0), 0);
-  return { state: rows.length ? 'some' : 'none', rows, more: Math.max(total - rows.length, 0) };
+/** A scope DE04's Missing line names, with why: not enough recorded, its coverage, or coverage not recorded. */
+function thinScope(s) {
+  const label = s?.label || s?.scope || 'A scope';
+  if (s?.state === 'not_enough') return `${label} (not enough recorded)`;
+  const c = s?.coverage;
+  if (typeof c === 'number' && Number.isFinite(c)) return `${label} (${Math.round(c * 100)}% of its evidence)`;
+  return `${label} (coverage not recorded)`;
+}
+
+/**
+ * D9109 (#9109): DE04's Investment case from the one case read (`GET /api/deals/:id/case`, D6173).
+ * `read` is `{ status: 'loading' | 'ready' | 'unreadable', data, error, reloading }`. The whole card is
+ * `loading`, `ready`, `unreadable` (a network error or a 5xx), `firm_required` (409) or `hidden` (403 or
+ * 404: the page around it handles access). A ready card has four blocks, each `recorded`, `not_recorded`
+ * with the read's reason word for word, `unreadable` with its reason, or `loading` while Try again reads
+ * the case again: a block that drew keeps drawing until the new answer arrives.
+ */
+export function caseView(read) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status !== 'ready') {
+    const s = Number(read.error?.status);
+    if (s === 403 || s === 404) return { state: 'hidden' };
+    if (s === 409) return { state: 'firm_required', line: CASE_FIRM_REQUIRED };
+    return { state: 'unreadable', why: CASE_WHY_UNREADABLE, open: CASE_OPEN_UNREADABLE };
+  }
+  const d = read.data || {};
+  const again = Boolean(read.reloading);
+  const fit = caseBlock('thesis_fit', d.thesis_fit, again, (b) => {
+    const f = b.fit;
+    if (!f || typeof f.score !== 'number') return null;
+    const reasons = (Array.isArray(f.criteria) ? f.criteria : []).filter((c) => c && (c.state === 'match' || c.state === 'outside') && CRITERION[c.key])
+      .map((c) => `${CRITERION[c.key]} ${c.state === 'match' ? 'matches your thesis' : 'is outside your thesis'}`);
+    return { line: `Fit to my thesis ${f.score}${f.confidence_label ? ` (${f.confidence_label})` : ''}`, reasons };
+  });
+  const evidence = caseBlock('main_evidence', d.main_evidence, again, (b) => {
+    if (!Array.isArray(b.groups)) return null;
+    const rows = b.groups.slice(0, 5).map((g) => ({
+      key: `${g.area}|${g.kind}|${g.source_label}`,
+      text: `${g.area || 'Evidence'} · ${itemTitle(g)} · ${Number(g.count) || 0}`,
+      newest: day(g.newest),
+    }));
+    return { rows, partial: b.partial === true ? CASE_PARTIAL : null };
+  });
+  const notes = caseBlock('open_questions', d.open_questions, again, (b) => {
+    if (!Array.isArray(b.items)) return null;
+    const all = b.items.filter((n) => n && String(n.body ?? '').trim()).map((n) => {
+      const first = String(n.body).trim().split('\n')[0].trim();
+      return { uid: n.uid, tag: tagWord(n.tag), text: first.length > 140 ? `${first.slice(0, 139)}…` : first };
+    });
+    const extra = Math.max(all.length - CASE_NOTES_SHOWN, 0);
+    const more = !extra ? null : b.items.length >= CASE_NOTES_CAP ? `${extra} or more in Firm notes` : `${extra} more in Firm notes`;
+    return { rows: all.slice(0, CASE_NOTES_SHOWN), more };
+  });
+  const missing = caseBlock('missing', d.missing, again, (b) => {
+    if (!Array.isArray(b.scopes)) return null;
+    return b.scopes.length ? { line: `Missing: ${b.scopes.map(thinScope).join(', ')}.`, thin: true } : { line: CASE_NO_THIN_SCOPE, thin: false };
+  });
+  return { state: 'ready', fit, evidence, notes, missing };
 }
 
 /** Your position's Route (DE04 "Direct"): the commitments read carries no route. */

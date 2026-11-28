@@ -98,7 +98,7 @@ export const KIND_WORDS = Object.freeze({
   'pain-theme': 'Interview pain themes', 'consented-quote': 'Interview quotes', 'icp-fit': 'Interviews with an ICP fit',
   'demand-signal': 'Demand signals', 'experiment-result': 'Experiment results', 'validation-verdict': 'Validation decisions',
   'kpi-snapshot': 'Dated KPIs', 'bank-revenue': 'Revenue from the bank', 'roadmap-release': 'Releases',
-  'must-have-done': 'Must-haves done', 'mapped-bank-spend': 'Spend from the bank, by section', 'hiring-plan': 'Planned hires',
+  'must-have-done': 'Must-haves done', 'prototype-test-result': 'Prototype test results', 'mapped-bank-spend': 'Spend from the bank, by section', 'hiring-plan': 'Planned hires',
   'roadmap-milestone': 'Roadmap milestones', 'formation-proof': 'Formation proof', 'filed-obligation': 'Filed obligations',
   'signed-document': 'Signed documents', 'github-ip-step': 'GitHub IP step', 'bank-statement': 'Bank statements',
   'loi-file': 'Letters of intent', 'revenue-proof': 'Revenue proof', 'accepted-safe': 'Accepted SAFEs', 'filed-83b': '83(b) filings',

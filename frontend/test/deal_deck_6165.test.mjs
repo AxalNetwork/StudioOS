@@ -74,6 +74,8 @@ function handlerWith(deck) {
     if (/\/api\/deals\/4\/stage/.test(url)) return response({ my_stage: 'Diligence', reason: null, next_action: { label: 'Open the diligence case', href: '/due-diligence/dd1', kind: 'navigate' } });
     if (/\/api\/deals\/4\/whats-new/.test(url)) return response({ first_visit: true, changes: [] });
     if (/\/api\/deals\/4\/notes/.test(url)) return response({ items: [], total: 0 });
+    // D9109: the Investment case's one read, with nothing recorded, so its card shows no Try again of its own.
+    if (/\/api\/deals\/4\/case$/.test(url)) return response({ deal_id: 4, ...Object.fromEntries(['thesis_fit', 'main_evidence', 'open_questions', 'missing'].map((k) => [k, { state: 'not_recorded', reason: 'Not recorded here.' }])) });
     if (/\/api\/deals\/4\/activity/.test(url)) return response([]);
     if (/\/api\/deals\/4\/commitments/.test(url)) return response([]);
     if (/\/api\/deals\/4(\?|$)/.test(url)) return response(DEAL);

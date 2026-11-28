@@ -74,6 +74,16 @@ const CACHE_TTL_SECONDS = 60 * 24 * 60 * 60; // 60 days (slug + cover only)
 const LIST_CACHE_TTL_SECONDS = 5 * 60;       // 5 minutes
 const VALID_AUTHOR_ROLES = new Set(['admin', 'founder', 'investor', 'partner', 'advisor', 'coach']);
 
+/** #9190 — the longest base64 text that can decode to at most MAX_IMAGE_BYTES. */
+const MAX_IMAGE_BASE64 = 4 * Math.ceil(MAX_IMAGE_BYTES / 3);
+
+/** #9190 — whether the bytes open with the signature of the declared image type (PNG, JPEG, WebP, GIF). */
+function imageBytesAre(bytes: Uint8Array, mime: string): boolean {
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  if (mime === 'image/gif') return bytes.length >= 6 && (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a');
+  return sniffMime(bytes) === mime;
+}
+
 function bytesFromBase64(b64: string): Uint8Array {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -814,8 +824,13 @@ articles.post('/:id/image', async (c) => {
   const mime = m[1].toLowerCase();
   const ext = IMAGE_MIME[mime];
   if (!ext) return c.json({ error: 'unsupported_mime' }, 400);
-  const bytes = bytesFromBase64(m[2]);
+  // #9190 — the size is read from the base64 length, before anything is decoded.
+  if (m[2].length > MAX_IMAGE_BASE64) return c.json({ error: 'too_large', max: MAX_IMAGE_BYTES }, 413);
+  let bytes: Uint8Array;
+  try { bytes = bytesFromBase64(m[2]); } catch { return c.json({ error: 'invalid_data_uri' }, 400); }
   if (bytes.byteLength > MAX_IMAGE_BYTES) return c.json({ error: 'too_large', max: MAX_IMAGE_BYTES }, 413);
+  // #9190 — the bytes must be the image type they declare.
+  if (!imageBytesAre(bytes, mime)) return refuse(c, 400, { code: 'mime_mismatch', message: 'That file is not the image type it says it is. Upload a PNG, JPEG, WebP or GIF.' });
   const uuid = crypto.randomUUID();
   const filename = `img-${uuid}.${ext}`;
   const key = `articles/${id}/${filename}`;

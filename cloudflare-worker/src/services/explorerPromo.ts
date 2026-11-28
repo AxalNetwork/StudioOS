@@ -21,7 +21,7 @@
  * after issuance.
  */
 import type { Env } from '../types';
-import { writeFeatureUnlock } from './featureUnlocks';
+import { featureUnlockStatement } from './featureUnlocks';
 import { bindingKey } from '../util/schemaBootstrap';
 
 /** The canonical redemption screen, with a code safe for a query parameter (D2319). */
@@ -183,24 +183,32 @@ export async function redeemExplorerPromo(env: Env, userId: number, rawCode: str
     return { ok: false, reason: 'expired' };
   }
 
-  // Atomic single-use claim: only one concurrent request can flip
-  // redeemed_at from NULL.
-  const claim = await env.DB.prepare(
-    `UPDATE explorer_promo_codes SET redeemed_at = datetime('now')
-      WHERE id = ? AND redeemed_at IS NULL`,
-  ).bind(row.id).run();
-  const changed = Number((claim as { meta?: { changes?: number } }).meta?.changes ?? 0);
-  if (changed === 0) return { ok: false, reason: 'already_redeemed' };
-
-  // Grant the license. Synthetic payment-intent id keeps the
-  // feature_unlocks UNIQUE(source_payment_intent_id) idempotence — the same
-  // pattern promos.ts uses for free grants (`promo:{id}:{userId}`).
-  await writeFeatureUnlock(env, {
+  // D9036: the single-use claim and the grant are ONE D1 batch, so they land
+  // together or not at all. The claim was written first and the grant after,
+  // so a grant that failed left the code spent with no unlock, and every retry
+  // answered `already_redeemed`.
+  //
+  // The claim is atomic: only one request flips redeemed_at from NULL. The
+  // grant is keyed on a synthetic payment-intent id, `explorer_promo:<code id>:<user>`,
+  // under feature_unlocks' UNIQUE(source_payment_intent_id) — the same pattern
+  // promos.ts uses for free grants (`promo:{id}:{userId}`). A request that
+  // loses the claim to a concurrent one therefore inserts nothing: the
+  // winner's row already holds that id, and INSERT OR IGNORE skips it.
+  const grant = await featureUnlockStatement(env, {
     userId,
     featureKey: row.feature_key,
     paymentIntentId: `explorer_promo:${row.id}:${userId}`,
     unlockDays: row.unlock_days,
   });
+  const [claim] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE explorer_promo_codes SET redeemed_at = datetime('now')
+        WHERE id = ? AND redeemed_at IS NULL`,
+    ).bind(row.id),
+    grant,
+  ]);
+  const changed = Number((claim as { meta?: { changes?: number } }).meta?.changes ?? 0);
+  if (changed === 0) return { ok: false, reason: 'already_redeemed' };
 
   const redeemedRow = await env.DB.prepare(
     `SELECT redeemed_at FROM explorer_promo_codes WHERE id = ?`,

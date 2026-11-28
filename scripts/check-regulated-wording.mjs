@@ -95,6 +95,9 @@ export const SURFACES = [
   ['copy', 'frontend/src/pages/team/SkillProposals.jsx', 'D8827: Eadwyn\'s rail on Compare with Axal — summary, proposals, unavailable state'],
   ['copy', 'frontend/src/pages/cycles/VerdictEvidencePanel.jsx', 'the Read the evidence task card on Record a decision'],
   ['copy', 'frontend/src/pages/cycles/FeedbackTab.jsx', 'Grow › Feedback: Eadwyn\'s theme placements and their review (D6865 part 2)'],
+  // D6913 part 4: Eadwyn's proposal of a data room's open files not yet in the investor's Library.
+  ['copy', 'frontend/src/pages/research/RoomLibrary.jsx', 'Research › Diligence room: Eadwyn\'s proposal card, its saving and failed states'],
+  ['copy', 'frontend/src/pages/research/roomLibraryModel.js', 'the proposal\'s sentence, eyebrow, foot and outcome lines'],
 ];
 
 /**

@@ -67,3 +67,16 @@ test('each new public path is reachable logged-out, previewable and in the sitem
     assert.match(sitemap, new RegExp(`<loc>https://axal.vc${path}</loc>`), `${path} belongs in the sitemap`);
   }
 });
+
+test('D6994: the retired Demo Day page forwards to Events and leaves no marketing metadata', async () => {
+  const { OG_ROUTES } = await import('../src/lib/ogRegistry.js');
+  const { isPublicPath } = await import('../src/lib/api.js');
+  const retired = '/lp/spinout-demo-day';
+  assert.equal(route(retired), '<Navigate to="/events" replace />');
+  assert.equal(isPublicPath(retired), false);
+  assert.equal(isPublicPath('/events'), true);
+  assert.equal(OG_ROUTES.some(({ path }) => path === retired), false);
+  assert.ok(!read('frontend/public/sitemap.xml').includes(retired));
+  assert.ok(!read('frontend/src/data/network.js').includes("id: 'spinout-demo-day'"));
+  assert.ok(!existsSync(resolve(ROOT, 'frontend/src/pages/templates/SpinoutDemoDayPage.jsx')));
+});

@@ -1,0 +1,141 @@
+<!doctype html>
+<!--
+  D5812 (#5812, D1451 part 2). CONSTRUCTED, NOT RECORDED (UNVERIFIED).
+
+  A page for the Playwright Teams driver's tests. It imitates the hooks in
+  src/adapters/teamsSelectors.ts and nothing more; it is not a copy of Teams'
+  page. Part 5 of D1451 (the live check) replaces it with recorded screens.
+
+  One page, every screen. The scenario is the first part of the meeting id in
+  the path (teams.microsoft.com/meet/<scenario>-…):
+    lobby      launcher → pre-join → lobby, until window.__teams.admit()
+    open       launcher → pre-join → straight into the call
+    nochat     straight into the call, but the chat box never opens (a notice cannot be posted)
+    captcha    a captcha on opening the link
+    anonymous  anonymous join turned off, on opening the link
+  window.__teams drives the rest (show, admit, people, captions, tone, end).
+  tone() plays a sine through a local WebRTC loopback, the way a remote
+  participant's audio arrives. Rows and captions carry TEXT the driver must
+  never return. If the test exposed window.__fixtureNote, the page reports
+  the capture switch, the chat send, the hang-up and any captcha click to it
+  (in order), so the test still knows after the page closes. No real name, link or text is in it.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Teams fixture</title>
+<style>.pane { border: 1px solid #ccc; padding: 4px; } [hidden] { display: none !important; }</style></head>
+<body>
+<main id="app"></main>
+<script>
+(() => {
+  const app = document.getElementById('app');
+  const scenario = (location.pathname.split('/').filter(Boolean).pop() || '').split('-')[0];
+  const log = { name: null, mic: null, camera: null, joins: 0, chat: [], hangup: 0, captchaClicks: 0, screens: [] };
+  let screen = 'launcher', rows = [], captions = [], chatOpen = false, moreOpen = false, rosterOpen = false, captionsOn = false;
+
+  const note = (what) => { log.order = (log.order || []).concat(what); if (typeof window.__fixtureNote === 'function') window.__fixtureNote(what); };
+
+  // The capture switch, watched: the driver must not turn it on before admission and the notice.
+  const capture = window.__eadwynCapture;
+  if (capture) {
+    let on = capture.on;
+    Object.defineProperty(capture, 'on', { get: () => on, set: (v) => { if (v && !on) note('capture_on'); if (!v && on) note('capture_off'); on = v; } });
+  }
+
+  const el = (tag, attrs = {}, text = '') => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text) e.textContent = text;
+    return e;
+  };
+  const on = (e, fn) => { e.addEventListener('click', fn); return e; };
+
+  function render() {
+    app.replaceChildren();
+    log.screens.push(screen);
+    if (screen === 'launcher') {
+      app.append(el('h1', {}, 'How do you want to join your Teams meeting?'));
+      app.append(on(el('button', { 'data-tid': 'joinOnWeb' }, 'Continue on this browser'), () => show('prejoin')));
+    } else if (screen === 'prejoin') {
+      app.append(el('input', { 'data-tid': 'prejoin-display-name-input', 'aria-label': 'Type your name' }));
+      const mic = on(el('button', { 'data-tid': 'toggle-mute', 'aria-pressed': 'true' }, 'Microphone'), () => mic.setAttribute('aria-pressed', mic.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
+      const cam = on(el('button', { 'data-tid': 'toggle-video', 'aria-pressed': 'true' }, 'Camera'), () => cam.setAttribute('aria-pressed', cam.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
+      app.append(mic, cam, on(el('button', { 'data-tid': 'prejoin-join-button' }, 'Join now'), () => {
+        log.name = app.querySelector('[data-tid="prejoin-display-name-input"]').value;
+        log.mic = mic.getAttribute('aria-pressed') === 'true' ? 'on' : 'off';
+        log.camera = cam.getAttribute('aria-pressed') === 'true' ? 'on' : 'off';
+        log.joins += 1;
+        show(scenario === 'open' || scenario === 'nochat' ? 'in_call' : 'lobby');
+      }));
+    } else if (screen === 'lobby') {
+      app.append(el('div', { 'data-tid': 'lobby-screen' }, 'Someone in the meeting should let you in soon'));
+    } else if (screen === 'in_call') {
+      app.append(on(el('button', { 'data-tid': 'hangup-main-btn' }, 'Leave'), () => { log.hangup += 1; note('hangup'); show('left'); }));
+      app.append(on(el('button', { 'data-tid': 'chat-button' }, 'Chat'), () => { if (scenario !== 'nochat') { chatOpen = true; render(); } }));
+      app.append(on(el('button', { 'data-tid': 'roster-button' }, 'People'), () => { rosterOpen = true; render(); }));
+      app.append(on(el('button', { 'data-tid': 'more-button' }, 'More'), () => { moreOpen = true; render(); }));
+      // Rendered in the DOM but hidden: the driver reads visible elements only.
+      app.append(el('div', { 'data-tid': 'roster-participant', 'data-participant-id': 'ghost', 'aria-label': 'Hidden Row', hidden: '' }, 'hidden'));
+      if (chatOpen) {
+        const box = el('input', { 'data-tid': 'chat-compose-input' });
+        app.append(box, on(el('button', { 'data-tid': 'chat-send-button' }, 'Send'), () => { log.chat.push(box.value); note('chat'); box.value = ''; }));
+      }
+      if (moreOpen) app.append(on(el('button', { 'data-tid': 'closed-captions-button' }, 'Turn on live captions'), () => { captionsOn = true; moreOpen = false; render(); }));
+      if (rosterOpen) {
+        const pane = el('div', { class: 'pane' });
+        for (const r of rows) pane.append(el('div', { 'data-tid': 'roster-participant', 'data-participant-id': r.id, 'aria-label': r.name, 'data-is-self': r.self ? 'true' : 'false' }, `${r.name} SECRET-ROSTER-TEXT`));
+        app.append(pane);
+      }
+      if (captionsOn) {
+        const pane = el('div', { class: 'pane' });
+        for (const c of captions) pane.append(el('div', { 'data-tid': 'closed-caption-row', 'data-speaker-name': c.name }, c.words));
+        app.append(pane);
+      }
+    } else if (screen === 'captcha') {
+      app.append(on(el('div', { 'data-tid': 'captcha-challenge' }, 'Prove you are a person'), () => { log.captchaClicks += 1; note('captcha_click'); }));
+    } else if (screen === 'anonymous_blocked') {
+      app.append(el('div', { 'data-tid': 'anonymous-join-blocked' }, 'Anonymous users can not join this meeting'));
+    } else if (screen === 'bot_blocked') {
+      app.append(el('div', { 'data-tid': 'external-bot-blocked' }, 'This meeting does not allow bots'));
+    } else if (screen === 'denied') {
+      app.append(el('div', { 'data-tid': 'lobby-denied' }, 'Sorry, you were not admitted'));
+    } else if (screen === 'ended') {
+      app.append(el('div', { 'data-tid': 'call-ended-screen' }, 'The meeting has ended'));
+    }
+  }
+  function show(next) { screen = next; render(); }
+
+  // A remote participant's audio, the way Teams receives it: a WebRTC track.
+  async function tone(hz = 440) {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = hz;
+    const dest = ctx.createMediaStreamDestination();
+    osc.connect(dest);
+    osc.start();
+    const a = new RTCPeerConnection();
+    const b = new RTCPeerConnection();
+    a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+    b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+    for (const t of dest.stream.getTracks()) a.addTrack(t, dest.stream);
+    const offer = await a.createOffer();
+    await a.setLocalDescription(offer);
+    await b.setRemoteDescription(offer);
+    const answer = await b.createAnswer();
+    await b.setLocalDescription(answer);
+    await a.setRemoteDescription(answer);
+    window.__tone = { ctx, a, b };
+  }
+
+  window.__teams = {
+    log, show, tone,
+    admit: () => show('in_call'),
+    end: () => show('ended'),
+    people: (next) => { rows = next; render(); },
+    captions: (next) => { captions = next; render(); },
+    get screen() { return screen; },
+  };
+  show(scenario === 'captcha' ? 'captcha' : scenario === 'anonymous' ? 'anonymous_blocked' : 'launcher');
+})();
+</script>
+</body>
+</html>

@@ -102,7 +102,8 @@ test('investor-owned deep links keep the investor workspace shell', () => {
   assert.match(
     dataRoom,
     // D4473: a member who also holds Founder is served the founder's room.
-    /effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/,
+    // D6162: the redirect keeps the query and the hash, so the venture rides along.
+    /effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to=\{\{ pathname: '\/research\/diligence', search: location\.search, hash: location\.hash \}\} replace \/>/,
     'the investor branch must be the first arm, ahead of any founder shell',
   );
   assert.doesNotMatch(dataRoom, /investorWorkspace\('deals', <DataRoomPage/,

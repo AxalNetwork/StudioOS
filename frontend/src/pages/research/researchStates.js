@@ -42,6 +42,9 @@ export const INDEX_STATE = {
   pending: { label: 'Queued', tone: 'info', glyph: '◷' },
   unsupported: { label: 'Unsupported', tone: 'neutral', glyph: '⊘' },
   failed: { label: 'Failed', tone: 'danger', glyph: '✕' },
+  // D6913 part 4 (RS-16, RS-21 B): D6869's lapsed room reference. Its passages were deleted; it is recorded, not missing.
+  // The canvas reads "Index entries deleted"; the pill says it in the width the Index state column has.
+  source_lost: { label: 'Entries deleted', tone: 'neutral', glyph: '⊖' },
 };
 
 export function indexStateOf(d) {

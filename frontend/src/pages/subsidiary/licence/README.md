@@ -7,7 +7,7 @@ the tab from the path and mounts one of these; Summary and Terms are
 are `../LicenceFrame.jsx`.
 
 - `ContractTab.jsx` — the contract in force and the one waiting (D804).
-- `StatementsTab.jsx` — HQ's statements and disputing a line (D804).
+- `StatementsTab.jsx` — The initial and annual fee invoices (D9112), royalty statements and disputing a line (D804).
 - `RequestsTab.jsx` — the six requests to HQ, the renewal timeline and "Your
   requests" with HQ's answers (D804; the sixth, Request a program, is D988's).
 - `RequestChangeSheet.jsx` — the "Request a change" sheet for the licence's
@@ -19,6 +19,9 @@ are `../LicenceFrame.jsx`.
   shared right-side `Sheet` (D1317).
 - `ProgramRequestSheet.jsx` — "Request a program" (GR9), D983's three program
   requests, the shared right-side `Sheet` (D1317).
+- `PackageCard.jsx` — "Your Axal VC package" on the Summary tab, read only: the
+  package HQ accepted, its programs, price and term, and the standalone grants
+  (D5026-p2, board L35).
 - `licenceTabsModel.js` — the Contract, Statements and Requests tabs as pure
   functions. The Programs tab's model is `../../../lib/studioPrograms.js`.
 

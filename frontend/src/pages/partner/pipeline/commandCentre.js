@@ -370,11 +370,15 @@ export const EVENT_WORDS = Object.freeze({
   retainer_ended: 'Retainer ended',
 });
 
-/** Recorded events only, in the feed's order (the Worker sorts newest first); `who` is the opportunity's title. */
+/**
+ * Recorded events only, in the feed's order (the Worker sorts newest first); `who` is the opportunity's title and
+ * `needId` its need (#9110), which opens that opportunity's sheet. A row without one opens nothing.
+ */
 export function activityRows(items) {
   return (Array.isArray(items) ? items : []).filter((e) => EVENT_WORDS[e?.kind]).map((e) => ({
     key: e.key || `${e.kind}:${e.occurred_at}`, at: e.occurred_at, text: EVENT_WORDS[e.kind],
     who: e.opportunity?.title || null,
+    needId: e.opportunity?.need_id ?? null,
   }));
 }
 
@@ -389,4 +393,26 @@ export function movementView(source) {
   if (source?.state !== 'ok') return { state: 'unreadable' };
   const items = source.data?.items;
   return { state: 'ok', rows: activityRows(Array.isArray(items) ? items : []).slice(0, MOVEMENT_SHOWN) };
+}
+
+/**
+ * #9110: how many events the All movement sheet asks the feed for. It is the Worker's own cap (`LIST_PAGE_MAX`,
+ * `cloudflare-worker/src/util/keyset.ts`); the feed has no cursor, so a full page may not be the whole feed.
+ */
+export const FEED_ALL_LIMIT = 200;
+
+/** Said when an answered feed holds no event, on the root and in All movement alike. */
+export const MOVEMENT_NONE =
+  'Nothing has moved yet. No lead was passed, no proposal version or decision was recorded, no negotiation moved and no retainer started or ended.';
+
+/**
+ * All movement (#9110): `loading` until the read settles, `unreadable` for a failed read, else every drawn row and
+ * `capped`. `capped` is decided by the Worker's raw item count, never by the rows drawn: `activityRows` leaves out a
+ * kind it has no words for, so a full page of 200 events can draw fewer than 200 rows and still not be the whole feed.
+ */
+export function allMovementView(source) {
+  if (!source || source.state === 'loading') return { state: 'loading' };
+  if (source.state !== 'ok') return { state: 'unreadable' };
+  const items = Array.isArray(source.data?.items) ? source.data.items : [];
+  return { state: 'ok', rows: activityRows(items), capped: items.length === FEED_ALL_LIMIT };
 }

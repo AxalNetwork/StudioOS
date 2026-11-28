@@ -67,18 +67,36 @@ const MODULE_PATHS = Object.freeze({
   learning: { learners: '/people' },
   influencer: { applications: '/applications', influencers: '/influencers' },
 });
+/**
+ * D5894 (#5894): a module whose screen is a page outside `/admin/programs`, at that page's own address. Product
+ * testing's Applications module is its HQ page, which keeps its home (the owner's answer B, 2026-11-27) and stays
+ * HQ-only (`hqOnly` in App.jsx), so only a Super Admin gets the door; an Admin reads the module named, with no door.
+ */
+const MODULE_PAGES = Object.freeze({
+  'product-testing': { applications: { path: '/admin/platform/product-testing', hqOnly: true } },
+});
+export const MODULE_HQ_ONLY = 'HQ only';
 export const NO_MODULES = 'None yet. This program works with the core sections alone.';
 export const MODULES_UNREAD = 'Its modules could not be read.';
 
-/** `{ state, rows: [{ key, label, path }] }` from the program read; `path` null where no screen runs the module here. */
-export function moduleRows(programKey, program) {
+/**
+ * `{ state, rows: [{ key, label, path, note? }] }` from the program read; `path` null where no screen runs the module
+ * here. D5894: a module on a page outside the shell (`MODULE_PAGES`) has that page's address, and one that page keeps
+ * for HQ has it only for a Super Admin (`superAdmin`); an Admin's row has no path and the note "HQ only".
+ */
+export function moduleRows(programKey, program, { superAdmin = false } = {}) {
   if (!program || typeof program !== 'object') return { state: 'loading', rows: [] };
   if (program.extras && program.extras.available === false) return { state: 'unreadable', rows: [] };
   if (!Array.isArray(program.modules)) return { state: 'pending', rows: [] };
   const paths = MODULE_PATHS[programKey] || {};
+  const pages = MODULE_PAGES[programKey] || {};
   return {
     state: 'ready',
     rows: program.modules.map((m) => {
+      if (m in pages) {
+        const open = !pages[m].hqOnly || superAdmin;
+        return { key: m, label: MODULE_LABEL[m] || m, path: open ? pages[m].path : null, ...(open ? {} : { note: MODULE_HQ_ONLY }) };
+      }
       const path = m in paths ? `${PROGRAMS_PATH}/${programKey}${paths[m]}` : null;
       return { key: m, label: MODULE_LABEL[m] || m, path: m === 'wellbeing' && program.studio_only === null ? '/wellbeing' : path };
     }),
@@ -90,10 +108,10 @@ export function moduleRows(programKey, program) {
  * the shell. Its page draws while that read is out or after it failed, so a failed read is "Could not be read", never
  * none, and one still out is loading.
  */
-export function shellModules(programKey, read) {
+export function shellModules(programKey, read, options = {}) {
   if (!read || read.status === 'loading') return { state: 'loading', rows: [] };
   if (read.status !== 'ready') return { state: 'unreadable', rows: [] };
-  return moduleRows(programKey, read.data?.program || {});
+  return moduleRows(programKey, read.data?.program || {}, options);
 }
 
 /** The member-access choices Settings offers: the registry's seven words, and Not recorded (null). */

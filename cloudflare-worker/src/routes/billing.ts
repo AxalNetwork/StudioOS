@@ -650,10 +650,13 @@ billing.get('/investor/status', async (c) => {
   // Task #7 (W-2) — surface live deal-room usage so the frontend quota bar
   // can render used/cap. Source of truth is the same table the
   // `/api/deals/:id/dealroom/join` endpoint counts against.
-  const dealroomRow = await c.env.DB.prepare(
+  // #9019: a count that could not be read is null (unknown), never 0 used.
+  const dealroomUsed = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
-  ).bind(user.id).first<{ n: number }>().catch(() => null);
-  const dealroomUsed = Number(dealroomRow?.n ?? 0);
+  ).bind(user.id).first<{ n: number }>().then(
+    (row) => Number(row?.n ?? 0),
+    () => null,
+  );
   return c.json({
     tier,
     raw_tier: user.investor_tier ?? 'free',

@@ -82,7 +82,7 @@ for (const width of [1440, 390]) {
   }
   if (width < 600) test('NW8 the Section picker opens a zone, as its pill does', async ({ page, request }) => {
     await open(page, request, { width, mode: 'full' });
-    await expect(page.getByTestId('select-network-section').locator('option')).toHaveText(['Overview', 'Relationships · 142', 'Introductions · 3', 'Organizations']);
+    await expect(page.getByTestId('select-network-section').locator('option')).toHaveText(['Overview', 'People', 'Relationships · 142', 'Introductions · 3', 'Organizations']);
     await page.getByTestId('select-network-section').selectOption({ label: 'Relationships · 142' });
     await expect(page.getByTestId('nw2-book')).toBeVisible();
   });

@@ -16,11 +16,10 @@ import os
 import pathlib
 import sys
 import types
-import unittest
-from unittest import mock
+from unittest import TestCase, main, mock
 
 try:
-    import httpx  # noqa: F401
+    importlib.import_module("httpx")
 except ModuleNotFoundError:
     stand_in = types.ModuleType("httpx")
 
@@ -55,7 +54,7 @@ def _env(**values):
     return mock.patch.dict(os.environ, base, clear=True)
 
 
-class SecretKeyRefusals(unittest.TestCase):
+class SecretKeyRefusals(TestCase):
     def _refused(self, code, env_name, value=None, **env):
         with _env(**env), mock.patch.object(sc.httpx, "Client") as client:
             with self.assertRaises(sc.StripeError) as caught:
@@ -93,7 +92,7 @@ class SecretKeyRefusals(unittest.TestCase):
         self.assertEqual(headers["Authorization"], f"Bearer {TEST_SECRET}")
 
 
-class PublishableKeyRefusals(unittest.TestCase):
+class PublishableKeyRefusals(TestCase):
     def _refused(self, code, value=None, **env):
         with _env(**env):
             with self.assertRaises(sc.StripeError) as caught:
@@ -117,7 +116,7 @@ class PublishableKeyRefusals(unittest.TestCase):
             self.assertEqual(sc.publishable_key(), TEST_PUBLISHABLE)
 
 
-class NoFallbackInTheSource(unittest.TestCase):
+class NoFallbackInTheSource(TestCase):
     def test_the_commerce_client_never_reads_the_live_variables(self):
         source = (ROOT / "backend/app/services/stripe_commerce.py").read_text(encoding="utf-8")
         code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
@@ -128,4 +127,4 @@ class NoFallbackInTheSource(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

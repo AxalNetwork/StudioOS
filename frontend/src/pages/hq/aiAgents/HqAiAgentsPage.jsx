@@ -14,6 +14,7 @@ import { radarVector } from '../../team/skillsModel';
 import { DefinitionEditor } from './DefinitionEditor.jsx';
 import { ReleaseEvidence } from './ReleaseEvidence.jsx';
 import Registry, { RosterSwitch } from './Registry.jsx';
+import CapabilityMatrix, { PolicySwitch } from './CapabilityMatrix.jsx';
 import { definitionEditable } from './definitionModel';
 import {
   COMPANY_COLUMNS, FROM_AXAL_VC, lineageLine, NOT_RECORDED, REASON_MIN,
@@ -378,7 +379,7 @@ function SubTabs({ view }) {
       <nav aria-label="Operations" className="flex gap-5 border-b border-axal-hairline dark:border-gray-800" data-testid="ai-agents-subtabs">
         <HeaderTab to="/hq/ai-agents/operations" end data-testid="ai-agents-sub-runs">Runs</HeaderTab>
         <HeaderTab to="/hq/ai-agents/operations/spend" end data-testid="ai-agents-sub-spend">Spend</HeaderTab>
-        <HeaderTab to="/hq/ai-agents/operations/policies" end data-testid="ai-agents-sub-policies">Policies</HeaderTab>
+        <HeaderTab to="/hq/ai-agents/operations/policies" end={false} data-testid="ai-agents-sub-policies">Policies</HeaderTab>
         <HeaderTab to="/hq/ai-agents/operations/audit" end data-testid="ai-agents-sub-audit">Audit</HeaderTab>
       </nav>
     );
@@ -696,7 +697,8 @@ export default function HqAiAgentsPage() {
       {view.tab === 'skills' && view.sub === 'companies' ? <CompanySkills /> : null}
       {view.tab === 'operations' && view.sub === 'runs' ? <Runs /> : null}
       {view.tab === 'operations' && view.sub === 'spend' ? <Spend /> : null}
-      {view.tab === 'operations' && view.sub === 'policies' ? <Policies /> : null}
+      {view.tab === 'operations' && view.sub === 'policies' ? <div className="space-y-4"><PolicySwitch /><Policies /></div> : null}
+      {view.tab === 'operations' && view.sub === 'capabilities' ? <CapabilityMatrix /> : null}
       {view.tab === 'operations' && view.sub === 'audit' ? <Audit /> : null}
     </div>
   );

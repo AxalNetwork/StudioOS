@@ -44,6 +44,13 @@ function payInstructionsOf(p) {
   return { available: false, code: p.code ?? null, message: p.message ?? null };
 }
 
+/** The Worker's `bank_reversed` on a line, as dates, or null for none. */
+function bankReversedOf(b) {
+  if (!b || typeof b !== 'object') return null;
+  const day = (v) => (v ? String(v).slice(0, 10) : null);
+  return { detected_on: day(b.detected_at), resolved_on: day(b.resolved_at), open: !b.resolved_at };
+}
+
 /**
  * One capital-call line as the card shows it. A line marked paid before
  * receipts existed has no receipt behind it; for the LP it is still settled.
@@ -68,6 +75,10 @@ function callLine(c, today) {
     // D708: on an unpaid Fund I line, where to wire (masked, with the
     // reference) or why it cannot be said; null on every other line.
     pay_instructions: payInstructionsOf(c.pay_instructions),
+    // D9017: the bank took back the wire a receipt on this line recorded:
+    // `{ detected_on, resolved_on, open }`, null when it never did, and no
+    // key at all when the portal could not read it.
+    ...(c.bank_reversed === undefined ? {} : { bank_reversed: bankReversedOf(c.bank_reversed) }),
   };
   return { ...line, state: callState(line, today) };
 }

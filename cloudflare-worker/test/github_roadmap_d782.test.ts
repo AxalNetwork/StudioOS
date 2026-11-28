@@ -44,6 +44,7 @@ async function world(opts: { withRoadmap?: boolean } = {}) {
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
     CREATE TABLE company_profiles(id INTEGER PRIMARY KEY);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
+    CREATE TABLE project_members(project_id INTEGER, user_id INTEGER, status TEXT DEFAULT 'accepted'); -- D8775: an item's owner may come from the project team
     CREATE TABLE projects(id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, mvp_target_date TEXT, incorporation_meta TEXT, cofounder_decision_meta TEXT, spinout_ip_meta TEXT, deleted_at TEXT);
     CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT UNIQUE, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT DEFAULT 'active', auth_type TEXT,
       credentials_enc TEXT, webhook_secret_enc TEXT, config_json TEXT, capabilities_json TEXT, scopes_json TEXT, external_account_id TEXT, external_account_name TEXT,

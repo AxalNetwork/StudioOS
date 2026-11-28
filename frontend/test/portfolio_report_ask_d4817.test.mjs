@@ -26,7 +26,8 @@
  *   - the timeline drawing Ask and Waive when `canAct` is false → test 7;
  *   - `openPeriodsOf` putting a due period before a late one → tests 1–6, 8, 9;
  *   - (owner answer 2026-11-14) the card's Waive ignoring `can_waive`, the
- *     timeline's Waive ignoring it, and the Worker's reason not drawn → test 11.
+ *     timeline's Waive ignoring it, and the Worker's reason not drawn → test 11;
+ *   - (D4818 part 4) the Review reading no answer as a refusal → test 4b.
  * (Reverted, all pass.)
  */
 import test from 'node:test';
@@ -205,10 +206,12 @@ test('3 · Receipt: drawn from the Worker’s stored record — its time, author
 });
 
 test('4 · A failed send keeps the draft: the Review stays with the company and period, and shows the Worker’s sentence and code; a retry can succeed', async () => {
+  // D4818 part 4: a refusal is an answer (here the route's 403). A 503 is not
+  // one: it may follow a stored ask, so it is test 4b's "may or may not".
   const v = await reportsAt({
     post: {
       '/reporting/periods/pm9/ask': (n) => (n === 1
-        ? { __status: 503, body: { error: 'reporting_unreadable', message: 'Unreadable: reporting could not be read or saved. Try again.' } }
+        ? { __status: 403, body: { error: 'reporting_refused', message: 'This account cannot do that on reporting.' } }
         : ASK_ANSWER),
     },
   });
@@ -217,7 +220,7 @@ test('4 · A failed send keeps the draft: the Review stays with the company and 
     await v.click('report-review-confirm');
     assert.ok(v.has('report-review-ask') && !v.has('report-receipt'), 'the Review stays');
     assert.equal(v.props('report-review-error').role, 'alert');
-    assert.match(v.text('report-review-error'), /Not sent\. Unreadable: reporting could not be read or saved\. Try again\. · reporting_unreadable/);
+    assert.match(v.text('report-review-error'), /Not sent\. This account cannot do that on reporting\. · reporting_refused/);
     assert.match(v.text('report-review-error'), /Your choice of Northwind Labs and Sep 2026 is kept/);
     assert.match(v.text('report-review-facts'), /Company Northwind Labs.*Period Sep 2026/);
     assert.equal(v.text('report-review-confirm'), 'Ask Northwind Labs · Sep 2026');
@@ -233,6 +236,29 @@ test('4 · A failed send keeps the draft: the Review stays with the company and 
     assert.match(c.text('report-review-error'), /You already asked for this period’s report\. · already_asked/);
     assert.ok(!c.has('report-receipt'));
   } finally { await c.close(); }
+});
+
+test('4b · No answer (D4818 part 4): a 503 is "may or may not", never "Not sent"; nothing is offered again, and Check the period reads the record', async () => {
+  // `routes/reporting.ts` answers 503 `reporting_unreadable` from any thrown
+  // error, including the read-back after the ask was stored and the founders told.
+  const v = await reportsAt({
+    post: { '/reporting/periods/pm9/ask': { __status: 503, body: { error: 'reporting_unreadable', message: 'Unreadable: reporting could not be read or saved. Try again.' } } },
+    reporting: (n) => owed(n === 1 ? PERIODS : withPm9({ asked: true, asked_at: '2026-11-05 09:15:00' })),
+  });
+  try {
+    await v.click('report-obligation-ask');
+    await v.click('report-review-confirm');
+    assert.equal(v.props('report-review-unknown').role, 'alert');
+    assert.match(v.text('report-review-unknown'), /No answer came back\. Your request for Northwind Labs · Sep 2026 may or may not have been recorded/);
+    assert.ok(!v.has('report-review-error'), 'no refusal is drawn');
+    assert.doesNotMatch(v.text(), /Not sent/);
+    assert.ok(!v.has('report-review-confirm'), 'the same ask is not offered again');
+    await v.click('report-review-check');
+    assert.ok(!v.has('report-review-ask'), 'the sheet closed');
+    assert.equal(v.reads(), 2, 'the company was read again');
+    assert.match(v.text('report-obligation-record'), /You asked on/);
+    assert.deepEqual(v.posts(), ['/reporting/periods/pm9/ask']);
+  } finally { await v.close(); }
 });
 
 test('5 · After an ask: the company is read again, and the period reads as asked — who and when — from that read, never from the press', async () => {

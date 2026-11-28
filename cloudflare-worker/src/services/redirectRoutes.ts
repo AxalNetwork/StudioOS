@@ -112,6 +112,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/lp/customer-discovery', keep: true },
   { path: '/lp/investor', keep: true },
   { path: '/lp/partner', keep: true },
+  { path: '/lp/spinout-demo-day', keep: true }, // D6994: shared campaign links still forward to /events
   // D6118 (#6118): Partner network and Partnerships are one page at /grow/partnerships. Sent digests and
   // mail drafts carry the old module address, so it is kept; its records (/grow/partner-network/:id) are pages.
   { path: '/grow/partner-network', keep: true },

@@ -1,5 +1,6 @@
 // D4522: connect HQ reads to the existing Super Admin APIs, independently of rollout.
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import CohortCard from "./CohortCard.jsx";
 import PolicyControls from "./PolicyControls.jsx";
 import { policyRefusal } from "./refusals.js";
@@ -155,9 +156,19 @@ export function Overview() {
     </Reading>
   );
 }
+/** D8070 part 2: `?run=<uid>` opens that run's detail (the capability matrix's last-refusal handoff). */
+export const runFromSearch = (search) => {
+  const v = new URLSearchParams(search || "").get("run");
+  return v && /^[0-9A-Za-z-]{8,64}$/.test(v) ? v : null;
+};
 export function Runs() {
+  const { search } = useLocation();
   const [cursor, setCursor] = useState(""),
-    [uid, select] = useState(null);
+    [uid, select] = useState(() => runFromSearch(search));
+  useEffect(() => {
+    const asked = runFromSearch(search);
+    if (asked) select(asked);
+  }, [search]);
   const state = useRead(() => api.runs({ cursor }), cursor);
   return (
     <section className={box}>

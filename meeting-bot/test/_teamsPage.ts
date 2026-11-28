@@ -18,6 +18,8 @@ export class FakeTeamsPage implements TeamsPage {
   /** Every attribute the adapter asked for, by selector. */
   readonly asked = new Map<string, Set<string>>();
   closed = 0;
+  /** D5812: the screens `startCapture` was called on, in order. */
+  readonly started: ScreenName[] = [];
   private toggles = new Map<string, string>();
   private chatOpen = false;
   private moreOpen = false;
@@ -68,6 +70,8 @@ export class FakeTeamsPage implements TeamsPage {
     this.audio.add(on);
     return () => { this.audio.delete(on); };
   }
+
+  async startCapture(): Promise<void> { this.started.push(this.screen); }
 
   async close(): Promise<void> { this.closed += 1; }
 

@@ -115,6 +115,10 @@ function makeEnv(users: any[]) {
         return { results: [] };
       },
       async first() {
+        // The POST's deal-exists check (#9187): only DEAL is a project here.
+        if (s.includes('from projects where id = ?')) {
+          return bound[0] === DEAL ? { id: DEAL, founder_id: null } : null;
+        }
         if (s.includes('from pipeline_votes where deal_id = ? and user_id = ?')) {
           return rows.find((r) => r.deal_id === bound[0] && r.user_id === bound[1]) ?? null;
         }
@@ -122,7 +126,15 @@ function makeEnv(users: any[]) {
       },
       async run() {
         if (s.startsWith('insert into pipeline_votes')) {
-          // bound: deal_id, user_id, vote_type, weight, comment, anonymous
+          // bound: deal_id, user_id, vote_type, weight, comment, anonymous.
+          // The write is an upsert on UNIQUE(deal_id, user_id) (#9187).
+          const row = rows.find((r) => r.deal_id === bound[0] && r.user_id === bound[1]);
+          if (row && s.includes('on conflict(deal_id, user_id) do update')) {
+            row.vote_type = bound[2]; row.weight = bound[3];
+            row.comment = bound[4]; row.anonymous = bound[5];
+            return { meta: { changes: 1 } };
+          }
+          if (row) throw new Error('UNIQUE constraint failed: pipeline_votes.deal_id, pipeline_votes.user_id');
           rows.push({
             id: nextId++, deal_id: bound[0], user_id: bound[1], vote_type: bound[2],
             weight: bound[3], comment: bound[4], anonymous: bound[5],

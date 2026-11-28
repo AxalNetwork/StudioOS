@@ -89,6 +89,14 @@ export const AI_NATIVE_AVAILABILITY_PATH = '/admin/programs/ai-native-venture/av
 export const AI_NATIVE_PARTICIPATION_PATH = '/admin/programs/ai-native-venture/participation';
 export const AI_NATIVE_ACTIVITY_PATH = '/admin/programs/ai-native-venture/activity';
 export const AI_NATIVE_SETTINGS_PATH = '/admin/programs/ai-native-venture/settings';
+// D5894 (#5894): Product testing runs in the generic shell (PG03a). Its HQ page keeps its home at
+// /admin/platform/product-testing (the owner's answer B, 2026-11-27); the shell links out to it as its Applications module.
+export const TESTING_PATH = '/admin/programs/product-testing';
+export const TESTING_HOW_PATH = '/admin/programs/product-testing/how-it-runs';
+export const TESTING_AVAILABILITY_PATH = '/admin/programs/product-testing/availability';
+export const TESTING_PARTICIPATION_PATH = '/admin/programs/product-testing/participation';
+export const TESTING_ACTIVITY_PATH = '/admin/programs/product-testing/activity';
+export const TESTING_SETTINGS_PATH = '/admin/programs/product-testing/settings';
 
 /** The three old addresses. Each redirects where its function now lives (D894's rule). */
 export const HELD_PROGRAMS_PATH = '/admin/held/programs';
@@ -127,7 +135,8 @@ const trimPath = (p) => String(p || '').replace(/\/+$/, '') || '/';
 
 /** The other pages these pages link to. */
 export const SPINOUT_LAB_PATH = '/admin/programs/spinout-lab';
-export const PRODUCT_TESTING_PATH = '/admin/platform/product-testing/programs';
+// D5894: Product testing's HQ page, HQ-only (`hqOnly` in App.jsx), which the shell's Applications module opens.
+export const PRODUCT_TESTING_PATH = '/admin/platform/product-testing';
 export const COMMISSIONS_PATH = '/admin/commissions';
 export const CONTRACT_TEMPLATES_PATH = '/admin/contracts?tab=templates';
 export const PARTNER_INVITATIONS_PATH = '/admin/partner-invitations';
@@ -248,8 +257,14 @@ export const programByKey = (key) => PROGRAMS.find((p) => p.key === key) || null
 /** The cards a group chip leaves; `null` is All. */
 export const cardsIn = (group) => (group ? PROGRAMS.filter((p) => p.group === group) : PROGRAMS);
 
-/** The product testing card's foot for an Admin: no figures and no door. */
-export const PRODUCT_TESTING_FOOT = 'Runs at HQ. Its page is for HQ only, so there is nothing to open here.';
+/**
+ * The product testing card's foot for an Admin: no figures. D5894 (#5894): the card opens the program's shell, which
+ * an Admin may read; its HQ page and its figures stay the Super Admin's.
+ */
+export const PRODUCT_TESTING_FOOT = 'Runs at HQ. Its campaigns and figures are for HQ only.';
+
+/** D5894: what an Admin reads where a Super Admin reads Product testing's figures or opens its HQ page. */
+export const PRODUCT_TESTING_HQ_ONLY = 'Product testing runs at HQ. Its campaigns, applications and figures are for HQ only, so none are read here.';
 
 /** The status pill: the canvas's glyph and tone for each status. */
 export const STATUS_PILL = Object.freeze({
@@ -499,6 +514,23 @@ export const PAGES = Object.freeze({
       { key: 'settings', label: 'Settings', path: AI_NATIVE_SETTINGS_PATH },
     ],
   },
+  'product-testing': {
+    title: 'Product testing', workspace: 'Programs',
+    line: 'HQ and partners test their products with members, who apply to each program.',
+    facts: ['Who: The roles each program names', 'Join: By application'],
+    // D5894 (#5894): the generic shell's six core sections in PG03's order and words, with the Applications module
+    // (`applications`, MODULE_PATHS) between Participation and History. That module is the HQ page at its own home
+    // (`outside: true`, the owner's answer B): a Super Admin's tab opens it, and an Admin has no such tab.
+    tabs: [
+      { key: 'overview', label: 'Overview', path: TESTING_PATH },
+      { key: 'how', label: 'Playbook', path: TESTING_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: TESTING_AVAILABILITY_PATH },
+      { key: 'participation', label: 'Participation', path: TESTING_PARTICIPATION_PATH },
+      { key: 'applications', label: 'Applications', path: PRODUCT_TESTING_PATH, module: 'applications', outside: true, hqOnly: true },
+      { key: 'activity', label: 'History', path: TESTING_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: TESTING_SETTINGS_PATH },
+    ],
+  },
 });
 
 /** What an address opens: `{ program, tab }`, `program` null for the catalogue. */
@@ -508,7 +540,8 @@ export function routeFor(pathname) {
   for (const [program, page] of Object.entries(PAGES)) {
     const base = `${PROGRAMS_PATH}/${program}`;
     if (path === base) return { program, tab: page.tabs.length ? 'overview' : 'page' };
-    const hit = page.tabs.find((t) => t.path === path);
+    // D5894: a tab that opens a page outside the shell (Product testing's HQ page) is never this page's.
+    const hit = page.tabs.find((t) => !t.outside && t.path === path);
     if (hit) return { program, tab: hit.key };
   }
   return { program: null, tab: 'catalogue' };
@@ -1119,6 +1152,32 @@ export function testingFrom(read) {
   const open = items.filter((p) => p?.status === 'open').length;
   const applied = items.reduce((t, p) => t + (Number.isFinite(Number(p?.applicant_count)) ? Number(p.applicant_count) : 0), 0);
   return { state: 'ready', text: `${nf(open)} open · ${nf(applied)} applied, not withdrawn` };
+}
+
+/**
+ * D5894 (#5894): Product testing's Participation, the generic shell's core section. A Super Admin reads R11 (every
+ * programme, with its applications not withdrawn), so the applications are recorded; the members behind them are
+ * not, since one member who applies to two programs is two applications, so that tile reads "Not recorded" with its
+ * reason, never 0. An Admin is not read R11 (the Worker answers it to a Super Admin only), so an Admin gets no tile.
+ */
+export const TESTING_MEMBERS_UNRECORDED = 'The read counts applications, not members, and one member who applies to two programs is two applications, so how many members take part is not recorded. It is not the same as nobody.';
+export function testingParticipationTiles(read) {
+  const applications = (() => {
+    if (isLoading(read)) return { state: 'loading' };
+    if (isFailed(read) || !Array.isArray(read.data?.items)) return { state: 'unreadable' };
+    const items = read.data.items;
+    const counts = items.map((p) => (p?.applicant_count === null || p?.applicant_count === undefined ? NaN : Number(p.applicant_count)));
+    if (counts.some((c) => !Number.isFinite(c))) return { state: 'unreadable' };
+    const live = items.filter((p) => p?.status === 'open' || p?.status === 'testing').length;
+    return { state: 'ready', total: counts.reduce((t, c) => t + c, 0), programs: items.length, live };
+  })();
+  return [
+    applications.state === 'ready'
+      ? { key: 'participation-applications', label: 'Applications, not withdrawn', state: 'ready', value: nf(applications.total),
+        sub: `Across ${plural(applications.programs, 'program', 'programs')}, ${nf(applications.live)} open or testing.` }
+      : { key: 'participation-applications', label: 'Applications, not withdrawn', state: applications.state, reason: 'The testing programs could not be read. That is not the same as none.' },
+    { key: 'participation-members', label: 'Members taking part', state: 'placeholder', word: NOT_RECORDED, reason: TESTING_MEMBERS_UNRECORDED },
+  ];
 }
 
 export const SCOPE_READING = 'Reading the scope…';

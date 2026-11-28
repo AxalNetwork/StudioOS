@@ -23,7 +23,7 @@ import { readCopyTarget, type CopyTarget } from './prefs';
 import {
   loadRefreshTokenExport as loadRefreshToken,
   refreshGoogleAccessToken,
-  refreshMicrosoftAccessToken,
+  refreshMicrosoftAccessTokenFor,
   pushEventToGoogle,
   type GoogleCalendarWriteLimit,
   pushEventToMicrosoft,
@@ -142,7 +142,7 @@ async function pushOneUserOneProvider(
   try {
     accessToken = provider === 'google'
       ? await refreshGoogleAccessToken(env, tok.raw)
-      : await refreshMicrosoftAccessToken(env, tok.raw);
+      : await refreshMicrosoftAccessTokenFor(env, userId, tok);
   } catch (e) {
     const status = e instanceof Error ? /^refresh_failed:(\d+)$/.exec(e.message)?.[1] : undefined;
     failure?.(status && ['400', '401', '403'].includes(status) ? 'parked' : 'pending');
@@ -151,7 +151,8 @@ async function pushOneUserOneProvider(
     await recordSyncError(env, userId, provider, 'connection_refused');
     return 'connection_refused';
   }
-  if (tok.wasPlaintext) await reencryptRefreshToken(env, tokTable, userId, tok.raw);
+  // #9028: the Microsoft refresh stores a rotated token and rolls a plaintext row forward itself.
+  if (provider === 'google' && tok.wasPlaintext) await reencryptRefreshToken(env, tokTable, userId, tok.raw);
   // A refresh that worked proves the connection, not that every copy was made.
   await clearSyncError(env, userId, provider, 'connection_refused');
 
@@ -433,7 +434,7 @@ export async function onAxalSessionCancelled(
       try {
         const accessToken = r.provider === 'google'
           ? await refreshGoogleAccessToken(env, tok.raw)
-          : await refreshMicrosoftAccessToken(env, tok.raw);
+          : await refreshMicrosoftAccessTokenFor(env, r.user_id, tok);
         const removed = r.provider === 'google'
           ? await deleteEventFromGoogle(accessToken, r.external_event_id)
           : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
@@ -556,7 +557,7 @@ export async function removeProviderCopies(
   try {
     accessToken = provider === 'google'
       ? await refreshGoogleAccessToken(env, tok.raw)
-      : await refreshMicrosoftAccessToken(env, tok.raw);
+      : await refreshMicrosoftAccessTokenFor(env, userId, tok);
   } catch {
     await recordSyncError(env, userId, provider, 'connection_refused');
     return { ok: false, removed: 0 };
