@@ -1,7 +1,7 @@
 // D1439 (#3914): the types of `ogRegistry.js` for the Worker, which imports it
 // to build record cards from the same registry (`services/socialCards.ts`).
 // Only what the Worker reads is declared; the registry itself stays plain JS.
-export interface OgEntry { path: string; title: string; description: string; key?: string; type: string; section: string; prefix?: boolean }
+export interface OgEntry { path: string; title: string; description: string; key?: string; type: string; section: string; prefix?: boolean; prerender?: boolean }
 export interface OgTags {
   path: string; title: string; description: string; url: string; image: string;
   type: string; siteName: string; card: string; imageAlt: string;
