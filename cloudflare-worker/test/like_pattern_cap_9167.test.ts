@@ -130,7 +130,8 @@ test('GET /api/public/events?q=: a 60-character ASCII and a 30-character CJK ter
     await DB.prepare('CREATE TABLE projects (id INTEGER PRIMARY KEY)').run();
     await DB.prepare('CREATE TABLE users (id INTEGER PRIMARY KEY)').run();
     await app.request('/api/public/events', {}, env);
-    const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    // A fixed far-future start: the list shows events until they finish (datetime('now')), with no upper bound.
+    const future = '2099-01-01T00:00:00.000Z';
     await DB.prepare(`INSERT INTO events (slug, title, summary, starts_at, visibility, status, admin_published)
       VALUES ('synthetic-long', ?1, ?2, ?3, 'public', 'published', 1)`)
       .bind(`${'A'.repeat(70)} meetup`, `${'漢'.repeat(40)} summary`, future).run();
