@@ -162,7 +162,7 @@ These jobs share a YAML definition across the listed events. Workflow filters, m
 | `changelog-gate.yml` | Fails a pull request that edits `CHANGELOG.md`, unless it carries the `changelog` label. Task PRs never edit the file: every one that added an entry at the top conflicted with every other open PR on the same lines, so Session 1 writes it from merged PRs in its own labelled PR (AGENTS.md, "CHANGELOG.md is Session 1's"; the owner, 2026-10-19). Runs `scripts/changelog-gate.mjs` against the PR's own base branch, whatever it is, so a PR stacked on another PR is held to the same rule. `labeled` and `unlabeled` re-run it | every PR (opened, synchronize, reopened, labeled, unlabeled) | none |
 | `landing-bot-conflict.yml` | The conflict resolver (#6475), dispatched by the branch keeper with one PR: `plan` checks every rule and stages the merge with a read-only token and no model; `resolve` is the model runner in merge mode, with no GitHub write; `apply` holds the App token and no model key, re-checks that every line both sides added survives, and pushes a normal merge commit, never forced. The owner lands every model-resolved PR. `scripts/landing-bot/README.md`. #7109: Merge Control's "Fix conflicts" check dispatches it too, held by `LANDING_BOT_MANUAL_CONFLICT` | manual dispatch with one PR, sent by the keeper or Merge Control (`LANDING_BOT_ENABLED` `true`, or `dispatch` for the named PR) | The landing bot App (`LANDING_BOT_APP_ID`, `LANDING_BOT_APP_PRIVATE_KEY`) in the `landing-bot` environment for `plan` and `apply`; `resolve` gets the model credentials through `landing-bot-model.yml`. Variables `LANDING_BOT_DAILY_MODEL_RUNS`, `LANDING_BOT_DAILY_PUSHES`, `LANDING_BOT_MAX_CONFLICT_FILES`, `LANDING_BOT_MAX_CONFLICT_LINES`, `LANDING_BOT_MANUAL_CONFLICT` |
 | `landing-bot-ejection.yml` | The queue ejection handler (#6476): classifies each merge-queue ejection (conflict, cascade, flake, infrastructure, timeout, own failure, manual, unknown), labels it `ejected`, and restores the entry with `enqueuePullRequest` on the same head only when a person queued it, no model commit followed, every check is green on that head, and the per-PR (2 a day), repo-wide (`LANDING_BOT_DAILY_REQUEUES`) and failure-share (`LANDING_BOT_QUEUE_FAIL_BREAKER`) limits and the breakers allow. Conflicts go to the branch keeper first. No `workflow_run` trigger (#4571 WF-4), so it sweeps every 10 minutes | Every 10 minutes, or manual dispatch with one PR (`LANDING_BOT_ENABLED` `true`, or `dispatch` for the named PR) | The landing bot App's installation token in the `landing-bot` environment |
-| `landing-bot-keeper.yml` | The branch keeper (#6474): merges main into conflicted PR branches on a runner, with hooks, filters and LFS off and main's merge rules only, so README-only conflicts (GitHub ignores `README.md merge=union`) clear without a session. Pushes a normal merge commit to the PR's own branch, never forced; labels a real conflict `conflict` and asks the resolver (`landing-bot-conflict.yml`, once it exists) with `GITHUB_TOKEN`; hands protected files back with `needs-session`. Skips queued, recently pushed, fork, `bot:off` and handed-back PRs. [Rules](../../scripts/landing-bot/README.md#the-branch-keeper) | Push to `main`, every 15 minutes, or manual dispatch with one PR (`LANDING_BOT_ENABLED` `true`, or `dispatch` for the named PR) | The landing bot App's installation token in the `landing-bot` environment (contents, pull requests and issues write) |
+| `landing-bot-keeper.yml` | The branch keeper (#6474): merges main into conflicted PR branches on a runner, with hooks, filters and LFS off and main's merge rules only, so README-only conflicts (GitHub ignores `README.md merge=union`) clear without a session. Pushes a normal merge commit to the PR's own branch, never forced; labels a real conflict `conflict` and `bot:keeper-tried` and asks the resolver (`landing-bot-conflict.yml`) with `GITHUB_TOKEN`; at most three attempts per PR (D6476-p6); hands protected files back with `needs-session`. Skips queued, recently pushed, fork, `bot:off` and handed-back PRs. [Rules](../../scripts/landing-bot/README.md#the-branch-keeper) | Push to `main`, every 15 minutes, or manual dispatch with one PR (`LANDING_BOT_ENABLED` `true`, or `dispatch` for the named PR) | The landing bot App's installation token in the `landing-bot` environment (contents, pull requests and issues write) |
 | `landing-bot-main-repair.yml` | Main repair (#6477, D6477): when main's newest push run of CI is red and not an infrastructure failure, it finds the repair issue (`[alert] main is red`, else D6387's CI-on-main issue). A claim, `state:in-progress`, a linked open PR or any open `main-repair` PR means one comment and nothing more (D5398). Otherwise `claim` takes the issue with `scripts/claim.mjs`; `repair` is the model runner on main, with no GitHub write, verified with the failing command and the typecheck; `apply` holds the App token and no model key, re-checks the patch with main's `pathGuard()` and `merge-policy.mjs`, refuses any change to an existing test, guard, baseline, allowlist or migration, or falls back to a plain revert of the first red commit, and opens ONE PR labelled `main-repair` from its own `repair/main-*` branch. Never pushes to main, never queues or merges. No `workflow_run` trigger (#4571 WF-4), so it sweeps every 10 minutes. [Rules](../../scripts/landing-bot/README.md#main-repair) | Every 10 minutes, or manual dispatch (`LANDING_BOT_ENABLED` `true`, or `dispatch` for a manual run) | The landing bot App's installation token in the `landing-bot` environment (contents and issues write in `claim`; contents, pull requests and issues write in `apply`). Variables `LANDING_BOT_DAILY_MODEL_RUNS`, `LANDING_BOT_DAILY_PUSHES` (repair PRs a day) |
 | `landing-bot-model.yml` | The landing bot's one model runner (#6473): Claude, then Codex, then Gemini (`LANDING_BOT_PROVIDERS`), moving on only when a provider is unavailable. Validates and clamps the task, then up to three rounds of `landing-bot-model-round.yml`, and publishes the first patch whose verify passed as the artifact `landing-bot-model-patch`. Pushes, comments and labels nothing. [Design and caps](../../scripts/landing-bot/model/README.md) | `workflow_call` from the bot's workflows; manual dispatch for the smoke test | none itself |
 | `landing-bot-model-round.yml` | One round of the model runner. `edit` runs main's runner with the model credentials, `contents: read` and `id-token: write`, and runs no repository code; `verify` applies the patch and runs the task's verify commands with no secret, no environment and a scrubbed process environment | `workflow_call` from `landing-bot-model.yml` only | `edit`: the `repair` environment (`main` only): `ANTHROPIC_API_KEY` or the four `ANTHROPIC_*_ID` federation variables, `OPENAI_API_KEY`, `GEMINI_API_KEY`; `LANDING_BOT_CLAUDE_MODEL`, `LANDING_BOT_OPENAI_MODEL`, `LANDING_BOT_GEMINI_MODEL` (else `GEMINI_MODEL`). `verify`: none |
@@ -268,6 +268,81 @@ active ruleset in `REQUIRED` and the shadow check in `SHADOW`.
 The queue was switched on on 2026-11-02 (#4107). The ruleset lets the Admin
 role bypass it, so an admin's plain Merge skips the queue and its checks: use
 **Merge when ready**, which adds the pull request to the queue.
+
+## The landing bot (#6480)
+
+The landing bot is the set of workflows below, acting as one GitHub App. They
+share one rule file, `scripts/landing-bot/rules.mjs`, and its defaults are
+closed: with no variable set, nothing acts. What a session does about each
+label is in `AGENTS.md` § "What the landing bot does to your PR"; how the owner
+turns it off, changes a cap, reads the sticky comment and rotates the App key
+is in [the landing bot runbook](../../documentation/operations/LANDING_BOT.md).
+The detailed rules of each automation are in `scripts/landing-bot/README.md`.
+Every scheduled workflow polls: the #4571 guard forbids `workflow_run`.
+
+| Workflow | What it does | Triggers | Switch |
+|---|---|---|---|
+| `landing-feeder.yml` | Puts an eligible T0/T1 PR in the merge queue, once, on its exact head (#6481) | every 10 minutes (`4-59/10`), manual dispatch with one `pr` | `LANDING_AUTO` `true` and `LANDING_BOT_FEEDER_ENABLED` (its own switch, D6481-p2) |
+| `landing-bot-keeper.yml` | Merges main into conflicted PRs that are not queued, with no model (#6474) | push to `main`, every 15 minutes (`7-59/15`), manual dispatch with one `pr` | `LANDING_BOT_ENABLED` |
+| `landing-bot-conflict.yml` | Resolves the conflicted files with a model, keeping both sides (#6475) | manual dispatch with one `pr`, sent by the keeper | `LANDING_BOT_ENABLED` `true` or `dispatch` |
+| `landing-bot-ejection.yml` | Classifies merge-queue ejections; restores an entry, asks the keeper, or labels `ejected` (#6476) | every 10 minutes (`3-59/10`), manual dispatch with one `pr` | `LANDING_BOT_ENABLED` |
+| `landing-bot-refresh.yml` | Updates inherited-red PRs one at a time after main recovers (#6478) | every 10 minutes (`5-59/10`), manual dispatch with one `pr` | `LANDING_BOT_ENABLED` |
+| `landing-bot-main-repair.yml` | Claims the repair issue for a red main and opens one `main-repair` PR, or steps aside (#6477) | every 10 minutes (`7-59/10`), manual dispatch | `LANDING_BOT_ENABLED` |
+| `landing-bot-model.yml` | The one model runner the resolver and main repair call (#6473) | `workflow_call`, manual dispatch for a smoke test | its caller's |
+| `landing-bot-model-round.yml` | One round of the model runner | `workflow_call` from `landing-bot-model.yml` | its caller's |
+| `landing-conflict-indicator.yml` | Labels a confirmed conflict `conflict` and clears it on a fresh clean read; labels only (D6476-p5) | push to `main`, every 15 minutes (`11-59/15`), manual dispatch | `LANDING_CONFLICT_LABELS` `true` |
+| `landing-policy.yml` | Reports a PR's T0/T1/T2 tier and `LANDING_AUTO` for its exact head; acts on nothing | pull request to `main` | none |
+
+**`LANDING_BOT_ENABLED` has three values** (`mode()` in `rules.mjs`):
+
+- `true`: every trigger of every bot workflow acts.
+- `dispatch`: only a manual run acts, on the one PR it names (main repair: one
+  manual run). Scheduled and push runs are skipped.
+- anything else, unset included: off. The jobs are skipped.
+
+**Breakers.** Every bot but the conflict indicator also stops while main's
+newest completed CI push run failed, or `[alert] main is red`, `[alert] the
+Actions queue is backed up` or `[alert] merge queue stalled` is open. Main
+repair runs only while main is red, and stops on the Actions-queue alert. The
+refresh also stops above `LANDING_BOT_MAX_QUEUED_RUNS` queued CI runs.
+
+| Actions variable | Read by | Unset means |
+|---|---|---|
+| `LANDING_AUTO` | the feeder, `landing-policy.yml` | no automatic queue entry |
+| `LANDING_BOT_ENABLED` | every bot workflow above but the indicator and the feeder | off |
+| `LANDING_BOT_FEEDER_ENABLED` | the feeder only (D6481-p2): `true` or `dispatch`, as `LANDING_BOT_ENABLED`; scheduled sweeps also wait until #6480 is closed | off |
+| `LANDING_CONFLICT_LABELS` | the conflict indicator | skipped |
+| `LANDING_BOT_LOGIN` | the feeder: the App's `<slug>[bot]` login | the keeper's merges count as unattributed, so the feeder holds those PRs |
+| `LANDING_BOT_FEED_PER_SWEEP` | the feeder | 0 |
+| `LANDING_BOT_DAILY_FEEDS` | the feeder | 0 |
+| `LANDING_BOT_QUEUE_FAIL_BREAKER` | the feeder, the ejection handler: the most failed share of the last 20 merge-group runs | no entry and no re-queue |
+| `LANDING_BOT_KEEPER_PER_SWEEP` | the keeper (a dispatch always takes its one PR) | 0 |
+| `LANDING_BOT_QUIET_MIN` | the keeper | 30 minutes |
+| `LANDING_BOT_DAILY_PUSHES` | the keeper, the resolver; main repair counts repair PRs | 0 |
+| `LANDING_BOT_DAILY_MODEL_RUNS` | the resolver, main repair | 0 (main repair: revert only) |
+| `LANDING_BOT_MAX_CONFLICT_FILES`, `LANDING_BOT_MAX_CONFLICT_LINES` | the resolver | 0: no model call |
+| `LANDING_BOT_MANUAL_CONFLICT` | the resolver, on a manual "Fix conflicts" request (#7109) | the request stops in `plan`, quietly |
+| `LANDING_BOT_DAILY_REQUEUES` | the ejection handler | 0 |
+| `LANDING_BOT_REFRESH_PER_WINDOW`, `LANDING_BOT_REFRESH_WINDOW_MIN` | the refresh | 0: nothing refreshed |
+| `LANDING_BOT_MAX_QUEUED_RUNS`, `QUEUE_ALERT_IGNORE_BEFORE` | the refresh's queued-runs breaker | 0, and every queued run counts: one queued CI run opens the breaker |
+| `LANDING_BOT_PROVIDERS`, `LANDING_BOT_CLAUDE_MODEL`, `LANDING_BOT_OPENAI_MODEL`, `LANDING_BOT_GEMINI_MODEL` | the model round | the runner's defaults ([its README](../../scripts/landing-bot/model/README.md)) |
+
+**Credentials.** The `landing-bot` environment holds the App's
+`LANDING_BOT_APP_ID` and `LANDING_BOT_APP_PRIVATE_KEY`; each bot job that
+writes as the App mints a short-lived installation token from them. The
+conflict indicator writes labels with its own `GITHUB_TOKEN` and no App. The `repair`
+environment holds the model keys (`ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY_2`,
+`ANTHROPIC_API_KEY_3` or the `ANTHROPIC_*_ID` federation variables,
+`OPENAI_API_KEY`, `GEMINI_API_KEY`), read only by the model round's `edit`
+job. No job holds both.
+
+**From ready to merged.** A draft runs the fast tier. `gh pr ready` starts the
+full suite on the head, and `landing-policy.yml` reports its tier. A T2 PR, or
+one a model changed, is the owner's to queue. A T0/T1 PR is queued by the
+feeder, by its session through the `land-pr` skill, or by the owner. In the
+queue, the required checks run on the `merge_group` candidate. A PR the queue
+ejects stays open; the ejection handler classifies it, sends a conflict to the
+keeper, and restores the entry or labels it `ejected` for the owner.
 
 ## When a workflow starts failing
 

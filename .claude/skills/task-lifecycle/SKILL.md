@@ -129,6 +129,13 @@ the start and keep them for the whole task.
     failure from a red `main` goes in `blockers:` once, as
     `inherited main failure, <alert issue>`. Landing is AGENTS.md step 5; this
     skill stops at `state:review` and resumes once the PR merges.
+    Meanwhile the landing bot may act on the PR (AGENTS.md § What the landing
+    bot does to your PR, D6480). Fetch and merge your own branch before every
+    push: it may have added a merge of main. On `needs-session`, or
+    `bot:keeper-tried` with `conflict`, the next move is yours: act and push.
+    On `ejected`, fix your own failure; the owner re-queues. Never re-queue,
+    approve or merge, and never add or remove a bot label on another slot's
+    PR.
 12. **DONE, once, after the merge.** Post `--state DONE` with the merged PR's
     link (DONE changes no label: the issue closes when the PR merges). Then
     release the claim:

@@ -93,6 +93,12 @@ test('queue hysteresis: open at the thresholds, clear only below half of both', 
 test('the red-main and queue protocol is where every agent reads it', () => {
   const agents = read('AGENTS.md');
   for (const rule of [/### Red main and a backed-up queue \(D5398\)/, /exactly one repair PR/i, /never port/i, /never merge `main` into/i, /re-run/i]) assert.match(agents, rule);
+  // #6480 (D6480): the landing bot's two stated exceptions, each with its breakers, and sessions still never in bulk.
+  const flat = agents.replace(/\s+/g, ' ');
+  assert.match(flat, /Sessions never refresh in bulk; the landing bot has two stated exceptions/);
+  assert.match(flat, /\*\*The serial refresh\.\*\*[^*]*`inherited_main_failure`[^*]*one at a time[^*]*`LANDING_BOT_REFRESH_PER_WINDOW` per `LANDING_BOT_REFRESH_WINDOW_MIN`[^*]*stops at once[^*]*`LANDING_BOT_MAX_QUEUED_RUNS`/);
+  assert.match(flat, /\*\*The keeper's and the resolver's merges into conflicted PRs\.\*\*[^*]*only while main is green and no breaker alert is open[^*]*`LANDING_BOT_KEEPER_PER_SWEEP`[^*]*`LANDING_BOT_DAILY_PUSHES`/);
+  assert.match(flat, /no branch updates \(the landing bot stops too: the alert is one of its breakers\)/);
   assert.match(read('CLAUDE.md'), /YYYYMMDDHHMM_<issue>_<slug>\.sql/);
   assert.match(read('AGENTS.md'), /YYYYMMDDHHMM_<issue>_<slug>\.sql/);
 });

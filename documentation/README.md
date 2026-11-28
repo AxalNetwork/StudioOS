@@ -93,3 +93,4 @@ hold.
 | [Country catalogue reconcile](operations/COUNTRY_CATALOGUE_RECONCILE.md) | Read, repair, import and re-read the licence-pricing country figures (D7714). |
 | [GitHub Actions repair issues](operations/WORKFLOW_FAILURE_ISSUES_6387.md) | Configure signed completion events and verify automatic issue filing. |
 | [Production deployment credentials](operations/PRODUCTION_CREDENTIALS.md) | Set up the release and operations environments and verify credential rotation. |
+| [The landing bot](operations/LANDING_BOT.md) | Turn the landing bot off and on, change its caps, read its sticky comment and rotate its App key (D6480). |

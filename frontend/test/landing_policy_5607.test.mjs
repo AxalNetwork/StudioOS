@@ -105,4 +105,9 @@ test('shadow workflow checks out and executes the base only with read permission
   assert.match(instructions, /gh pr merge --auto --squash/);
   assert.match(instructions, /owner lands T2/);
   assert.match(instructions, /PR did not edit\n   `\.github\/workflows\/landing-policy\.yml`/);
+  // #6480 (D6480): the feeder may make the first entry; a session never re-queues, and a model-changed PR is the owner's.
+  const step5 = instructions.slice(instructions.indexOf('5. **Finish.**'), instructions.indexOf('### STATUS')).replace(/\s+/g, ' ');
+  assert.match(step5, /The landing feeder may make that first queue entry instead, on the same gates/);
+  assert.match(step5, /never re-queue one the queue ejected/);
+  assert.match(step5, /A PR a model changed \(`bot:resolved`, `main-repair`\) is the owner's to land\./);
 });
