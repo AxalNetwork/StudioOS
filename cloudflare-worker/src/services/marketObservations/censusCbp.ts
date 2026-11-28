@@ -154,10 +154,14 @@ async function sha256(value: unknown): Promise<string> {
   return [...new Uint8Array(hash)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** A provider file's bytes and its Last-Modified date, bounded (D7928 passes its own cap); any transport or size problem is a classed failure. */
-export async function providerArchive(url: string, maxBytes: number = CBP_IMPORT_LIMITS.archive_bytes): Promise<{ bytes: Uint8Array; lastModified: string | null }> {
+/**
+ * A provider file's bytes and its Last-Modified date, bounded (D7928 passes its own cap and, D7928-p2, the User-Agent
+ * bls.gov requires); any transport or size problem is a classed failure.
+ */
+export async function providerArchive(url: string, maxBytes: number = CBP_IMPORT_LIMITS.archive_bytes,
+  headers?: Record<string, string>): Promise<{ bytes: Uint8Array; lastModified: string | null }> {
   let response: Response;
-  try { response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(20_000) }); }
+  try { response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(20_000), ...(headers ? { headers } : {}) }); }
   catch { throw new ImportFailure('provider_transport'); }
   if (!response.ok) { await response.body?.cancel(); throw new ImportFailure('provider_http', response.status); }
   if (Number(response.headers.get('content-length')) > maxBytes) {
