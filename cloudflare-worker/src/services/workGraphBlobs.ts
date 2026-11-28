@@ -12,6 +12,9 @@
  *   verifyBlob           re-reads what R2 holds: size, R2's SHA-256 checksum and (up to 8 MiB, or with no checksum)
  *                        the bytes re-hashed. `missing_bytes` or `digest_mismatch` otherwise.
  *   readRevisionBytes    the bytes of a revision, digest-checked; refused while the revision is `offline`.
+ *   streamRevisionBytes  D5583 part 4: the same read as a stream, hashed as it passes and never buffered whole; with a
+ *                        delivery binding (a signed link, `workGraphMediaDelivery.ts`) it also refuses a revision that
+ *                        is no longer the bound head, scope, digest or class.
  *   readRevisionMetadata metadata only; a preview is returned only for `public` and `internal` assets.
  *   setRevisionOffline   a person marks a revision offline (metadata only) or back online. Audited.
  *
@@ -29,7 +32,7 @@ import {
   type AccessClass, type Actor, type Scope, type SourceRef, type ValidationContext,
 } from './workGraphContracts';
 import { putContentAddressedRecord } from './recordStore';
-import { sha256OfStream } from './sha256Incremental';
+import { sha256OfStream, verifyingStream } from './sha256Incremental';
 
 export const BLOB_BINDING = 'FILES' as const;
 export const BLOB_PREFIX = 'wg/v1';
@@ -71,7 +74,9 @@ export const PREVIEW_CLASSES: ReadonlySet<AccessClass> = new Set<AccessClass>(['
 export type BlobRefusalCode =
   | 'malformed' | 'wrong_tenant' | 'no_binding' | 'size_limit' | 'tenant_limit' | 'residency_mismatch'
   | 'preview_forbidden' | 'digest_mismatch' | 'missing_bytes' | 'not_found' | 'offline' | 'bytes_deleted'
-  | 'domain_held' | 'person_required';
+  | 'domain_held' | 'person_required'
+  // D5583 part 4: a signed delivery link whose revision moved on, was revoked, or is not a typed media object.
+  | 'superseded' | 'revoked' | 'not_media';
 
 /** What a call cost: D1 statements and batches, R2 Class A (put, list, delete) and Class B (head, get) operations. */
 export interface BlobCost { d1Statements: number; d1Batches: number; r2ClassA: number; r2ClassB: number }
@@ -459,12 +464,14 @@ interface RevisionBytesRow {
   revision_uid: string; asset_uid: string; tenant_id: number; company_id: number; project_id: number | null; digest: string;
   byte_length: number; media_profile: string; source_store: string; source_locator: string; source_id: string;
   kind: string; access_class: string; approval_policy: string; flags: string | null;
+  head_revision_uid: string | null; head_seq: number; tombstoned_at: string | null;
 }
 
 async function readRevision(env: BlobEnv, s: Spend, revisionUid: string): Promise<RevisionBytesRow | null> {
   return s.first<RevisionBytesRow>(env.DB.prepare(
     `SELECT r.revision_uid, r.asset_uid, r.tenant_id, r.company_id, r.project_id, r.digest, r.byte_length, r.media_profile,
             r.source_store, r.source_locator, r.source_id, a.kind, a.access_class, a.approval_policy,
+            a.head_revision_uid, a.head_seq, r.tombstoned_at,
             (SELECT group_concat(f.flag) FROM work_graph_revision_flags f WHERE f.revision_uid = r.revision_uid AND f.cleared_at IS NULL) AS flags
        FROM work_graph_revisions r JOIN work_graph_assets a ON a.asset_uid = r.asset_uid
       WHERE r.revision_uid = ?`,
@@ -473,15 +480,20 @@ async function readRevision(env: BlobEnv, s: Spend, revisionUid: string): Promis
 const flagsOf = (r: RevisionBytesRow) => new Set((r.flags ?? '').split(',').filter(Boolean));
 const scopeOfRow = (r: RevisionBytesRow): Scope => ({ tenantId: r.tenant_id, companyId: r.company_id, projectId: r.project_id });
 
-export type ReadBytesResult = { ok: true; bytes: Uint8Array; digest: string; size: number; cost: BlobCost } | BlobRefusal;
+type ReadEvent = Omit<IntegrityEvent, 'action' | 'outcome' | 'refusalCode' | 'at'> & { action: string };
 
-/** The bytes of a WorkGraph revision, re-hashed against its digest. Refused while offline or after deletion. */
-export async function readRevisionBytes(env: BlobEnv, ctx: ValidationContext, input: { revisionUid: string; actor: Actor }): Promise<ReadBytesResult> {
-  const s = new Spend(env);
+/**
+ * The checks every read of a revision's bytes makes before R2 is asked: shape, existence, the caller's scope, the
+ * offline and deletion flags, WorkGraph-held bytes, and a key that is the row's own typed key. Shared by the buffered
+ * `readRevisionBytes` and the streamed `streamRevisionBytes`, so the two can never admit by different rules.
+ */
+async function admitRead(
+  env: BlobEnv, s: Spend, ctx: ValidationContext, input: { revisionUid: string; actor: Actor }, detail: Record<string, unknown> | null = null,
+): Promise<{ ok: true; r: RevisionBytesRow; ev: ReadEvent; bucket: R2Bucket } | BlobRefusal> {
   if (typeof input?.revisionUid !== 'string' || !actorOk(input.actor)) return s.refuse('malformed', [], null);
   const r = await readRevision(env, s, input.revisionUid);
   if (!r) return s.refuse('not_found', [input.revisionUid], null);
-  const ev = { tenantId: r.tenant_id, companyId: r.company_id, assetUid: r.asset_uid, revisionUid: r.revision_uid, digest: r.digest, actor: input.actor, action: 'read_refused' };
+  const ev: ReadEvent = { tenantId: r.tenant_id, companyId: r.company_id, assetUid: r.asset_uid, revisionUid: r.revision_uid, digest: r.digest, actor: input.actor, action: 'read_refused', ...(detail ? { detail } : {}) };
   if (outOfScope(ctx, scopeOfRow(r), r.access_class as AccessClass)) return s.refuse('wrong_tenant', [r.revision_uid], ev);
   const flags = flagsOf(r);
   if (flags.has('offline')) return s.refuse('offline', [r.revision_uid], ev);
@@ -492,6 +504,17 @@ export async function readRevisionBytes(env: BlobEnv, ctx: ValidationContext, in
   if (r.source_id !== blobKey({ tenantId: r.tenant_id, companyId: r.company_id, projectId: r.project_id }, r.digest, parseBlobKey(r.source_id)?.objectClass)) return s.refuse('digest_mismatch', [r.revision_uid, 'key'], ev);
   const bucket = env.FILES;
   if (!bucket) return s.refuse('no_binding', [BLOB_BINDING], ev);
+  return { ok: true, r, ev, bucket };
+}
+
+export type ReadBytesResult = { ok: true; bytes: Uint8Array; digest: string; size: number; cost: BlobCost } | BlobRefusal;
+
+/** The bytes of a WorkGraph revision, re-hashed against its digest. Refused while offline or after deletion. */
+export async function readRevisionBytes(env: BlobEnv, ctx: ValidationContext, input: { revisionUid: string; actor: Actor }): Promise<ReadBytesResult> {
+  const s = new Spend(env);
+  const admitted = await admitRead(env, s, ctx, input);
+  if (!admitted.ok) return admitted;
+  const { r, ev, bucket } = admitted;
   const body = await bucket.get(r.source_id);
   s.cost.r2ClassB++;
   if (!body) return s.refuse('missing_bytes', [r.revision_uid], ev);
@@ -500,6 +523,77 @@ export async function readRevisionBytes(env: BlobEnv, ctx: ValidationContext, in
   s.cost.d1Statements++;
   await integrityEventStatement(env.DB, { ...ev, action: 'bytes_read', outcome: 'applied', cost: { ...s.cost }, at: WORK_GRAPH_BLOB_DEPS.now().toISOString() }).run();
   return { ok: true, bytes, digest: r.digest, size: bytes.byteLength, cost: { ...s.cost } };
+}
+
+/**
+ * D5583 part 4: what a signed delivery link was minted for, rechecked against the revision as it is now. The bytes
+ * are served only while the revision still has this scope, digest, size and typed media class, is still its asset's
+ * head at the same head sequence (a head that moved, even back to it, supersedes the link), and is not tombstoned.
+ */
+export interface DeliveryBinding {
+  tenantId: number; companyId: number; projectId: number | null; assetUid: string;
+  digest: string; size: number; objectClass: Exclude<BlobClass, 'generic'>; headSeq: number;
+  /** Ids only, for the audit rows: the link's id and who minted it. */
+  detail: Record<string, string | number>;
+}
+
+export interface StreamRevisionInput { revisionUid: string; actor: Actor; delivery?: DeliveryBinding }
+export type StreamBytesResult =
+  | { ok: true; body: ReadableStream<Uint8Array>; digest: string; size: number; mediaProfile: string;
+    objectClass: BlobClass; method: 'checksum' | 'stream'; cost: BlobCost }
+  | BlobRefusal;
+
+/**
+ * D5583 part 4: the bytes of a revision as a stream, never buffered whole. The same admission as `readRevisionBytes`,
+ * then R2's own answer is checked before the first byte: size, R2's SHA-256 checksum when it has one, and the digest
+ * in custom metadata. The body is then hashed as it passes (`verifyingStream`): its last chunk is held back until the
+ * byte count and digest match, so a body R2 no longer holds intact errors instead of completing. The read is audited
+ * when the stream is handed out (`bytes_read`, applied) and again if the bytes turn out wrong (`read_refused`,
+ * `digest_mismatch`). `cost` counts the calls made before the stream is returned; a late mismatch adds one statement.
+ */
+export async function streamRevisionBytes(env: BlobEnv, ctx: ValidationContext, input: StreamRevisionInput): Promise<StreamBytesResult> {
+  const s = new Spend(env);
+  const d = input?.delivery;
+  const admitted = await admitRead(env, s, ctx, input, d ? { ...d.detail, delivery: 'signed' } : null);
+  if (!admitted.ok) return admitted;
+  const { r, bucket, ev } = admitted;
+  const objectClass = parseBlobKey(r.source_id)?.objectClass ?? 'generic';
+  if (d) {
+    if (d.tenantId !== r.tenant_id || d.companyId !== r.company_id || d.projectId !== r.project_id || d.assetUid !== r.asset_uid) {
+      return s.refuse('wrong_tenant', [r.revision_uid, 'binding'], ev);
+    }
+    if (d.digest !== r.digest || d.size !== r.byte_length) return s.refuse('digest_mismatch', [r.revision_uid, 'binding'], ev);
+    if (d.objectClass !== objectClass) return s.refuse('not_media', [r.revision_uid, objectClass], ev);
+    if (r.tombstoned_at !== null) return s.refuse('revoked', [r.revision_uid, 'tombstoned'], ev);
+    const flags = flagsOf(r);
+    if (flags.has('bytes_missing')) return s.refuse('missing_bytes', [r.revision_uid, 'flag'], ev);
+    if (flags.has('residency_mismatch')) return s.refuse('residency_mismatch', [r.revision_uid, 'flag'], ev);
+    if (r.head_revision_uid !== r.revision_uid || Number(r.head_seq) !== d.headSeq) return s.refuse('superseded', [r.revision_uid], ev);
+  }
+  const obj = await bucket.get(r.source_id);
+  s.cost.r2ClassB++;
+  if (!obj?.body) return s.refuse('missing_bytes', [r.revision_uid], ev);
+  const checksum = toHex(obj.checksums?.sha256);
+  const meta = obj.customMetadata?.digest;
+  const early = obj.size !== r.byte_length ? 'size' : checksum !== null && checksum !== r.digest ? 'checksum'
+    : meta !== undefined && meta !== r.digest ? 'metadata' : null;
+  if (early) {
+    await obj.body.cancel().catch(() => {});
+    return s.refuse('digest_mismatch', [r.revision_uid, early], ev);
+  }
+  const at = () => WORK_GRAPH_BLOB_DEPS.now().toISOString();
+  const method = checksum !== null ? 'checksum' as const : 'stream' as const;
+  s.cost.d1Statements++;
+  await integrityEventStatement(env.DB, { ...ev, action: 'bytes_read', outcome: 'applied', detail: { ...ev.detail, streamed: true, method }, cost: { ...s.cost }, at: at() }).run();
+  const handedOut = { ...s.cost };
+  const body = verifyingStream(obj.body, { hex: r.digest, bytes: r.byte_length }, async (check) => {
+    if (check.ok) return;
+    try {
+      await integrityEventStatement(env.DB, { ...ev, action: 'read_refused', outcome: 'refused', refusalCode: 'digest_mismatch',
+        detail: { ...ev.detail, streamed: true, phase: check.detail }, cost: { ...handedOut, d1Statements: handedOut.d1Statements + 1 }, at: at() }).run();
+    } catch { /* the stream still errors; an unwritable audit row must not let the bytes complete */ }
+  });
+  return { ok: true, body, digest: r.digest, size: r.byte_length, mediaProfile: r.media_profile, objectClass, method, cost: handedOut };
 }
 
 export interface RevisionMetadata {

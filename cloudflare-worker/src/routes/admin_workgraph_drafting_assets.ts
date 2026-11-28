@@ -10,7 +10,9 @@
  *                               manifest pinning the old head stale
  *   POST /:assetUid/freeze      { headRevisionUid, approvedDigest, lineAssetUid, role, profile?, partial, idempotencyKey }
  *                               cut a D5585 manifest pinning the exact head, only while the domain row still reads
- *                               as that head
+ *                               as that head. Part 5 (D5582-p5): a deck's embedded D5583 media revisions are pinned
+ *                               in the same manifest at their digests, and refused when foreign, revoked, unreadable
+ *                               or no longer their asset's head
  *
  * Same gates as part 3's drafting router: an HQ preview deployment, `WORK_GRAPH_DRAFTING=preview`, a Super Admin, the
  * write bar on every POST, and the caller's verified selected company. Templates also need counsel. Nothing here
@@ -34,6 +36,7 @@ import {
   readableAt,
 } from '../services/workGraphDraftingRegistry';
 import { unitsDigest } from '../services/workGraphUnits';
+import { EMBEDDED_MEDIA_ROLE, checkEmbeddedMedia, embeddedMediaRefs, type MediaPin } from '../services/workGraphDraftingMedia';
 import { PROFILES, cutManifest } from '../services/workGraphReleases';
 
 const r = new Hono<{ Bindings: Env; Variables: { actor: User } }>();
@@ -178,14 +181,30 @@ r.post('/:assetUid/freeze', async c => {
     return refuse(c, 409, { code: 'stale_approval', message: 'The approved digest is not the head this export would pin.' });
   }
   // A domain save after the approval leaves the head stale: the export waits for a renewed adoption.
-  if (!await currentDraftingDomain(c.env, s.asset, Number(s.user.id))) return stale(c);
+  const current = await currentDraftingDomain(c.env, s.asset, Number(s.user.id));
+  if (!current) return stale(c);
+  // Part 5: the media the approved deck embeds, read from the units its digest covers, pinned beside it.
+  let media: { pins: MediaPin[]; cost: { d1Statements: number; r2ClassB: number } } = { pins: [], cost: { d1Statements: 0, r2ClassB: 0 } };
+  if (s.asset.kind === 'pitch_deck') {
+    const refs = embeddedMediaRefs(current.doc.units);
+    const checked = refs.ok ? await checkEmbeddedMedia(c.env, scopeOfDraft(s.asset), refs.refs) : { ...refs, cost: media.cost };
+    if (!checked.ok) {
+      await audit(c, s.user, 'workgraph_drafting_freeze', { asset_uid: s.asset.asset_uid, revision_uid: s.asset.head_revision_uid,
+        line_asset_uid: b.lineAssetUid, outcome: checked.code, media_ids: checked.ids });
+      return refuse(c, checked.code === 'embedded_media_not_found' ? 404 : 409, { code: checked.code,
+        message: 'Media the deck embeds cannot be frozen with it.', extra: { ids: checked.ids } });
+    }
+    media = checked;
+  }
   const result = await cutManifest(c.env, { scope: { tenantId: s.asset.tenant_id, companyId: s.asset.company_id, projectId: null } }, {
     lineAssetUid: b.lineAssetUid, partial: b.partial, author: person(s.user), idempotencyKey: b.idempotencyKey,
     components: [{ assetUid: s.asset.asset_uid, revisionUid: s.asset.head_revision_uid, digest: s.asset.digest, role: b.role,
-      ...(b.profile ? { profile: b.profile } : {}) }],
+      ...(b.profile ? { profile: b.profile } : {}) },
+      ...media.pins.map((p) => ({ assetUid: p.assetUid, revisionUid: p.revisionUid, digest: p.digest, role: EMBEDDED_MEDIA_ROLE }))],
   });
   await audit(c, s.user, 'workgraph_drafting_freeze', { asset_uid: s.asset.asset_uid, revision_uid: s.asset.head_revision_uid,
-    line_asset_uid: b.lineAssetUid, outcome: result.ok ? 'applied' : result.code });
+    line_asset_uid: b.lineAssetUid, outcome: result.ok ? 'applied' : result.code,
+    media: media.pins.map((p) => `${p.assetUid}:${p.revisionUid}:${p.digest}`) });
   if (!result.ok) {
     if (result.code === 'not_found' || result.code === 'wrong_tenant') {
       return refuse(c, 404, { code: 'release_line_not_found', message: 'That release line is unavailable in this company.' });
@@ -194,7 +213,10 @@ r.post('/:assetUid/freeze', async c => {
   }
   return c.json({ manifestUid: result.manifestUid, digest: result.digest, baseManifestUid: result.baseManifestUid,
     pinned: { assetUid: s.asset.asset_uid, revisionUid: s.asset.head_revision_uid, digest: s.asset.digest,
-      source: { locator: s.asset.source_locator, id: s.asset.source_id } }, replayed: result.replayed, cost: result.cost });
+      source: { locator: s.asset.source_locator, id: s.asset.source_id } },
+    media: media.pins.map((p) => ({ assetUid: p.assetUid, revisionUid: p.revisionUid, kind: p.kind, digest: p.digest,
+      byteLength: p.byteLength, mediaProfile: p.mediaProfile, objectClass: p.objectClass, units: p.units })),
+    replayed: result.replayed, cost: { ...result.cost, r2ClassB: media.cost.r2ClassB, d1Statements: result.cost.d1Statements + media.cost.d1Statements } });
 });
 
 export const mount: RouteMount = { path: '/api/admin/workgraph/drafting-assets', router: r };
