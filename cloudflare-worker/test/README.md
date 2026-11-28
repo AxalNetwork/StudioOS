@@ -376,6 +376,8 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
 | `azure_jobs_executor_5571.test.ts` | D5571: disabled Azure Container Apps Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed capabilities, ambiguous start located without a second start, status mapping, quota/revoked-identity/cross-region refusals; shared start reservations, durable refusal outcomes and pending-stop reconciliation. |
+| `cloud_run_jobs_executor_5571.test.ts` | D5571 part 2: disabled Google Cloud Run Jobs adapter on a synthetic Cloud Run v2 endpoint: etag-conditional digest-pinned run, unknown starts located by key and never run twice, status mapping, cancel, exact owned cleanup. |
+| `aws_fargate_executor_5571.test.ts` | D5571 part 3: disabled AWS ECS/Fargate adapter on a synthetic ECS endpoint and a fake SigV4 signer: digest-pinned revision with no task role or secrets, private awsvpc, one identical `clientToken` resend, late starts located by `startedBy` and key, deadline stop, status mapping, cancel, nothing-deleted cleanup. |
 
 `package_offers_5024.test.ts` exercises real commercial package acceptance over
 the complete SQLite schema and authenticated routers: frozen prices and
