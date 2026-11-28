@@ -207,7 +207,7 @@ jobs:
           fi
           deployed=0
           for attempt in 1 2 3; do
-            if npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
+            if npx --yes wrangler@4.162.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
               deployed=1
               break
             fi
@@ -275,7 +275,7 @@ jobs:
 
           for attempt in 1 2 3; do
             echo "Deleting $PREVIEW_NAME (attempt $attempt/3)"
-            if out="$(NO_COLOR=1 timeout --kill-after=5s 70s npx --yes wrangler@4.125.0 delete "$PREVIEW_NAME" --force 2>&1)"; then
+            if out="$(NO_COLOR=1 timeout --kill-after=5s 70s npx --yes wrangler@4.162.0 delete "$PREVIEW_NAME" --force 2>&1)"; then
               printf '%s\n' "$out"
               exit 0
             else

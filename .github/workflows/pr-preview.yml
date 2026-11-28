@@ -217,7 +217,7 @@ jobs:
       # waited for, not failed on.
       - name: Run the D722 and D753 specs against the local preview
         run: |
-          npx --yes wrangler@4.125.0 dev --config wrangler.pr-preview.toml --ip 127.0.0.1 --port 8787 > wrangler-dev.log 2>&1 &
+          npx --yes wrangler@4.162.0 dev --config wrangler.pr-preview.toml --ip 127.0.0.1 --port 8787 > wrangler-dev.log 2>&1 &
           server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
           if ! curl -fsS -o /dev/null --retry 40 --retry-delay 3 --retry-all-errors --retry-connrefused "$PLAYWRIGHT_BASE_URL/login"; then
