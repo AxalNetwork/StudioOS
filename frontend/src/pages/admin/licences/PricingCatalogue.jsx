@@ -154,7 +154,7 @@ export default function PricingCatalogue({ api = licencePricingHqApi, writeApi =
             </p>
           ) : (
             <section className={`mt-4 overflow-hidden ${cardClass}`} data-testid="pricing-catalogue">
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 md:block" tabIndex={0} role="region" aria-label="Country catalogue, scrolls sideways">
                 <table className="w-full border-collapse text-[12.5px]" data-testid="pricing-catalogue-table">
                   <thead><tr>{columns.map((c) => <th key={c} scope="col" className={thClass}>{c}</th>)}</tr></thead>
                   <tbody>

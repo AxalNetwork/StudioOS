@@ -37,6 +37,12 @@ const STANDING_TONE = {
   unavailable: 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200',
 };
 
+/**
+ * D7715 part 2: a table wider than its card scrolls inside it, so the box takes Tab focus (axe scrollable-region-
+ * focusable, WCAG 2.1.1) and says what it holds; a keyboard user scrolls it with the arrow keys.
+ */
+const scrollBox = 'overflow-x-auto rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600';
+
 function Card({ title, children, testId }) {
   return (
     <section className={`${cardClass} p-4`} data-testid={testId}>
@@ -123,7 +129,7 @@ export default function PricingCountry({ api = licencePricingHqApi, writeApi = l
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
               <div className="flex min-w-0 flex-col gap-4">
                 <Card title="Profile inputs" testId="pricing-country-inputs">
-                  <div className="overflow-x-auto">
+                  <div className={scrollBox} tabIndex={0} role="region" aria-label="Profile inputs, scrolls sideways">
                     <table className="w-full border-collapse text-[12.5px]">
                       <thead><tr>{['Input', 'Value', 'Status', 'Source', 'As of', ...(flags.state === 'ok' ? ['Check against history'] : [])].map((h) => <th key={h} scope="col" className={thClass}>{h}</th>)}</tr></thead>
                       <tbody>
@@ -159,7 +165,7 @@ export default function PricingCountry({ api = licencePricingHqApi, writeApi = l
                   {(d.snapshots || []).length === 0 ? (
                     <p className="text-[12.5px] text-gray-600 dark:text-gray-400">None: no snapshot has been frozen for {code}. A snapshot is taken only by Refresh recommendation on a licence.</p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className={scrollBox} tabIndex={0} role="region" aria-label="Snapshots, scrolls sideways">
                       <table className="w-full border-collapse text-[12.5px]">
                         <thead><tr>{['Taken', 'Model', 'Index', 'Annual', 'Data'].map((h) => <th key={h} scope="col" className={thClass}>{h}</th>)}</tr></thead>
                         <tbody>
@@ -181,7 +187,7 @@ export default function PricingCountry({ api = licencePricingHqApi, writeApi = l
                   {(d.observations || []).length === 0 ? (
                     <p className="text-[12.5px] text-gray-600 dark:text-gray-400">None recorded beyond the profile's current values.</p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className={scrollBox} tabIndex={0} role="region" aria-label="Observation history, scrolls sideways">
                       {/* LCD-02 and LCD-08 B: newest first, with who recorded it and why; after a write the new row is first and focused. */}
                       <table className="w-full border-collapse text-[12px]" aria-label="Observation history, newest first" data-testid="pricing-history">
                         <thead><tr>{['Recorded', 'Field', 'Value', 'Status', 'Source', 'As of', 'By', 'Reason', 'Revision'].map((h) => <th key={h} scope="col" className={thClass}>{h}</th>)}</tr></thead>
@@ -220,7 +226,7 @@ export default function PricingCountry({ api = licencePricingHqApi, writeApi = l
                   {standing.label}
                 </p>
                 {trace.length > 0 && (
-                  <div className="mt-2 overflow-x-auto">
+                  <div className={`mt-2 ${scrollBox}`} tabIndex={0} role="region" aria-label="Calculation trace, scrolls sideways">
                     <table className="w-full border-collapse text-[12.5px]" aria-label="Calculation trace" data-testid="pricing-trace">
                       <thead><tr>{['Step', 'Value', 'Weight', 'Note'].map((h) => <th key={h} scope="col" className={thClass}>{h}</th>)}</tr></thead>
                       <tbody>
