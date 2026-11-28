@@ -26,6 +26,10 @@ import { BRANCH_ONLY, BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './bra
  *  handler already imports, because `index.ts` is a frozen hub (D5615) and takes
  *  no new import. */
 export { reportPrivateError } from './errorPrivacy';
+/** D9186, #9184: `app.onError`'s last two branches (the malformed-body 400 and the
+ *  413/409/500 fallback) reach `index.ts` the same way, for the same reason. */
+export { edgeFallback } from './edgeError';
+export { invalidJson, isMalformedJsonBody } from './jsonBody';
 
 /** The sentence `requireStepUp` throws. A constant so the two readers below
  *  cannot drift from it the way a typed-in copy would. */
