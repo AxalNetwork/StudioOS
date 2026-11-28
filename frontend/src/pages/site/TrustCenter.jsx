@@ -51,6 +51,15 @@ const TH = 'py-2 pr-3 text-[10.5px] font-extrabold uppercase tracking-[.07em] te
 const ROW = 'border-t border-[#ececf1] dark:border-gray-700';
 
 /** One read, with its state and Try again. */
+/**
+ * #9196: a wide table's sideways scroller. At 390px some columns sit past the
+ * edge, so the scroller takes keyboard focus (arrow keys then scroll it) and is
+ * a named region, as axe's scrollable-region-focusable asks.
+ */
+export function TableScroll({ label, children }) {
+  return <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={label} data-testid="trust-table-scroll">{children}</div>;
+}
+
 function useRead(fn) {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [n, setN] = useState(0);
@@ -262,7 +271,7 @@ function Matrix({ read, onRetry }) {
       {m.state === 'unreadable' ? <Unread what="What we check" onRetry={onRetry} testId="trust-matrix-unreadable" /> : null}
       {m.state === 'ready' ? (
         <>
-          <div className="overflow-x-auto">
+          <TableScroll label="What we check, and for whom">
             <table className="w-full min-w-[720px] text-left text-[13px] text-[#141118] dark:text-gray-100">
               <thead><tr><th className={TH}>Requirement</th>{m.profiles.map((p) => <th key={p.key} className={TH}>{p.label}</th>)}</tr></thead>
               <tbody>
@@ -274,7 +283,7 @@ function Matrix({ read, onRetry }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <p className={MUTED}>{MATRIX_FOOT}</p>
         </>
       ) : null}
@@ -448,7 +457,7 @@ function Subprocessors({ reads }) {
         ) : null}
         {s.state === 'ready' ? (
           <section className={CARD} data-testid="trust-subprocessors-list">
-            <div className="overflow-x-auto">
+            <TableScroll label="Subprocessors">
               <table className="w-full min-w-[640px] text-left text-[13px] text-[#141118] dark:text-gray-100">
                 <thead><tr>{['Company', 'What they do for us', 'Data they see', 'Where', 'Since'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
                 <tbody>
@@ -463,7 +472,7 @@ function Subprocessors({ reads }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
             <p className={MUTED}>{s.items.length} listed{s.lastChange ? ` · last change ${s.lastChange}` : ''}.</p>
           </section>
         ) : null}
@@ -488,7 +497,7 @@ function Documents({ reads }) {
     <div className="flex flex-col gap-[14px]">
       <section className={CARD} data-testid="trust-documents">
         <h2 className={H2}>Documents</h2>
-        <div className="overflow-x-auto">
+        <TableScroll label="Documents">
           <table className="w-full min-w-[640px] text-left text-[13px] text-[#141118] dark:text-gray-100">
             <thead><tr>{['Document', 'Version', 'Last updated', 'Applies to', ''].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
             <tbody>
@@ -508,7 +517,7 @@ function Documents({ reads }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
         <p className={MUTED}>Read opens the legal page. Cookie preferences opens the cookie dialog. A version nobody recorded says so.</p>
       </section>
       {notes.state === 'ready' && notes.groups.length ? <BlockCards block={notes} what="Documents" testId="trust-documents-notes" cols="lg:grid-cols-2" /> : null}
@@ -584,12 +593,12 @@ function Disclosure({ reads, signedIn }) {
       </div>
       <section className={CARD}>
         <h2 className={H2}>How fast we answer</h2>
-        <div className="overflow-x-auto">
+        <TableScroll label="How fast we answer">
           <table className="w-full min-w-[520px] text-left text-[13px] text-[#141118] dark:text-gray-100">
             <thead><tr>{['Severity', 'We acknowledge', 'Updates', 'Fix target'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
             <tbody>{RESPONSE_TIMES.map((r) => <tr key={r[0]} className={ROW}>{r.map((c, i) => <td key={c} className={`py-2 pr-3 ${i === 0 ? 'font-bold' : ''}`}>{c}</td>)}</tr>)}</tbody>
           </table>
-        </div>
+        </TableScroll>
       </section>
       <div className="grid grid-cols-1 gap-[14px] lg:grid-cols-2">
         <section className={CARD}>

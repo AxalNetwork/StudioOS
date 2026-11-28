@@ -193,7 +193,7 @@ export default function DoorPage({ door: key }) {
 
   return (
     <SitePage title={meta.title} description={meta.description}>
-      <div className="ax-door" data-door={key} style={{ '--door-accent': door.accent, '--door-soft': door.soft }}>
+      <div className="ax-door" data-door={key} style={{ '--door-accent': door.accent, '--door-text': door.accentText, '--door-soft': door.soft }}>
 
         <section className="ax-door-hero" aria-labelledby="ax-door-h">
           <img className="ax-door-hero-img" src={door.img} alt={door.imgAlt} style={{ objectPosition: door.imgPos }} />
