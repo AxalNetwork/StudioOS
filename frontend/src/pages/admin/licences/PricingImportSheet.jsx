@@ -19,7 +19,8 @@ import { importOutcome, importRowView, parseImportFile, refusalOf } from './pric
 import { Tag, thClass, tdClass } from './PricingShell';
 
 const btn = 'inline-flex min-h-[36px] items-center justify-center rounded-lg px-3.5 text-[13px] font-bold disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]';
-export const primaryBtn = `${btn} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:text-white dark:hover:bg-violet-500`;
+// D7715 part 2: dark hover darkens (violet-700); the violet-500 it lightened to held white text at 4.2:1, under AA.
+export const primaryBtn = `${btn} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:text-white dark:hover:bg-violet-700`;
 export const ghostBtn = `${btn} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800`;
 const box = 'rounded-lg border p-3 text-[12.5px]';
 export const badBox = `${box} border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200`;
@@ -95,9 +96,10 @@ function Section({ n, title, children, testId }) {
   );
 }
 
+/** A sheet's table; its box scrolls sideways on a phone, so it takes Tab focus and is named (D7715 part 2). */
 function Table({ head, rows, testId, label }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+    <div className="overflow-x-auto rounded-lg border border-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:border-gray-800" tabIndex={0} role="region" aria-label={`${label}, scrolls sideways`}>
       <table className="w-full border-collapse text-[12px]" aria-label={label} data-testid={testId}>
         <thead><tr>{head.map((x) => <th key={x} scope="col" className={thClass}>{x}</th>)}</tr></thead>
         <tbody>{rows}</tbody>
