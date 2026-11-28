@@ -328,7 +328,7 @@ function CompanyWorkspace({ uid, tab }) {
       testid="portfolio-company-page"
       title={name || 'Company'}
       crumb={name || 'Company'}
-      docTitle={companyDocTitle(name, tab)}
+      docTitle={companyDocTitle(tab)}
       description={held ? (
         <span data-testid="company-holding">{[position?.project?.stage, position ? holdingLine(position) : null, route && route !== 'mixed' ? ROUTE_WORDS[route] : null].filter(Boolean).join(' · ') || 'Your holding: not recorded'}</span>
       ) : 'One portfolio company: your holding, its figures, reports and support.'}

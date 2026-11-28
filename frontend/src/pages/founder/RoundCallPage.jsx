@@ -13,7 +13,7 @@ function useRoundCallTitle(embedded) {
   useEffect(() => {
     if (!embedded) return undefined;
     const previous = document.title;
-    const title = 'Round calls · Deals — axal';
+    const title = 'Round calls · Axal VC'; // D8681: as Deals' own (DEALS_PAGE_TITLES.roundCalls)
     document.title = title;
     return () => { if (document.title === title) document.title = previous; };
   }, [embedded]);

@@ -21,6 +21,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
 import {
   getExplorerPromo,
   redeemExplorerPromo,
@@ -59,7 +60,19 @@ products.post('/redeem', async (c) => {
   // contract, `error` is what a human reads.
   if (!code) return c.json({ ok: false, reason: 'not_found', error: 'Enter a code to redeem.' }, 400);
 
-  const result = await redeemExplorerPromo(c.env, user.id, code);
+  // D9036: the claim and the grant are one batch, so a failure here spent
+  // nothing; the caller can simply try again.
+  let result: Awaited<ReturnType<typeof redeemExplorerPromo>>;
+  try {
+    result = await redeemExplorerPromo(c.env, user.id, code);
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'redeem_not_saved',
+      message: 'Your code was not used and nothing was charged. Try again in a moment.',
+      raw: e,
+      extra: { ok: false, reason: 'redeem_not_saved' },
+    });
+  }
   if (!result.ok) {
     const REASON_TEXT: Record<string, string> = {
       not_found: "That code isn't recognised.",

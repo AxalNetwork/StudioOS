@@ -256,7 +256,9 @@ export function detailsRows(p) {
 }
 
 export function pageTitle(entry) {
-  return entry?.state === 'ready' && entry.p?.display_name ? `${entry.p.display_name} · Connectors · Axal VC` : 'Connectors · Axal VC';
+  // D8681 (#8681): the screen, never the record. A connector's name comes from the Worker's record,
+  // so the tab says which screen this is and the page's heading names the connector.
+  return entry?.state === 'ready' ? 'Connector · Connectors · Axal VC' : 'Connectors · Axal VC';
 }
 
 // ---------- The body (D753 #1955, F7) ---------------------------------------

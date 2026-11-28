@@ -72,7 +72,18 @@ export type SwarmTicket = SwarmRequest & {
   charged_microusd: number | null; measured: boolean | null; wait_reason: string | null; end_code: string | null;
   /** #5585 part 15: the release manifest whose render approval admitted this ticket; absent when none was required. */
   render_manifest_uid?: string;
+  /** D5586-p4: when a waiting or never-run ticket was withdrawn (or its agent revoked); absent on tickets ended before p4. */
+  ended_at?: number;
 };
+/** D5586-p4: what retention keeps of a retired ticket, so a replay of its uid is still answered and never run twice. */
+export type RetiredTicket = { venture: string; state: 'settled' | 'withdrawn'; charged_microusd: number | null; measured: boolean | null; ended_at: number };
+/**
+ * D5586-p4 (`swarmRetention.ts`): what retention compacted. `uids` is a bounded tombstone list (`order` oldest first,
+ * `dropped` counts the ones evicted); `charged` and `render` carry the retired tickets' settled charges, per venture and
+ * per (venture, asset, base, modality), so the budget and a render approval never regain what was spent.
+ */
+export type SwarmRetired = { uids: Record<string, RetiredTicket>; order: string[]; dropped: number;
+  tickets: Record<string, number>; charged: Record<string, number>; render: Record<string, number>; audit_compacted: number };
 export type SwarmAuditAction = 'request' | 'promote' | 'settle' | 'withdraw' | 'revoke';
 /** One audit entry, written in the same transaction as the change it records, refusals included. */
 export type SwarmAudit = {
@@ -81,7 +92,9 @@ export type SwarmAudit = {
 };
 export type SwarmState = { tickets: Record<string, SwarmTicket>; next_sequence: number; last_now: number; audit: SwarmAudit[]; audit_seq: number; audit_dropped: number;
   /** Part 2 (D5586-p2): the last `seq` copied to D1's `swarm_admission_events`; absent until the first copy. */
-  audit_flushed_seq?: number };
+  audit_flushed_seq?: number;
+  /** Part 4 (D5586-p4): what retention compacted; absent until the first retention pass retires anything. */
+  retired?: SwarmRetired };
 export type SwarmRefusal = WorkspaceRefusal & { reasons: string[] };
 export type SwarmResult<T> = { ok: true; value: T } | SwarmRefusal;
 /** Entries kept in state; older ones are counted in `audit_dropped`, never silently lost. Part 2 copies them to D1 (`swarmAudit.ts`). */
@@ -97,13 +110,21 @@ export function swarmOf(state: AdmissionState): SwarmState {
   return (s.swarm ??= emptySwarmState());
 }
 export const ventureKey = (t: { tenant_id: number; company_id: number }) => `t${t.tenant_id}:c${t.company_id}`;
+/** D5586-p4: the carry key of a render approval's spend; `|` is outside every uid's alphabet. */
+export const renderKey = (t: Pick<SwarmRequest, 'tenant_id' | 'company_id' | 'asset_uid' | 'base_revision_uid' | 'modality'>) =>
+  `${ventureKey(t)}|${t.asset_uid}|${t.base_revision_uid ?? ''}|${t.modality}`;
+/** The venture a ticket uid belongs to, live or retired; null when the coordinator never held it (or evicted its tombstone). */
+export function ticketOwnerKey(sw: SwarmState, uid: string): string | null {
+  const t = sw.tickets[uid];
+  return t ? ventureKey(t) : sw.retired?.uids[uid]?.venture ?? null;
+}
 const whole = (n: unknown, min = 0) => Number.isSafeInteger(n) && (n as number) >= min;
 const live = (t: SwarmTicket) => t.state === 'admitted';
 const refuse = (code: string, status: WorkspaceRefusal['status'] = 409, reasons: string[] = [code]): SwarmRefusal => ({ ...workspaceRefusal(code, status), reasons });
 
 /** What a venture has committed of its budget: live reserves plus settled charges. Waiting tickets commit nothing. */
 export function budgetCommitted(sw: SwarmState, key: string): number {
-  return Object.values(sw.tickets).filter(t => ventureKey(t) === key)
+  return (sw.retired?.charged[key] ?? 0) + Object.values(sw.tickets).filter(t => ventureKey(t) === key)
     .reduce((sum, t) => sum + (t.state === 'admitted' ? t.reserve_held_microusd : t.state === 'settled' ? t.charged_microusd ?? 0 : 0), 0);
 }
 /**
@@ -113,7 +134,7 @@ export function budgetCommitted(sw: SwarmState, key: string): number {
  */
 export function renderApprovalCommitted(sw: SwarmState, t: Pick<SwarmRequest, 'tenant_id' | 'company_id' | 'asset_uid' | 'base_revision_uid' | 'modality'>): number {
   const key = ventureKey(t);
-  return Object.values(sw.tickets).filter(x => ventureKey(x) === key && x.asset_uid === t.asset_uid && x.base_revision_uid === t.base_revision_uid && x.modality === t.modality)
+  return (sw.retired?.render[renderKey(t)] ?? 0) + Object.values(sw.tickets).filter(x => ventureKey(x) === key && x.asset_uid === t.asset_uid && x.base_revision_uid === t.base_revision_uid && x.modality === t.modality)
     .reduce((sum, x) => sum + (x.state === 'waiting' || x.state === 'admitted' ? x.reserve_held_microusd : x.state === 'settled' ? x.charged_microusd ?? 0 : 0), 0);
 }
 /** Bytes a venture's live tickets will write. */
@@ -152,7 +173,12 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
   const audit = (sw: SwarmState, at: number, t: { ticket_uid: string; tenant_id: number; company_id: number }, action: SwarmAuditAction,
     outcome: SwarmAudit['outcome'], code: string | null, extra: Partial<SwarmAudit> = {}) => {
     sw.audit.push({ seq: ++sw.audit_seq, at, ticket_uid: t.ticket_uid, tenant_id: t.tenant_id, company_id: t.company_id, action, outcome, code, ...extra });
-    if (sw.audit.length > SWARM_AUDIT_MAX) { sw.audit.splice(0, sw.audit.length - SWARM_AUDIT_MAX); sw.audit_dropped = sw.audit_seq - SWARM_AUDIT_MAX; }
+    // Both this cap and retention (D5586-p4, copied entries only) remove from the front, so everything below the first
+    // kept entry is either dropped here or compacted there; only the first is lost.
+    if (sw.audit.length > SWARM_AUDIT_MAX) {
+      sw.audit.splice(0, sw.audit.length - SWARM_AUDIT_MAX);
+      sw.audit_dropped = sw.audit[0].seq - 1 - (sw.retired?.audit_compacted ?? 0);
+    }
   };
   /** Capacity reasons a ticket waits for. Empty means it fits now. */
   const capacityReasons = (sw: SwarmState, t: SwarmRequest, policy: VenturePolicy) => {
@@ -176,6 +202,21 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
   };
   const admit = (t: SwarmTicket, now: number) => { t.state = 'admitted'; t.admitted_at = now; t.wait_reason = null; };
   /** A lease-lane ticket takes #5570's compute lease under its own uid; enqueue is idempotent on the same terms. */
+  /**
+   * D5586-p4: a retired ticket answers as it ended. A settled one repeats its bill with `first: false`; a withdrawn one
+   * was never admitted. Another venture's (checked by `withdraw`, and by the coordinator for `settle`) is not found.
+   */
+  const retiredBill = (sw: SwarmState, uid: string): SwarmResult<{ charged_microusd: number; measured: boolean; first: boolean }> => {
+    const r = sw.retired?.uids[uid];
+    if (!r) return refuse('ticket_not_found', 403);
+    if (r.state !== 'settled') return refuse('not_admitted');
+    return { ok: true, value: { charged_microusd: r.charged_microusd as number, measured: r.measured as boolean, first: false } };
+  };
+  const retiredSettle = (uid: string) => store.transaction(state => retiredBill(swarmOf(state), uid));
+  const retiredWithdraw = (uid: string, venture: { tenant_id: number; company_id: number }) => store.transaction((state): SwarmResult<{ state: TicketState }> => {
+    const r = swarmOf(state).retired?.uids[uid];
+    return r && r.venture === ventureKey(venture) ? { ok: true, value: { state: r.state } } : refuse('ticket_not_found', 403);
+  });
   const enqueueLease = (t: SwarmTicket) => admission.enqueue({ run_uid: t.ticket_uid, tenant_id: t.tenant_id, agent_id: t.agent_id,
     provider: t.provider, region: t.region, compute_reserve_microusd: t.reserve_held_microusd });
 
@@ -196,6 +237,8 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
           if (SAME_TERMS.some(k => prior[k] !== req[k])) return refuse('ticket_contract_changed');
           return { ok: true as const, ticket: structuredClone(prior), duplicate: true };
         }
+        // D5586-p4: a retired uid is never admitted again, so a late redelivery cannot run (or bill) a ticket twice.
+        if (sw.retired?.uids[req.ticket_uid]) return refuse('ticket_retired');
         const now = readNow(sw);
         if (now === null) return refuse('clock_regressed', 503);
         const no = (code: string, status: WorkspaceRefusal['status'] = 409, reasons?: string[]) => { audit(sw, now, req, 'request', 'refused', code); return refuse(code, status, reasons); };
@@ -286,7 +329,7 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
      */
     async settle(ticketUid: string, measured: number | 'unavailable', generation?: number): Promise<SwarmResult<{ charged_microusd: number; measured: boolean; first: boolean }>> {
       const peek = await store.transaction(state => structuredClone(swarmOf(state).tickets[ticketUid] ?? null));
-      if (!peek) return refuse('ticket_not_found', 403);
+      if (!peek) return retiredSettle(ticketUid);
       let bill: { charged_microusd: number; measured: boolean } | null = null;
       if (MODALITY_LANE[peek.modality] === 'lease' && !(peek.state === 'settled')) {
         if (!Number.isSafeInteger(generation)) return refuse('lease_generation_required', 422);
@@ -297,7 +340,7 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
       return store.transaction(state => {
         const sw = swarmOf(state);
         const t = sw.tickets[ticketUid];
-        if (!t) return refuse('ticket_not_found', 403);
+        if (!t) return retiredBill(sw, ticketUid);
         if (t.state === 'settled') return { ok: true as const, value: { charged_microusd: t.charged_microusd as number, measured: t.measured as boolean, first: false } };
         if (t.state !== 'admitted') return refuse('not_admitted');
         const now = readNow(sw);
@@ -317,7 +360,8 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
      */
     async withdraw(ticketUid: string, venture: { tenant_id: number; company_id: number }): Promise<SwarmResult<{ state: TicketState }>> {
       const peek = await store.transaction(state => structuredClone(swarmOf(state).tickets[ticketUid] ?? null));
-      if (!peek || ventureKey(peek) !== ventureKey(venture)) return refuse('ticket_not_found', 403);
+      if (!peek) return retiredWithdraw(ticketUid, venture);
+      if (ventureKey(peek) !== ventureKey(venture)) return refuse('ticket_not_found', 403);
       let leaseNeverRan = false;
       if (peek.state === 'admitted' && MODALITY_LANE[peek.modality] === 'lease') {
         const r = await admission.cancel(ticketUid, 0);
@@ -330,7 +374,7 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
         if (t.state === 'admitted' && !leaseNeverRan) return refuse('settle_required');
         const now = readNow(sw);
         if (now === null) return refuse('clock_regressed', 503);
-        if (t.state === 'waiting' || t.state === 'admitted') { t.state = 'withdrawn'; t.end_code = 'withdrawn'; audit(sw, now, t, 'withdraw', 'applied', null); }
+        if (t.state === 'waiting' || t.state === 'admitted') { t.state = 'withdrawn'; t.end_code = 'withdrawn'; t.ended_at = now; audit(sw, now, t, 'withdraw', 'applied', null); }
         return { ok: true as const, value: { state: t.state } };
       });
     },
@@ -346,7 +390,7 @@ export function createSwarmAdmission({ store, clock, admission, halted = () => f
         const mine = Object.values(sw.tickets).filter(t => ventureKey(t) === ventureKey(venture) && t.agent_id === agentId);
         const withdrawn: string[] = [];
         for (const t of mine.filter(x => x.state === 'waiting')) {
-          t.state = 'withdrawn'; t.end_code = 'agent_revoked'; withdrawn.push(t.ticket_uid);
+          t.state = 'withdrawn'; t.end_code = 'agent_revoked'; t.ended_at = now; withdrawn.push(t.ticket_uid);
           audit(sw, now, t, 'revoke', 'applied', 'agent_revoked');
         }
         return { withdrawn, still_running: mine.filter(live).map(t => t.ticket_uid) };
