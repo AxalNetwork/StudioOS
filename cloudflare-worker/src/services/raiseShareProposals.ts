@@ -31,6 +31,7 @@ import type { RunOptions } from './aiRouter';
 import { untrustedBlock, withUntrustedRule } from './ai/untrusted';
 import { listRail, type RailProposal } from './railProposals';
 import { outsidePackView } from './raiseEvidence';
+import { isFounderChosen } from './raiseEvidenceSources';
 import { coveringLine, readinessBody, COVERING_LINE_MAX } from './raiseEvidenceShare';
 
 export const PROPOSALS_PAGE = 'Founder · Raise · Evidence';
@@ -77,9 +78,9 @@ export type LineFacts = { areas: Array<{ area: string; score: string; evidence: 
 export async function packFacts(env: Env, projectId: number, audience: string): Promise<PackFacts | null> {
   const view: any = await outsidePackView(env, projectId, true, null);
   if (!view?.items || view.items.state !== 'recorded') return null;
-  // D5837: a founder-chosen ledger fact never goes to a model; the founder ticks it in the composer.
+  // D5837, D5842 part 2: a founder-chosen ledger fact or Search Console aggregate never goes to a model; the founder ticks it in the composer.
   const rows = (view.items.rows as any[])
-    .filter((r) => r.kind !== 'ledger-fact')
+    .filter((r) => !isFounderChosen(r))
     .sort((a, b) => String(b.observed_on ?? '').localeCompare(String(a.observed_on ?? '')) || String(a.uid).localeCompare(String(b.uid)))
     .slice(0, MAX_ITEMS);
   return {

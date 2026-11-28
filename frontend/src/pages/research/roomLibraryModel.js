@@ -150,3 +150,86 @@ export function withheldPassage(answeredAt) {
   const day = dayWords(answeredAt);
   return `The passage is no longer shown. The answer keeps its text as it was given${day ? ` on ${day}` : ''}.`;
 }
+
+/**
+ * D6913 part 4 (Eadwyn's proposal, RS-14 rail): the room's files Eadwyn may propose. Only a file open to every invited
+ * investor (`visibility === 'open'`) is ever named; a file behind an NDA is never proposed, even to an investor whose
+ * NDA lets them open it. Nothing is proposed while the room's Library read is not ready, or when the founder has not
+ * allowed Library copies, and a file already in the caller's Library is left out.
+ */
+export function proposalFiles(files, read) {
+  if (!read || read.state !== 'ready' || !read.allowed) return [];
+  const have = new Set((read.items || []).map((i) => i.file_uid));
+  return (files || []).filter((f) => f && f.uid && f.visibility === 'open' && !have.has(f.uid))
+    .map((f) => ({ uid: f.uid, name: f.name || NR }));
+}
+
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** The proposal's one sentence: how many, which, and the question. */
+export function proposalLine(files) {
+  const n = (files || []).length;
+  if (!n) return null;
+  return `${count(n, 'file', 'files')} open to every invited investor in this room ${n === 1 ? 'is' : 'are'} not in your Library: ${files.map((f) => f.name).join(', ')}. Add ${n === 1 ? 'it' : 'them'}?`;
+}
+
+export const PROPOSAL_EYEBROW = 'Proposal · nothing is added until you accept';
+export const PROPOSAL_FOOT = 'Eadwyn only lists files open to every invited investor. A file behind an NDA is never named or proposed here. Eadwyn adds nothing itself.';
+
+/**
+ * RS-19 "Saving" and "Save failed · selection kept": what one Add of the proposal did. `results` is `[{ uid, ok }]`,
+ * one per file sent; a second add (409 `already_added`) counts as added. The files that were not added stay selected,
+ * so Try again sends only those.
+ */
+export function proposalOutcome(results) {
+  const list = results || [];
+  const added = list.filter((r) => r.ok).length;
+  const kept = list.filter((r) => !r.ok).map((r) => r.uid);
+  if (!list.length) return { added: 0, kept: [], tone: 'ok', title: '', text: '' };
+  if (!kept.length) {
+    return { added, kept, tone: 'ok', title: `${count(added, 'file', 'files')} added to your Library`, text: 'Read-only, and being indexed now, at no charge.' };
+  }
+  if (!added) {
+    return { added, kept, tone: 'error', title: `The ${count(kept.length, 'file wasn’t', 'files weren’t')} added`, text: 'Nothing changed. Your selection is kept.' };
+  }
+  return { added, kept, tone: 'error', title: `${added} added · ${count(kept.length, 'file wasn’t', 'files weren’t')} added`, text: 'Your selection keeps the ones that were not added.' };
+}
+
+/**
+ * Add the selection one file at a time through `add` (`roomLibraryApi.add`, `POST /api/room-library/items`). One
+ * refusal never stops the rest; a second add (409 `already_added`) is the file already there, so it counts as added.
+ */
+export async function addSelection({ files, projectUid, add }) {
+  const results = [];
+  for (const f of files || []) {
+    try { await add({ projectUid, fileUid: f.uid }); results.push({ uid: f.uid, ok: true }); }
+    catch (e) { results.push({ uid: f.uid, ok: e?.code === 'already_added' }); }
+  }
+  return results;
+}
+
+/**
+ * RS-18: the Library filtered to From data rooms with no room file in it. `rooms` is the investor's own room list
+ * (`{ state, count }`, from `GET /api/research/diligence`): with no live grant the page says no room is open to you,
+ * and offers only to clear the filter. Otherwise (rooms held, or the list not read) it says nothing is added yet.
+ * Null when the filter is not From data rooms, or when a room file is in the Library.
+ */
+export function roomsEmpty({ source, items, rooms }) {
+  if (source !== 'rooms') return null;
+  const all = items || [];
+  if (all.some((d) => d?.room)) return null;
+  if (rooms?.state === 'ready' && rooms.count === 0) {
+    return {
+      kind: 'no-rooms',
+      title: 'No rooms are open to you',
+      body: 'A founder opens a data room to an investor. When one does, its open files can be added to your Library here. Your own documents are unaffected.',
+      action: 'Show all sources',
+    };
+  }
+  return {
+    kind: 'no-room-files',
+    title: 'No data-room files in your Library yet',
+    body: `Open a room you hold and choose Add to my Library on a file. Filter: From data rooms · 0 of ${count(all.length, 'document', 'documents')}.`,
+    action: 'Open your rooms',
+  };
+}

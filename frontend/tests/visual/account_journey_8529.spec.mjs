@@ -7,8 +7,9 @@
  * revokes B's seat, and B's tab shows no access.
  *
  * A acts through the real routes in A's own browser context, with A's session, as the app's client does. B's
- * sign-in is the harness's controlled one: at `/login?next=…` B's session is put in place and the `next` the app
- * wrote is followed, so the deep link the app carried is what returns B to the invitation. No outside provider,
+ * sign-in is the harness's controlled one: the app sends B to `/login?next=…`, B's session is put in place on a page
+ * no app runs on (D8785), and the `next` the app wrote is followed, so the deep link the app carried is what returns
+ * B to the invitation. No outside provider,
  * no production account; every request off 127.0.0.1 is aborted.
  *
  *   npm run build                                                   (repo root)
@@ -101,10 +102,22 @@ for (const width of [1440, 390]) {
       await expect(B.page).toHaveURL(/\/login\?/);
       const next = new URL(B.page.url()).searchParams.get('next');
       expect(next, 'the app carried the invitation to sign-in').toBe(linkPath.replace(/token=([^&]+)/, (_m, t) => `token=${encodeURIComponent(decodeURIComponent(t))}`));
+      // D8785 (#8785): B's session is put in place on a page no app runs on, never on the live /login. The router
+      // commits /login in a transition, after the address has changed, so the URL check above can pass first; a
+      // session written before that commit is a signed-in visitor arriving at /login, whom AuthScreen signs out
+      // (`clearSession`, then `POST /api/auth/logout`). B then reached the invitation signed out, and the journey
+      // waited 60 s for an Open button the page never draws.
+      await B.page.goto('/__visual/manifest');
       await B.page.evaluate(({ token, user }) => { localStorage.setItem('token', token); localStorage.setItem('user', JSON.stringify(user)); }, { token: j.b.token, user: j.b.user });
       await B.page.goto(next);
       const open = B.page.getByRole('button', { name: /Open project|Go to project|Open/ });
-      await expect(open).toBeVisible({ timeout: 60_000 });
+      const signedOut = B.page.getByRole('link', { name: /Sign in to accept/ });
+      const refused = B.page.getByRole('link', { name: 'Go to dashboard' });
+      // Whichever the page settles on: a signed-out or refused arrival fails here at once, by name, not on a timeout.
+      await expect(open.or(signedOut).or(refused)).toBeVisible({ timeout: 60_000 });
+      await expect(signedOut, 'B arrives at the invitation signed in').toHaveCount(0);
+      await expect(refused, 'the invitation is accepted, not refused').toHaveCount(0);
+      await expect(open).toBeVisible();
       const roster = await asA(A.context, j, 'GET', `/api/projects/${soloId}/members`);
       expect(roster.members.filter((m) => Number(m.user_id) === Number(j.b.user.id)).length, 'exactly one seat').toBe(1);
       await open.click();

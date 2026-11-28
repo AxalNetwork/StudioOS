@@ -3563,11 +3563,13 @@ function AppInner() {
       {/* D696 decision 12, D1109 (#2989): /raise/data-room is the Data room tool's Home. An investor's
           rooms are read by grant under Research · Diligence (D311): the investor branch is a redirect
           there, so a bookmark still lands, and the guard keeps admitting investor so the redirect can run.
+          D6162 (#6162): that redirect keeps the query and hash, so `?project_id=N` reaches the list,
+          which opens that venture's room or says no room is open to you for it.
           The retired files tool (?mode=workspace) and access view (?mode=access) forward to the tool's
           Files and Access tabs with a moved notice, the query and hash kept, each forward counted (#2319). */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor' && !holds('founder')
-          ? <Navigate to="/research/diligence" replace />
+          ? <Navigate to={{ pathname: '/research/diligence', search: location.search, hash: location.hash }} replace />
           : movedKind(location.search)
             ? <DataRoomMovedRedirect kind={movedKind(location.search)} />
             : <CycleRoute cycle="raise" slug="data-room" />)} />

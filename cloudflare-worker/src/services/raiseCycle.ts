@@ -688,6 +688,9 @@ export const FIGURES = [
   'interviews', 'lois', 'waitlist', 'pilots', 'headcount', 'raise',
   // D1607 (#3731): active users, which the narrative check reads from the founder's PostHog.
   'active_users',
+  // D5842 part 2 (#5842): a week's organic Google web search clicks, impressions and click-through rate, which only a
+  // founder-chosen Search Console aggregate backs. They are never paying customers, revenue or conversions.
+  'organic_search_clicks', 'organic_search_impressions', 'organic_search_ctr',
 ] as const;
 export type FigureKey = (typeof FIGURES)[number];
 /** The figures readiness' narrative score compares. D1607: `active_users` is checked and shown, never scored (#2409 decision E, a). */
@@ -696,12 +699,14 @@ export const FIGURE_LABEL: Record<FigureKey, string> = {
   mrr: 'MRR', arr: 'ARR', paying_customers: 'Paying customers', revenue: 'Monthly revenue', revenue_growth: 'Revenue growth',
   net_burn: 'Net burn', runway: 'Runway', churn: 'Churn', cac: 'CAC', interviews: 'Customer interviews', lois: 'Letters of intent',
   waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise', active_users: 'Active users',
+  organic_search_clicks: 'Organic search clicks', organic_search_impressions: 'Organic search impressions', organic_search_ctr: 'Organic search CTR',
 };
 /** What a figure counts: dollars, a percentage, months, or a whole number. */
 export const FIGURE_UNIT: Record<FigureKey, 'money' | 'percent' | 'months' | 'count'> = {
   mrr: 'money', arr: 'money', paying_customers: 'count', revenue: 'money', revenue_growth: 'percent', net_burn: 'money',
   runway: 'months', churn: 'percent', cac: 'money', interviews: 'count', lois: 'count', waitlist: 'count', pilots: 'count',
   headcount: 'count', raise: 'money', active_users: 'count',
+  organic_search_clicks: 'count', organic_search_impressions: 'count', organic_search_ctr: 'percent',
 };
 
 export type Stated = { figure: FigureKey; value: number; source: string };
@@ -750,6 +755,10 @@ export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
     ['pilots', [new RegExp(`${COUNT}\\s+(?:paid\\s+|active\\s+|signed\\s+)?pilots?\\b`, 'i')], false],
     // D1607: "1,240 weekly active users", "MAU of 3,000"; the words beside the number, never a bare number.
     ['active_users', [new RegExp(`${COUNT}\\s+(?:weekly\\s+|monthly\\s+|daily\\s+)?active users`, 'i'), new RegExp(`(?:WAU|MAU|DAU)\\s*(?:of|is|at|:|=)\\s*${COUNT}`, 'i')], false],
+    // D5842 part 2: "4,200 organic search clicks", "organic search impressions of 61,000", "3.1% organic search CTR".
+    ['organic_search_clicks', [new RegExp(`${COUNT}\\s+(?:weekly\\s+)?organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+clicks`, 'i'), new RegExp(`organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+clicks\\s*(?:of|is|at|:|=)\\s*${COUNT}`, 'i')], false],
+    ['organic_search_impressions', [new RegExp(`${COUNT}\\s+(?:weekly\\s+)?organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+impressions`, 'i'), new RegExp(`organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+impressions\\s*(?:of|is|at|:|=)\\s*${COUNT}`, 'i')], false],
+    ['organic_search_ctr', [new RegExp(`${PCT}\\s+organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+(?:CTR|click-through rate)`, 'i'), new RegExp(`organic\\s+(?:Google\\s+)?(?:web\\s+)?search\\s+(?:CTR|click-through rate)\\s*(?:of|is|at|:|=)\\s*${PCT}`, 'i')], false],
     ['headcount', [new RegExp(`team of\\s+${COUNT}`, 'i'), new RegExp(`headcount\\s*(?:of|is|:|=)?\\s*${COUNT}`, 'i'), new RegExp(`${COUNT}\\s+(?:full-time\\s+)?(?:employees|team members)`, 'i')], false],
   ];
   for (const [figure, patterns, money] of more) {

@@ -15,7 +15,7 @@ import {
  * The compare page reads the extension's card (`GET /api/teams/skills/:uid`) and its lineage
  * (`GET /api/teams/skills/:uid/base`); nothing here writes except Extend (`POST /api/teams/skills/:uid/extend`) and
  * Rebase (SK-20, #4538: `POST /api/teams/skills/:uid/rebase`, D4538 part 5). Each makes a company draft and publishes
- * or attaches nothing. Who published each version is not built: it is drawn as "Not built yet", never a guessed value.
+ * or attaches nothing. History names who published each version and the day (D8826); one the read lacks is "Not recorded".
  */
 
 const SECTION = 'rounded-axal-lg border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -143,7 +143,7 @@ export function Comparison({ view, card }) {
   );
 }
 
-/** History: each published version of yours and the Axal version it was built on. Who published it, and when, is not recorded yet. */
+/** History: each published version of yours, the Axal version it was built on, and who published it and when (D8826). */
 export function History({ rows }) {
   return (
     <section className={`${SECTION} flex flex-col gap-2 p-4`} data-testid="compare-history">
@@ -157,7 +157,7 @@ export function History({ rows }) {
             <li key={r.version} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-axal-hairline py-2 text-[13px] first:border-t-0 dark:border-gray-800" data-testid={`history-v${r.version}`}>
               <b className="font-mono text-axal-ink dark:text-gray-100">Your v{r.version}</b>
               <span className="text-axal-ink dark:text-gray-200">built on {r.builtOn ? <b className="font-mono">Axal v{r.builtOn}</b> : <>Axal: <Unrecorded /></>}</span>
-              <span className={MUTED}>Published by, when: <Unrecorded reason="Not built yet: the Worker does not return who published a company version, or when." /></span>
+              <span className={`${MUTED} md:ml-auto`} data-testid={`history-who-v${r.version}`}>Published by {r.by || <Unrecorded />}, {r.on || <Unrecorded />}</span>
             </li>
           ))}
         </ul>

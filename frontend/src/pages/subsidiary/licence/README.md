@@ -19,6 +19,9 @@ are `../LicenceFrame.jsx`.
   shared right-side `Sheet` (D1317).
 - `ProgramRequestSheet.jsx` — "Request a program" (GR9), D983's three program
   requests, the shared right-side `Sheet` (D1317).
+- `PackageCard.jsx` — "Your Axal VC package" on the Summary tab, read only: the
+  package HQ accepted, its programs, price and term, and the standalone grants
+  (D5026-p2, board L35).
 - `licenceTabsModel.js` — the Contract, Statements and Requests tabs as pure
   functions. The Programs tab's model is `../../../lib/studioPrograms.js`.
 

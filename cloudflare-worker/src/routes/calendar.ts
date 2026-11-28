@@ -52,7 +52,7 @@ import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
-  exchangeGoogleCode, exchangeMicrosoftCode,
+  exchangeGoogleCode, exchangeMicrosoftCode, microsoftGrantHasCalendarScope,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, FEED_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
   personalWindowRefusal, PERSONAL_WINDOW_MAX_DAYS,
@@ -2182,6 +2182,8 @@ calendar.get('/microsoft/callback', async (c) => {
     if (!userId) return failureRedirect(c.env, 'microsoft', 'invalid_state', returnTo);
 
     const tokens = await exchangeMicrosoftCode(c.env, code);
+    // #9028: a consent without Calendars.ReadWrite is not a calendar connection; store nothing.
+    if (!microsoftGrantHasCalendarScope(tokens?.scope)) return failureRedirect(c.env, 'microsoft', 'calendar_scope_missing', returnTo);
     const refreshToken = tokens?.refresh_token;
     if (!refreshToken) return failureRedirect(c.env, 'microsoft', 'no_refresh_token', returnTo);
     const info = await fetchMicrosoftUserinfo(tokens.access_token || '');

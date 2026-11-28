@@ -41,7 +41,7 @@ fails.
 Register exactly these as **Web** redirect URIs on the app registration. Use
 no wildcard and no SPA platform.
 
-### Findings from the inventory (no code changed)
+### Findings from the inventory (2 and 3 fixed by #9028)
 
 1. **Shared fallback client.** When neither `MICROSOFT_CAL_*` nor
    `MAIL_MICROSOFT_*` is set, calendar and Outlook mail
@@ -53,18 +53,23 @@ no wildcard and no SPA platform.
    - To keep calendar consent limited to calendar actions (criterion 4), set
      `MICROSOFT_CAL_CLIENT_ID` and `_SECRET` to an app registration used for
      nothing else.
-2. **Granted scope is stored, not checked.** The callback saves whatever
-   `scope` Microsoft returns. A grant without `Calendars.ReadWrite` connects,
-   and then fails at meeting time with `teams_reconnect`.
+2. **Granted scope was stored, not checked.** Before #9028, the callback
+   saved whatever `scope` Microsoft returned. A grant without
+   `Calendars.ReadWrite` connected, and then failed at meeting time with
+   `teams_reconnect`.
    - §3 step 4 is where the operator reads the stored scope.
-   - A code check is a separate change.
-3. **The refresh token is not rotated into storage.**
-   `refreshMicrosoftAccessToken` keeps only the access token, so every refresh
-   reuses the refresh token saved at connect.
-   - UNVERIFIED: whether the app's token lifetime policy lets that original
-     refresh token outlive its own lifetime. If it does not, the member sees
-     `teams_reconnect` and reconnects (§4).
-   - Recording the rotated token is a separate change.
+   - Fixed by #9028 (D9028): the callback now refuses a grant whose `scope`
+     lacks `Calendars.ReadWrite`, stores nothing, and returns the member with
+     `?microsoft=error&reason=calendar_scope_missing`.
+3. **The refresh token was not rotated into storage.** Before #9028,
+   the refresh kept only the access token, so every refresh reused the
+   refresh token saved at connect.
+   - A member connected before #9028 still holds the token saved at connect
+     until Microsoft next rotates it. If that token has lapsed, the member
+     sees `teams_reconnect` and reconnects (§4).
+   - Fixed by #9028 (D9028): `refreshMicrosoftAccessTokenFor` stores a
+     rotated `refresh_token` (encrypted, with `updated_at`) and keeps the stored
+     one when the answer carries none. Every Microsoft refresh goes through it.
 
 ## 2. Configuration (owner only)
 
@@ -146,7 +151,7 @@ no customer data. Record only environment, result and counts (§5).
 | Symptom | Cause | Action |
 | --- | --- | --- |
 | `teams_reconnect` for every member | client secret expired or deleted | rotate (§2.6); members need not reconnect |
-| `teams_reconnect` for one member | the member revoked consent, their refresh token lapsed, or the grant lacks `Calendars.ReadWrite` | the member reconnects; check step 4's scope |
+| `teams_reconnect` for one member | the member revoked consent, their refresh token lapsed, or a grant saved before #9028 lacks `Calendars.ReadWrite` | the member reconnects; check step 4's scope |
 | `AADSTS50011` at sign-in | callback not registered for this environment | add §1's exact URI as a Web redirect |
 | `AADSTS700016` | client id not in the tenant the authority names | fix `MICROSOFT_TENANT_ID` or the supported account types |
 | `teams_personal_account` for a work account | no Teams licence, or Teams disabled for the user | license the organizer or create the meeting in Teams |

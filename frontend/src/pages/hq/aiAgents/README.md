@@ -21,6 +21,8 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 | `provenanceModel.js` | #5346 (D4575): one run's provenance (`GET /runs/:uid/provenance`) as labelled rows for the run detail's Provenance panel in `Operations.jsx`; an unavailable field is "Not recorded" with its reason, never 0. |
 | `registryModel.js` | D8080 part 2: the Registry (SA20 to SA24, D4137-p4) as pure rules: the read's three outcomes, the five stage groups and "Stage not recorded", the five drift marks, the counts line, the filters kept in the address and the CSV (null stays empty, a formula cell is quoted). Tested by `frontend/test/hq_ai_agents_registry_8080.test.mjs`. |
 | `Registry.jsx` | D8080 part 2: Roster › Personas \| Registry at `/hq/ai-agents/roster/registry[/:name]`, read-only, over `GET /api/admin/ai-agents/registry`: the stage tables (cards and a sheet on a phone), an entry's manifest, drift and how to change it, and the Loading, Not recorded, Unavailable and Refused states. |
+| `capabilityModel.js` | D8070 part 2: the capability matrix (SA10 to SA14, D4137-p2) as pure rules: the five reserved names (locked whatever a read says), the canvas's column order, a cell as Granted, Not granted, Locked or Not offered, the ceiling row, the summary (no grant yet is Not recorded, an unreadable ceiling is Unavailable, never 0), the filters kept in the address, the reason (10 to 200), a refusal in the Worker's own words, and the last refused run per agent. Tested by `frontend/test/hq_ai_agents_capabilities_8070.test.mjs`. |
+| `CapabilityMatrix.jsx` | D8070 part 2: Operations › Policies › Platform settings \| Capabilities at `/hq/ai-agents/operations/policies/capabilities`: the matrix, the grant, revoke and locked panel (a bottom sheet on a phone), the phone cards and the Loading, Not recorded, Unavailable and Refused states. Reads `GET /api/admin/ai-agents/policy/capabilities` and the run log; writes only grant and revoke, each with a reason. Never switches enforcement or the ceiling. |
 
 | `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and policy reads, with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
 
@@ -28,7 +30,7 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 
 - **Every request needs a Worker route.** The panel reads and writes under `/api/admin/ai-agents` (H1–H5) and the engine halt at `/api/admin/agents/halt`. A new control adds its client method and its route in the same PR.
 - **Every write takes a reason** (10 to 500 characters; the engine halt's is at most 64) and is audited with it. Values, risk and natural fit are shown, never sent (D4158).
-- **A refusal shows its own sentence.** Add the code to `refusals.js`; never show `e.message`.
+- **A refusal shows its own sentence.** Add the code to `refusals.js`; never show `e.message`. The capability panel is the one exception (#8070): it shows the Worker's code and sentence from the refusal body (`workerRefusal` in `capabilityModel.js`), and still never `e.message`.
 - **No control the Worker would refuse.** Publish needs a second Super Admin's approval and golden cases at or above the bar; the page says so before and after, and the Worker decides.
 - **"Not recorded" is never 0, and people are never shown by email.** A reviewer is chosen by name from `reviewers` on the skill's read.
 - **Words live in the model.** Wiring a task changes no copy.
