@@ -9,7 +9,9 @@
  *
  * FILTERS (every value from the request is bound, never interpolated):
  *   q             the fund's name, as a substring; `%`, `_` and `\` match
- *                 themselves (LIKE … ESCAPE '\').
+ *                 themselves (LIKE … ESCAPE '\'). D7749: also the vehicle
+ *                 label (`fund_number`), the name plus the fund number, and a
+ *                 served current manager_name statement (D7743).
  *   hq_country    an ISO 3166-1 alpha-2 code, through #1080's crosswalk
  *                 (`mapFundHq`): every distinct HQ string that maps to the
  *                 code is matched, bound as one JSON array.
@@ -23,8 +25,10 @@
  *   eif / eifo    `1` backed; `0` not backed, which is only known when the row
  *                 records its LPs (`notable_lps`): a 0 flag with no LP text
  *                 means unknown (S1, 12:17Z).
- *   stage         refused with 400: the directory records no stage yet, and an
- *                 unfiltered answer must never pass for a filtered one.
+ *   stage, invests_in, cheque (+ cheque_currency)
+ *                 D7749: the mandate filters, over D7743's served current
+ *                 statements (services/researchFundMandate.ts). Before D7749
+ *                 `stage` was refused with 400 because nothing recorded it.
  *   size_band     one of SIZE_BANDS (half-open bands of the asked currency), on
  *                 the rows sized in it only, like size_min/max; it cannot be combined with them.
  *                 `none` (D7166 part 2, RFD-02's "Show them") is the other
@@ -81,10 +85,25 @@
  * `size_currency` takes any three-letter code (EUR by default); a code no
  * served row holds matches no size and is not an error. `kind` filters on
  * `record_kind` (`none`: not recorded), with a facet. Sizes are never converted.
+ *
+ * D7749 (#7749) — mandate filters and coverage. `stage`, `invests_in` and
+ * `cheque` filter on each row's own served current statements (D7743), with
+ * `facets.stage`, `facets.invests_in`, `facets.cheque` and
+ * `facets.cheque_not_comparable` (each leaving its own filter out, counting
+ * rows), the unmapped rows in `facets_unmapped`, `coverage.mandate`, and a
+ * `mandate` block on every row (services/researchFundMandate.ts holds the
+ * parsing, clauses, facets and summary; this file only wires them in). A
+ * statement store that cannot be read leaves the list, total and other facets
+ * answering, every mandate block `unavailable`, and a mandate filter refused
+ * (thrown, so the route answers 503), never an unfiltered list.
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
 import { fundProfile } from './researchFundProfile';
+import {
+  MANDATE_BASIS, MANDATE_UNAVAILABLE_BLOCK, MandateUnavailableError, chequeFacet, managerNameCondition, mandateAsked,
+  mandateConditions, mandateCoverage, parseMandateQuery, readMandates, termFacet, type MandateQuery,
+} from './researchFundMandate';
 
 /**
  * The EuroTech list's name. D7744: no read decides a currency from it any
@@ -212,7 +231,7 @@ export class DirectoryQueryError extends Error {
   constructor(field: string, reason: string) { super(reason); this.field = field; this.reason = reason; }
 }
 
-export interface DirectoryQuery {
+export interface DirectoryQuery extends MandateQuery {
   q: string;
   hq_country: string | null;
   focus: string | null;
@@ -260,9 +279,8 @@ function flag(field: string, raw: string | undefined): 0 | 1 | null {
 
 /** Read and validate the query string; a bad value is a 400, never a silent default. */
 export function parseDirectoryQuery(get: (k: string) => string | undefined): DirectoryQuery {
-  if ((get('stage') ?? '') !== '') {
-    throw new DirectoryQueryError('stage', 'stage is not recorded in the fund directory yet, so it cannot be filtered on');
-  }
+  // D7749: stage, invests_in and cheque (services/researchFundMandate.ts); a bad value is a 400 naming its field.
+  const mandate = parseMandateQuery(get, (field, reason) => new DirectoryQueryError(field, reason));
   const hq = (get('hq_country') ?? '').trim().toUpperCase();
   if (hq && hq !== 'NONE' && !/^[A-Z]{2}$/.test(hq)) throw new DirectoryQueryError('hq_country', 'hq_country must be a two-letter country code');
   const focus = (get('focus') ?? '').trim().toLowerCase();
@@ -301,6 +319,7 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
     kind: (kind || null) as RecordKind | 'none' | null,
     limit: int('limit', get('limit'), 1, 100) ?? 25,
     offset: int('offset', get('offset'), 0, 1_000_000) ?? 0,
+    ...mandate,
   };
   if (q.size_min != null && q.size_max != null && q.size_min > q.size_max) {
     throw new DirectoryQueryError('size_min', 'size_min is above size_max');
@@ -405,10 +424,13 @@ export function presentFund(r: DirectoryRow) {
   };
 }
 
-type FacetKey = 'hq_country' | 'focus' | 'size' | 'vintage' | 'eif' | 'eifo' | 'kind';
+type FacetKey = 'hq_country' | 'focus' | 'size' | 'vintage' | 'eif' | 'eifo' | 'kind' | 'stage' | 'invests_in' | 'cheque';
 
-/** The crosswalk's answer for an `hq_country` / `focus` filter (a JSON array), resolved once per request. */
-interface Resolved { hq: string | null; focus: string | null }
+/**
+ * The crosswalk's answer for an `hq_country` / `focus` filter (a JSON array), resolved once per request;
+ * `store`: D7749, whether the fund statements can be read (the mandate clauses are added only then).
+ */
+interface Resolved { hq: string | null; focus: string | null; store?: boolean }
 
 /**
  * The WHERE conditions for `q`, leaving out the filter named by `omit` (a
@@ -418,7 +440,15 @@ interface Resolved { hq: string | null; focus: string | null }
 function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null) {
   const where: string[] = [];
   const binds: unknown[] = [];
-  if (q.q) { where.push(`name LIKE ? ESCAPE '\\'`); binds.push(`%${likeLiteral(q.q)}%`); }
+  if (q.q) {
+    // D7749: the name, or the name with its fund number (which holds the vehicle label on its own), or a
+    // served manager_name statement.
+    const needle = `%${likeLiteral(q.q)}%`;
+    const any = [`name LIKE ? ESCAPE '\\'`, `(name || ' ' || fund_number) LIKE ? ESCAPE '\\'`];
+    binds.push(needle, needle);
+    if (r.store) { const m = managerNameCondition(needle); any.push(m.sql); binds.push(...m.binds); }
+    where.push(`(${any.join(' OR ')})`);
+  }
   if (q.hq_country && omit !== 'hq_country') {
     if (q.hq_country === 'none') where.push(`TRIM(COALESCE(hq, '')) = ''`);
     else { where.push(`hq IN (SELECT value FROM json_each(?))`); binds.push(r.hq); }
@@ -467,6 +497,11 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
     binds.push(JSON.stringify(q.focus_in));
   }
   if (q.name_in) { where.push(`LOWER(TRIM(name)) IN (SELECT value FROM json_each(?))`); binds.push(JSON.stringify(q.name_in)); }
+  if (r.store) {
+    const m = mandateConditions(q, omit);
+    where.push(...m.where);
+    binds.push(...m.binds);
+  }
   return { where, binds };
 }
 
@@ -681,13 +716,22 @@ export function sizeBasis(currency: SizeCurrency): string {
   return `Sizes are compared and sorted in ${word}, on the funds whose list records their size in ${word}; sizes in another currency are compared on their own and never converted, and a size with no recorded currency is not shown.`;
 }
 
+/** D7749: the matching uids under every filter but `omit`, for a mandate facet (`clause` from `conditions`, values in `binds`). */
+function matchesFor(q: DirectoryQuery, r: Resolved, omit: FacetKey) {
+  const { where, binds } = conditions(q, r, omit);
+  return { sql: `SELECT uid FROM ${SERVED_FUNDS} AS f ${whereClause(where)}`, binds };
+}
+
 export async function listDirectory(env: Env, q: DirectoryQuery) {
-  const [overrides, reviews] = await Promise.all([loadOverrides(env), loadFundSources(env)]);
+  const [overrides, reviews, mandateCov] = await Promise.all([loadOverrides(env), loadFundSources(env), mandateCoverage(env, SERVED_FUNDS)]);
+  // D7749: a mandate filter over a store that cannot be read is refused, never answered unfiltered.
+  const store = mandateCov.status === 'ok';
+  if (!store && mandateAsked(q)) throw new MandateUnavailableError();
   const [hqRaw, focusRaw] = await Promise.all([
     q.hq_country && q.hq_country !== 'none' ? rawValuesMappingTo(env, 'hq', q.hq_country, overrides) : null,
     q.focus && q.focus !== 'none' ? rawValuesMappingTo(env, 'sector_focus', q.focus, overrides) : null,
   ]);
-  const r: Resolved = { hq: hqRaw && JSON.stringify(hqRaw), focus: focusRaw && JSON.stringify(focusRaw) };
+  const r: Resolved = { hq: hqRaw && JSON.stringify(hqRaw), focus: focusRaw && JSON.stringify(focusRaw), store };
   const { where, binds } = conditions(q, r);
   const clause = whereClause(where);
   // `clause` is built from literals of `conditions`; every value is in `binds`.
@@ -699,7 +743,9 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     coverageAndSources(env, reviews),
     facetLabels(env),
   ]);
-  const [hq, focus, vintage, size, eif, eifo, kind] = await Promise.all([
+  const rows = page.results || [];
+  const mStage = matchesFor(q, r, 'stage'), mWhere = matchesFor(q, r, 'invests_in'), mCheque = matchesFor(q, r, 'cheque');
+  const [hq, focus, vintage, size, eif, eifo, kind, stageF, whereF, chequeF, mandates] = await Promise.all([
     placeFacet(env, 'hq', q, r, overrides, labels.countries, 'HQ not recorded'),
     placeFacet(env, 'sector_focus', q, r, overrides, labels.markets, 'Focus not recorded'),
     vintageFacet(env, q, r),
@@ -707,9 +753,14 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     backingFacet(env, q, r, 'eif'),
     backingFacet(env, q, r, 'eifo'),
     kindFacet(env, q, r),
+    store ? termFacet(env, 'stage', mStage.sql, mStage.binds, labels.countries) : null,
+    store ? termFacet(env, 'invests_in', mWhere.sql, mWhere.binds, labels.countries) : null,
+    store ? chequeFacet(env, q, mCheque.sql, mCheque.binds) : null,
+    store ? readMandates(env, rows.map((x) => x.uid)) : null,
   ]);
+  const { status: mandateStatus, reason: mandateReason, ...mandateCounts } = mandateCov;
   return {
-    items: (page.results || []).map((row) => presentCited(row, reviews)),
+    items: rows.map((row) => ({ ...presentCited(row, reviews), mandate: mandates?.get(row.uid) ?? MANDATE_UNAVAILABLE_BLOCK })),
     total: Number(count?.n ?? 0),
     limit: q.limit,
     offset: q.offset,
@@ -717,8 +768,20 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     size_currency: q.size_currency,
     size_currencies: whole.size_currencies,
     kind: q.kind ?? null,
+    // D7749: the mandate filters as read, and whether the statements could be read.
+    stage: q.stage ?? null,
+    invests_in: q.invests_in == null ? null : q.invests_in === 'none' ? 'none' : q.invests_in.term,
+    cheque: q.cheque ?? null,
+    cheque_currency: q.cheque_currency ?? null,
+    mandate_status: mandateStatus,
+    ...(mandateReason ? { mandate_reason: mandateReason } : {}),
+    mandate_basis: MANDATE_BASIS,
     size_basis: sizeBasis(q.size_currency),
-    coverage: whole.coverage,
+    coverage: {
+      ...whole.coverage,
+      // D7749: rows of the whole served directory with each current mandate statement; `unavailable`, never zeros.
+      mandate: store ? { status: 'ok' as const, total: whole.coverage.total, ...mandateCounts } : MANDATE_UNAVAILABLE_BLOCK,
+    },
     sources: whole.sources,
     removed_sources: whole.removed_sources,
     facets: {
@@ -730,8 +793,16 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
       eif,
       eifo,
       kind,
+      // D7749: empty, and null for the cheque blocks, when the statements cannot be read (`mandate_status`).
+      stage: stageF?.values ?? [],
+      invests_in: whereF?.values ?? [],
+      cheque: chequeF?.cheque ?? null,
+      cheque_not_comparable: chequeF?.not_comparable ?? null,
     },
-    facets_unmapped: { hq_country: hq.unmapped, focus: focus.unmapped },
+    facets_unmapped: {
+      hq_country: hq.unmapped, focus: focus.unmapped,
+      stage: stageF ? stageF.unmapped : null, invests_in: whereF ? whereF.unmapped : null,
+    },
     facets_basis: 'Each filter\'s counts apply every other active filter, not its own. A fund whose HQ or focus names two values counts under both; one the crosswalk places nowhere counts under neither. Size bands count sizes in the asked currency only.',
   };
 }

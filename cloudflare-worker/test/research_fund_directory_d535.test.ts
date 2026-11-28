@@ -194,11 +194,14 @@ test('a size is shown only with its currency; otherwise "Not recorded" with the 
   assert.match(all.size_basis, /euros/);
 });
 
-test('stage is refused, not silently ignored', async () => {
+test('stage is never silently ignored: an unknown term is a 400, and a known one over no statement store is a 503 (D7749)', async () => {
+  const bad = await get(fixture(), '/fund-directory?stage=round_z');
+  assert.equal(bad.status, 400);
+  assert.equal(bad.body.field, 'stage');
+  assert.match(bad.body.detail, /stage must be one of .*seed.*none/);
   const r = await get(fixture(), '/fund-directory?stage=seed');
-  assert.equal(r.status, 400);
-  assert.equal(r.body.field, 'stage');
-  assert.match(r.body.detail, /not recorded/);
+  assert.equal(r.status, 503, 'this schema has no statement store, so the filter cannot be answered');
+  assert.equal(r.body.items, undefined);
 });
 
 test('parseDirectoryQuery names the bad field', () => {

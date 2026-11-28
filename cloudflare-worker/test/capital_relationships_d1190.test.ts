@@ -346,8 +346,9 @@ test('match: the directory with each fund’s Fit, the caller’s own warm paths
   assert.ok(!r.text.includes('Fixture Theirs'));
   assert.deepEqual(f.get('beta').in_pipeline, { prospect_id: 40 });
   assert.equal(f.get('alpha').in_pipeline, null);
-  assert.equal(f.get('beta').stage, null);
-  assert.match(f.get('beta').stage_reason, /records no stage/);
+  // D7749: the directory's mandate passes through; this schema has no statement store, so it reads unavailable.
+  assert.equal(f.get('beta').mandate.status, 'unavailable');
+  assert.ok(!('stage_reason' in f.get('beta')), 'the directory no longer says it records no stage');
   // One verified investor fits: unverified, outside and anti-thesis are not counted.
   assert.equal(r.body.verified_investors.count, 1);
   for (const n of ['Fixture Fits Privately', 'fits@example.test', 'Fixture Unverified', 'Fixture Anti Thesis']) assert.ok(!r.text.includes(n), `${n} named`);
@@ -365,7 +366,9 @@ test('match: the Fit and warm-path filters page with the directory, and bad filt
   assert.deepEqual(names(warm.body), ['Beta Capital']);
   assert.equal(warm.body.total, 1);
   assert.deepEqual(names((await match(env, '&fit=fits&warm=1')).body), ['Beta Capital']);
-  for (const [qs, field] of [['&stage=seed', 'stage'], ['&fit=great', 'fit'], ['&warm=0', 'warm'], ['&sort=random', 'sort']] as const) {
+  // D7749: an unknown stage term is refused; a known one over no statement store is not answered unfiltered.
+  assert.notEqual((await match(env, '&stage=seed')).status, 200);
+  for (const [qs, field] of [['&stage=round_z', 'stage'], ['&fit=great', 'fit'], ['&warm=0', 'warm'], ['&sort=random', 'sort']] as const) {
     const bad = await match(env, qs);
     assert.equal(bad.status, 400, qs);
     assert.equal(bad.body.field, field, qs);

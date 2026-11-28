@@ -1,0 +1,12 @@
+{
+  "CHEQUE_STMT @ services/researchFundMandate.ts": 4,
+  "COMPARABLE @ services/researchFundMandate.ts": 4,
+  "MANDATE_STMT @ services/researchFundMandate.ts": 1,
+  "matches @ services/researchFundMandate.ts": 2,
+  "one @ services/researchFundMandate.ts": 4,
+  "served @ services/researchFundMandate.ts": 1,
+  "uidsWith('initial_cheque') @ services/researchFundMandate.ts": 4,
+  "uidsWith('manager_name') @ services/researchFundMandate.ts": 1,
+  "uidsWith(FACT_OF.invests_in) @ services/researchFundMandate.ts": 1,
+  "uidsWith(FACT_OF.stage) @ services/researchFundMandate.ts": 1
+}
