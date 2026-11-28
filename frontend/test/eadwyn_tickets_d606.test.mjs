@@ -249,11 +249,11 @@ test('the Tasks panel: community tasks with Start, my suggestions with their sta
     my_suggestions_next: 2,
   };
   const t = text(html(h(TasksPanelView, { list: ready(data), rewards: RULES(), onSuggest() {}, onStart() {}, onRetry() {}, onOlder() {} })));
-  assert.match(t, /Community tasks Suggest a task Share a cap-table template Upload the one you use\. Start →/);
+  // D9284 (#9284): the action and its line come first, then the list.
+  assert.match(t, /Suggest a community task Opens a Help Center ticket with Type set to Task\. Axal reviews it; an approved one joins Community tasks\. An approved suggestion earns 10 credits\. Community tasks Share a cap-table template Upload the one you use\. Start →/);
   assert.match(t, /My suggestions Post a weekly update Approved · \+10 credits Record a demo Declined Decks are private by default here Join a cohort call Pending review/);
   assert.match(t, /Show older suggestions/);
-  assert.match(t, /“Suggest a task” opens the ticket form with Type set to Task\. An approved suggestion earns 10 credits\./);
-  assert.equal(suggestNote({ status: 'unreadable' }), '“Suggest a task” opens the ticket form with Type set to Task.');
+  assert.equal(suggestNote({ status: 'unreadable' }), 'Opens a Help Center ticket with Type set to Task. Axal reviews it; an approved one joins Community tasks.');
 });
 
 test('the Tasks panel says "No tasks yet" only for an empty list, and unreadable for a failed one', () => {
