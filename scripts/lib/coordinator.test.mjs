@@ -160,6 +160,13 @@ test('partial handback #4570 stays separate from closure intent and quoted examp
     [[8661, 'closing'], [6312, 'partial']]);
 });
 
+test('a reference inside an HTML comment is not intent, however the comment is assembled', () => {
+  assert.deepEqual([...prRelationships('Refs #7\n<!-- Closes #5 -->')], [[7, 'partial']]);
+  // Removing the inner comment joins the outer halves into a new one. A single pass would read Closes #5.
+  assert.deepEqual([...prRelationships('Refs #7\n<!-<!-- x -->- Closes #5 -->')], [[7, 'partial']]);
+  assert.deepEqual([...prRelationships('<!-<!-<!-- a -->- b -->- Closes #6 -->\nCloses #8')], [[8, 'closing']]);
+});
+
 test('expired claims stay held and a 403 or a label receipt cannot supply absence', () => {
   const issue = { number: 8661, labels: ['task', 'state:ready'] };
   const holder = { version: 1, issue: 8661, slot: 'S24', agent: 'Codex', session: 'test', at: '2025-11-01T00:00:00Z', ttlHours: 24 };

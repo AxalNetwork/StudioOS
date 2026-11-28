@@ -28,6 +28,17 @@ export const MARKER_VERSION = 'v1';
 /** A run id: starts with a letter or digit, so `--run --go` is never mistaken for one. */
 export const RUN_ID = /^[A-Za-z0-9][\w.-]{0,63}$/;
 
+/**
+ * A body without its HTML comments. One pass can leave a comment behind: removing the inner comment of
+ * `<!-<!-- x -->- Closes #5 -->` joins the outer halves into a new one. Repeat until nothing changes, so
+ * text GitHub hides from a reader is never read as intent.
+ */
+function withoutHtmlComments(body) {
+  let text = String(body || ''), before;
+  do { before = text; text = text.replace(/<!--[\s\S]*?-->/g, ''); } while (text !== before);
+  return text;
+}
+
 // A line or list item may name several issues. Keep intent separate per PR
 // and issue. A partial reference on the same PR wins over a closing keyword.
 export function prRelationships(body, repo = 'AxalNetwork/StudioOS') {
@@ -35,7 +46,7 @@ export function prRelationships(body, repo = 'AxalNetwork/StudioOS') {
   const reference = '(?:https://github\\.com/[\\w.-]+/[\\w.-]+/issues/\\d+|#\\d+)';
   const referenceList = new RegExp(`^${reference}(?:(?:\\s*,\\s*|\\s+)(?:and\\s+)?${reference})*`);
   let fenced = false;
-  for (const line of String(body || '').replace(/<!--[\s\S]*?-->/g, '').split('\n')) {
+  for (const line of withoutHtmlComments(body).split('\n')) {
     if (/^\s{0,3}(?:```|~~~)/.test(line)) { fenced = !fenced; continue; }
     if (fenced || /^\s*>/.test(line) || /^(?: {4}|\t)/.test(line)) continue;
     const prose = line.replace(/`+[^`]*`+/g, ' ');
