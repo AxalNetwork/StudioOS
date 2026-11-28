@@ -2,7 +2,7 @@
  * #9043 (D9043) — one normalised `users.email` on every write and lookup, so one mailbox maps to one account.
  *
  * The flows run the real routers and services over the full migrated schema in node:sqlite, with synthetic
- * addresses only: register then magic link, admin create then magic link, partner deal activation, Google and
+ * addresses only: register then magic link, retired admin-create refusals then magic link, partner deal activation, Google and
  * Apple first sign-in, an email change and its revert, and a case pair seeded before D9043. The guard at the end
  * reads every Worker source file and fails on an `INSERT INTO users` or `UPDATE users SET email` whose address does
  * not pass through `normalizeEmail` (util/accountEmail.ts), and on a `FROM users WHERE email = …` exact match.
@@ -114,17 +114,18 @@ test('a magic link first, then register in another case: the address is already 
   assert.equal(f.rows().length, 1);
 });
 
-test('admin create as a mixed-case address, then a magic link in lowercase: one row, the same id', async () => {
+test('retired admin create writes nothing; magic links normalise the address and reuse the same account', async () => {
   const f = fixture();
   f.db.prepare("INSERT INTO users (id, email, name, role, email_verified, is_active) VALUES (900, 'admin9043@example.test', 'Synthetic Admin', 'admin', 1, 1)").run();
   const h = await bearer(900, 'admin');
   const r = await post(f.env, '/api/users', { email: ' Lee.A9043@Example.TEST ', name: 'Synthetic Lee', role: 'founder' }, h);
-  assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal(r.body.email, 'lee.a9043@example.test');
+  assert.equal(r.status, 404, 'D9041 retired the unaudited admin-create route');
   const dup = await post(f.env, '/api/users', { email: 'LEE.A9043@example.test', name: 'Synthetic Lee', role: 'founder' }, h);
-  assert.equal(dup.status, 409, 'the same mailbox in another case is the existing user');
-  assert.equal(await magicSignIn(f, 'lee.a9043@example.test'), Number(r.body.id));
-  assert.equal(f.rows().filter((u) => u.email.startsWith('lee.')).length, 1);
+  assert.equal(dup.status, 404, 'a different case cannot reach the retired route');
+  assert.deepEqual(f.rows(), [{ id: 900, email: 'admin9043@example.test' }], 'both refused writes leave the account store unchanged');
+  const id = await magicSignIn(f, ' Lee.A9043@Example.TEST ');
+  assert.equal(await magicSignIn(f, 'lee.a9043@example.test'), id);
+  assert.deepEqual(f.rows().filter((u) => u.email.startsWith('lee.')), [{ id, email: 'lee.a9043@example.test' }]);
 });
 
 test('partner deal activation stores the invited address normalised; a later magic link is the same account', async () => {
@@ -231,7 +232,7 @@ test('an account stored in mixed case before D9043 is found by every sign-in pat
   assert.equal(reg.status, 409, 'register finds the verified account');
   f.db.prepare("INSERT INTO users (id, email, name, role, email_verified, is_active) VALUES (900, 'admin9043@example.test', 'Synthetic Admin', 'admin', 1, 1)").run();
   const dup = await post(f.env, '/api/users', { email: 'LEGACY.l9043@example.test', name: 'Synthetic Lee', role: 'founder' }, await bearer(900, 'admin'));
-  assert.equal(dup.status, 409, 'admin create finds it too');
+  assert.equal(dup.status, 404, 'the retired admin-create route cannot change the existing account');
   assert.deepEqual(f.rows().map((u) => u.id), [71, 900]);
 });
 
