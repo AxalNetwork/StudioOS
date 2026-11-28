@@ -369,8 +369,8 @@ export function transferEvidenceBody(item) {
 }
 
 /** "400,000.00" or "$400000" as integer cents, or null: never a float, never a guess. */
-export function centsFromInput(text) {
-  const t = String(text ?? '').replace(/[\s,$]/g, '');
+export function centsFromInput(typed) {
+  const t = String(typed ?? '').replace(/[\s,$]/g, '');
   const m = /^(\d{1,13})(?:\.(\d{1,2}))?$/.exec(t);
   if (!m) return null;
   const cents = Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
@@ -396,8 +396,8 @@ export function transferBody({ amount, reference, phone, lineUid }) {
 /** The Worker's withdraw-reason bounds (WITHDRAW_REASON_MIN/MAX), on the trimmed text. */
 export const WITHDRAW_REASON_MIN = 10;
 export const WITHDRAW_REASON_MAX = 200;
-export function reasonState(text) {
-  const n = String(text ?? '').trim().length;
+export function reasonState(typed) {
+  const n = String(typed ?? '').trim().length;
   const ok = n >= WITHDRAW_REASON_MIN && n <= WITHDRAW_REASON_MAX;
   const short = WITHDRAW_REASON_MIN - n;
   const long = n - WITHDRAW_REASON_MAX;
@@ -433,8 +433,8 @@ export function lineableCommitments(commitments, lines) {
 }
 
 /** A Raise prospect's id as `addLine` takes it, or null. */
-export function prospectIdOf(text) {
-  const t = String(text ?? '').trim();
+export function prospectIdOf(typed) {
+  const t = String(typed ?? '').trim();
   return /^[1-9]\d{0,11}$/.test(t) ? Number(t) : null;
 }
 
