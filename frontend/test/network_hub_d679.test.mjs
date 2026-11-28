@@ -212,9 +212,11 @@ test('the article pills are the live sector taxonomy', () => {
   assert.equal(count(pills.slice(0, pills.indexOf('</div>')), '<button'), 1);
 
   // The page keeps its own behaviour: search, the author filter, the featured strip, pagination.
-  for (const keep of [/placeholder="Search articles…"/, /ROLE_FILTERS\.map/, /featured: 1/, /Page \{page \+ 1\} of \{totalPages\}/, /No articles yet\. Be the first to publish\./]) {
+  for (const keep of [/placeholder="Search articles…"/, /ROLE_FILTERS\.map/, /featured: 1/, /Page \{page \+ 1\} of \{totalPages\}/, /<ArticleListStatus state=\{listState\}/]) {
     assert.match(src, keep);
   }
+  // D8791: the empty-publication sentence moved to the list-state module, kept for a genuinely empty read.
+  assert.match(read('frontend/src/lib/articleListState.js'), /No articles yet\. Be the first to publish\./);
 });
 
 test('an article card: category, date and read time, title, excerpt, author link, Read →', () => {
