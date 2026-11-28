@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Compute Capacity · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · AI agents · Operations › Compute · #8832 for #5570 · continues HQ AI Agents (D4137, SA0–SA24) · decision D4137-p6</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ AI agents compute capacity — containers held now against each provider and region cap, the runs that wait and why, and what each run was quoted and charged</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Boards SA32 to SA37 add a Compute view to HQ › AI agents › Operations (/hq/ai-agents/operations/compute, ⚑ Q1 A), for HQ Super Admins only. It reads #5570’s admission coordinator: containers holding a slot now against the sum of provider caps, per provider and provider:region, per venture (1 running, 10 waiting; 100 waiting in all), the reconciling runs that hold until the provider confirms, and each run’s lease, six-line quote, reserve and basis, and its measured or reserve charge. Registered agents and containers running now sit in two tiles that are never summed: registered agents hold no capacity. This is not #7078 (team run capacity on Team › Agents); a venture row links there once that card is designed. No route serves any admission field on main today, so every coordinator value carries a violet dashed ◇ for #8832 / #5570; SA34a draws today’s real state, where no provider has a cap and nothing is admitted. Zero, Unavailable, Not recorded, Unreadable, No cap set and Full each have their own glyph and word (D5129). Shell, header, tabs, tables, chips and type are copied from the landed HQ AI Agents canvas; Eadwyn summarises and drafts in the one shared rail (#5130), accept, edit or discard. Amber ⚑ tags mark owner picks drawn as option A. Neither tag is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026, read 14:02 · checked against main d26a93a252 · [Venture Alder] to [Venture Dogwood], super admin [Iris Chen], the eight agents ([SEO Agent] to [Data Room Clerk]), regions, run uids and every figure (38 of 60 holding, 7 of 100 waiting, 1,000 registered) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ AI Agents Compute Capacity Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SA32', 'Compute capacity', 'Operations › Compute: the two tiles (registered agents [1,000] ≠ containers running now [38] of [60]), live runs [41] and waiting [7] of 100; the pause line; providers expanding into regions (holding / cap meter, waiting, health, free; Cloudflare [us-east] ■ Full, [ap-south] and AWS No cap set with a lock); ventures (running / 1, waiting / 10, reconciling, oldest wait); the nine waiting and reconciling runs with their reason in words and reserve; the 7-day metrics row Not recorded yet. Every coordinator value carries ◇. Eadwyn summarises and drafts a cap note.', [F('SA32', false, 2170)]],
+      ['SA33', 'Run lease panel', 'The right-hand panel for one run over SA32: run (Open run → SA7), agent, venture, provider and region, state, generation, queued / admitted / lease ends; why it waits; the six quote lines, total, upper bound [$4.00], reserve and basis; the charge. A waiting run with every line Unavailable and basis Spec ceiling, Withdraw drawn disabled ◇; and a released run charged [$1.37] · Measured.', [F('SA33', 'Waiting · quote unavailable', 1180), F('SA33B', 'Released · measured charge', 1180)]],
+      ['SA34', 'Empty states', '(a) Today on main: no provider has a cap, so no container is admitted and [7] runs wait; Set provider caps is a disabled ◇. (b) No run has ever asked for a container: Open the run log; the registered-agents tile keeps its count.', [F('SA34', 'No caps recorded · today', 1240), F('SA34B', 'Nothing queued', 760)]],
+      ['SA35', 'States', 'Loading; Not recorded (quote lines Unavailable, basis Spec ceiling, registered agents Unavailable, metrics Not recorded yet, and the five look-alikes side by side); Unreadable (coordinator unbound or unavailable: the D1 parts still show); Refused (not a Super Admin); Paused (banner, tables dimmed but readable); a row at the cap (■ Full); and the panel’s own Loading, Unreadable, Not found and Refused.', [F('SA35', 'Loading', 1300), F('SA35B', 'Not recorded', 1000), F('SA35C', 'Unreadable · coordinator', 1000), F('SA35D', 'Refused · not a Super Admin', 560), F('SA35E', 'Paused', 2170), C('SA35F', 'At the cap', 1440, 300), C('SA35G', 'Lease panel states', 1440, 640)]],
+      ['SA36', 'Phone 390', 'The two tiles stacked with the hold-no-capacity line between; the pause line; providers as cards with a meter per region; ventures as cards; waiting runs as cards that open the lease as a full-height sheet; metrics last. 44 px targets, no table wider than the screen.', [C('SA36', 'Compute · 390', 390, 1600), C('SA36B', 'Lease sheet · 390', 390, 1180)]],
+      ['SA37', 'Dark', 'SA32 and the phone on the dark tokens; No cap set, Unavailable, Full and Not recorded keep their words and glyphs.', [F('SA37', 'Compute · dark', 2170), C('SA37B', 'Phone · dark · 390', 390, 1600)]],
+      ['SAQ-H', 'Handoff', 'What main has (the coordinator object and its limits, the slot and settlement fields, the placement quote, the D1 policy and budgets reads) and that no route serves any admission field; what #8832 / #5570 must add (◇); the three owner picks (⚑ A); acceptance mapped to boards; hand-offs to SA7, SA15, Policies and #7078.', [W('SAQH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

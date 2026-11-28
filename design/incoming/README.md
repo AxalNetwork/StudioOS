@@ -2749,6 +2749,20 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
 
 
+## Landed 2026-11-27 — Seven addenda: Beehiiv in Grow, Grow Feedback themes, Research overview for advisors and partners, workflow run timeline, compute capacity, skill restore and WorkGraph confirm (#8819, #8822, #8823, #8825, #8832, #8833, #8835)
+
+Seven board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-27 from S1's design prompts on these issues. Each set is a page plus its boards and continues a landed canvas with the board ids its brief gives. The owner chose option A on #8823 (only Super Admins open a workflow run, in HQ) and on #8833 (a Super Admin presses Confirm publication). Every other question is drawn as option A, landed at the owner's request before it was answered.
+
+- **`Grow v2 Beehiiv`** (GR-32 to GR-42 and GRB-H, 27 frames): the From Beehiiv figures, the connected Newsletter tab, the composer ending in Publish to…, and the draft handoff and failure states such as the paid-plan message (#8819, D4861-p2).
+- **`Grow v2 Feedback Themes`** (GR-43 to GR-50 and GTM-H, 19 frames): renaming a theme and merging two, on the selected theme's heading (#8835, D6099-p3). The brief numbered these GR-32 to GR-39; they were renumbered because `Grow v2 Beehiiv` holds GR-32 to GR-42.
+- **`Research v2 Advisor and Partner Overview`** (RS-23 to RS-28 and RSV-H, 14 frames): the Research Overview for the advisor and partner licences, from the stores they already reach (#8822, D8822).
+- **`HQ AI Agents Workflow Run Timeline`** (SA25 to SA31 and SAW-H, 28 frames): the Startup Assessment run timeline under Operations › Runs, its nodes, attempts, brief sections and decision (#8823, D4137-p5).
+- **`HQ AI Agents Compute Capacity`** (SA32 to SA37 and SAQ-H, 17 frames): a Compute view of workspace quota, admission and waiting runs (#8832, D4137-p6).
+- **`Skill Library v2 Restore`** (SK-26 to SK-33 and SKR-H, 13 frames): the Super Admin control that restores a published version as a reviewed draft (#8825, D4956-p1).
+- **`WorkGraph Frozen Export and Confirm`** (WG-10 to WG-20 and WGX-H, 35 frames): the drafting page's frozen export and the Super Admin Confirm publication strip (#8833, D5580-p6).
+
+Every person, venture, agent and figure is bracketed sample content, except names the briefs give. Each file is the canvas export as published; no value was edited. None is built yet.
+
 ## Landed 2026-11-27 — Access and orientation: seven canvases from the 25 November role audit (#8676, #8677, #8678, #8682, #8683, #8684, #8687)
 
 Seven board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-27 from the briefs filed after the 25 November role audit. Each set is a page plus its boards. They were landed at the owner's request before the briefs' questions were answered, and each open question is drawn as option A.

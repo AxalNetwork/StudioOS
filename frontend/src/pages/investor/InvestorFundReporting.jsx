@@ -11,7 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase as caseLabel } from '../../lib/absence';
-import { fundReportDeliveryLabel, fundReportDeliveryTime } from '../../lib/fundReportDelivery';
+import { fundReportDeliveryTime, lpDeliveryLabel, lpDeliveryNote } from '../../lib/fundReportDelivery';
 import { useManagedFund, FundPicker } from './managedFund';
 import FromMercury from './FromMercury';
 
@@ -41,15 +41,22 @@ export function statusOf(row) {
   if (stored) return stored;
   return row?.issued_at ? 'issued' : 'draft';
 }
+/** D6240: an issued period whose recorded delivery missed an LP. Not recorded or unreadable is not "missed". */
+export function notAllDelivered(row) {
+  const counts = row?.lp_delivery;
+  return statusOf(row) === 'issued' && counts?.state === 'recorded' && counts.delivered < counts.total;
+}
 /** The chip keys, and the rows each selects. `all` is every row. */
 export function periodsFor(filter, rows) {
   const list = Array.isArray(rows) ? rows : [];
   if (filter === 'issued' || filter === 'draft') return list.filter((row) => statusOf(row) === filter);
+  if (filter === 'undelivered') return list.filter(notAllDelivered);
   return list;
 }
 export function periodCounts(rows) {
   const list = Array.isArray(rows) ? rows : [];
-  return { all: list.length, issued: periodsFor('issued', list).length, draft: periodsFor('draft', list).length };
+  return { all: list.length, issued: periodsFor('issued', list).length, draft: periodsFor('draft', list).length,
+    undelivered: periodsFor('undelivered', list).length };
 }
 export const periodPath = (fundId, row) => `/funds/${fundId}/reporting/${row.id}`;
 export const newPeriodPath = (fundId) => `/funds/${fundId}/reporting/new`;
@@ -95,14 +102,14 @@ export function ReportingArchive({ loading, error, fund, rows, filter, onRetry }
         <td><Link className="if4-period-link" to={periodPath(fund.id, row)}>{periodOf(row)}</Link><small>{span(row)}</small></td>
         <td data-label="State"><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td>
         <td data-label="Issued">{date(row.issued_at) || 'Not issued'}</td>
-        <td data-label="Delivered">{fundReportDeliveryLabel(row)}{row.lps_notified_at && <small>{fundReportDeliveryTime(row)}</small>}</td>
+        <td data-label="Delivered" data-testid="cell-period-delivered">{lpDeliveryLabel(row)}{lpDeliveryNote(row) && <small>{lpDeliveryNote(row)}</small>}{row.lps_notified_at && <small>{fundReportDeliveryTime(row)}</small>}</td>
         <td data-label="Contents"><ReportContents row={row} /></td></tr>)}
     </tbody></table></div>;
   }
   const subtitle = loading ? 'Loading the fund’s periods' : error || !fund ? 'No count is shown' : `${visible.length} of ${count} periods`;
   return <section className="i6-card if4-archive" data-testid="fund-reporting-archive"><header><div><h2>Reporting periods</h2><span>{subtitle}</span></div>
     {fund && !loading && !error && count > 0 && <NewPeriodLink fundId={fund.id} />}</header>{body}
-    <p className="i6-footnote">A draft is not shown as issued. Delivered records in-app notices, not whether an LP opened the report.</p></section>;
+    <p className="i6-footnote">A draft is not shown as issued. Delivered counts the LPs an issued period was made available to; open the period to see each LP and whether they opened it.</p></section>;
 }
 
 export default function InvestorFundReporting() {
@@ -140,7 +147,9 @@ export default function InvestorFundReporting() {
   const counts = useMemo(() => periodCounts(state.rows), [state.rows]);
   const readable = !state.loading && !state.error && !!fund;
   const latest = readable ? state.rows[0] : null;
-  const deliveryKnown = readable && state.rows.some(row => row.delivery_status && row.delivery_status !== 'unreadable');
+  // D6240: the latest issued period's "n of m". One issued before delivery was recorded reads Not recorded, never 0.
+  const latestIssued = readable ? state.rows.find((row) => statusOf(row) === 'issued') || null : null;
+  const delivery = latestIssued?.lp_delivery?.state;
   // The handler is supplied only for a fund the member operates; without one the
   // action is absent and the archive card says why.
   const newPeriod = useMemo(() => (fund ? () => navigate(newPeriodPath(fund.id)) : null), [fund, navigate]);
@@ -155,12 +164,12 @@ export default function InvestorFundReporting() {
       filters={investorZoneFilters('funds/reporting', { value: filter, onChange: setFilter, counts: readable ? counts : {} })}
       actions={investorZoneActions('funds/reporting', {
         handlers: { newPeriod },
-        view: { scope: fund?.name, header: ['Period', 'State', 'Start', 'End', 'Issued', 'Delivered'], rows: readable ? visible : [], cells: (r) => [periodOf(r), statusOf(r), date(r.period_start), date(r.period_end), date(r.issued_at), fundReportDeliveryLabel(r)] },
+        view: { scope: fund?.name, header: ['Period', 'State', 'Start', 'End', 'Issued', 'Delivered'], rows: readable ? visible : [], cells: (r) => [periodOf(r), statusOf(r), date(r.period_start), date(r.period_end), date(r.issued_at), lpDeliveryLabel(r)] },
       })}
     />
-    <section className="if4-stats"><Stat label="Periods" value={readable ? counts.all : null} note={readable ? `${counts.issued} issued · ${counts.draft} draft` : 'Not read'} /><Stat label="Latest period" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : readable ? 'No period yet' : 'Not read'} /><Stat label="Delivery" value={deliveryKnown ? 'Recorded' : null} note={deliveryKnown ? 'In-app notice results' : 'Per-LP delivery unavailable'} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
+    <section className="if4-stats"><Stat label="Periods" value={readable ? counts.all : null} note={readable ? `${counts.issued} issued · ${counts.draft} draft` : 'Not read'} /><Stat label="Latest period" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : readable ? 'No period yet' : 'Not read'} /><Stat label="Delivered" value={delivery === 'recorded' ? lpDeliveryLabel(latestIssued) : delivery === 'not_recorded' ? 'Not recorded' : null} note={deliveryNote(readable, latestIssued, delivery)} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
     <ReportingArchive loading={managed.loading || state.loading} error={managed.error || state.error} fund={fund} rows={state.rows} filter={filter} onRetry={refresh} />
-    <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>What you can do here</span></div></header><p>Start a period, or open one to edit its draft and issue it. Issuing cannot be undone: a change after that is a separate correcting period, and the original stays issued. An admin saves drafts here and issues from the reporting queue. Delivery records in-app notices for issued periods. It does not indicate that an LP opened the report.</p></section>
+    <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>What you can do here</span></div></header><p>Start a period, or open one to edit its draft and issue it. Issuing cannot be undone: a change after that is a separate correcting period, and the original stays issued. An admin saves drafts here and issues from the reporting queue. Issuing records delivery for each LP: made available, opened, failed, or No account for an LP with no active linked account. Opened means the LP’s account read the report; LPs have no acknowledgement step.</p></section>
     {/* D840 (#2349): month-end cash from the GP's own Mercury, and its statement attached on Accept. */}
     <FromMercury section="reporting" fundId={managed.fund?.id ?? null} />
     <footer className="i6-footnote">Periods are drafted and issued in their editor; this list reads them.</footer>
@@ -170,12 +179,22 @@ export default function InvestorFundReporting() {
     className="i6-rail"
     stance={"Reporting periods"}
     note={"Draft a period, then issue it from its editor. A draft is never represented as issued or delivered."}
-    coverage={['Reporting periods read from the fund record']}
+    coverage={['Reporting periods read from the fund record', 'Delivery to each LP of an issued period']}
     coverageNote={'Each period opens in its editor, where a draft is saved or issued.'}
     unavailable={[
-        ['Per-LP delivery', 'Issuing records when a period was issued, not which LP received it.'],
+        ['LP acknowledgement', 'LPs have no acknowledgement step, so opening the report is the last state recorded.'],
       ]}
   /></div></ZonePrimaryScope>;
+}
+
+/** D6240: the Delivered tile's note for the latest issued period. */
+export function deliveryNote(readable, latestIssued, delivery) {
+  if (!readable) return 'Not read';
+  if (!latestIssued) return 'No issued period yet';
+  if (delivery === 'recorded') return `LPs reached · ${periodOf(latestIssued)}`;
+  if (delivery === 'not_recorded') return `${periodOf(latestIssued)} was issued before delivery was recorded`;
+  if (delivery === 'unreadable') return 'Per-LP delivery could not be read';
+  return 'Per-LP delivery not returned';
 }
 
 function Stat({ label, value, note }) { return <article className="if4-stat"><span>{label}</span><b>{value == null ? 'Unavailable' : value}</b><small>{note}</small></article>; }

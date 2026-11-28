@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Compute Capacity · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* SAQ (#8832): every style is inline, as in the landed HQ AI Agents component. */
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "2170px"}, "board": {"editor": "enum", "default": "SA32", "options": ["SA32", "SA33", "SA33B", "SA34", "SA34B", "SA35", "SA35B", "SA35C", "SA35D", "SA35E", "SA35F", "SA35G", "SA36", "SA36B", "SA37", "SA37B", "SAQH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SA32';
+    /* SA37 boards draw on the dark tokens; everything else is light. */
+    const dark = /^SA37/.test(B);
+    const SG = "font-family:'Space Grotesk',system-ui,sans-serif";
+    const M = "font-family:'Roboto Mono',ui-monospace,monospace";
+    const V = dark ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', body: '#d1d5db', mut: '#9ca3af', faint: '#6b7280', line: '#374151', line2: '#4b5563', vio: '#a78bfa', vbtn: '#7c3aed', vdeep: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.42)', pos: '#34d399', posT: 'rgba(52,211,153,.13)', neg: '#f87171', negT: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.45)', ambF: 'rgba(252,211,77,.13)', ambE: 'rgba(252,211,77,.45)', ambT: '#fcd34d', sk: '#1f2937', hq: '#be123c' } : { bg: '#f4f3f7', card: '#ffffff', raised: '#faf9fc', ink: '#18181b', body: '#3f3a47', mut: '#6b6577', faint: '#a1a1aa', line: '#ececf1', line2: '#e2dfe8', vio: '#7c3aed', vbtn: '#7c3aed', vdeep: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posT: '#ecfdf5', neg: '#b91c1c', negT: '#fef2f2', negE: '#fecaca', ambF: '#fef3c7', ambE: '#fcd34d', ambT: '#92400e', sk: '#ececf1', hq: '#881337' };
+    const VARS = Object.keys(V).map(k => '--' + k + ':' + V[k]).join(';');
+    const SV = (d, s) => `<svg width="${s || 16}" height="${s || 16}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;display:block">${d}</svg>`;
+    const ICO = { search: SV('<circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path>'), bell: SV('<path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14a1.5 1.5 0 0 0 3 0"></path>'), check: SV('<path d="M3 8.5l3 3 7-7"></path>', 14), plus: SV('<path d="M8 3v10M3 8h10"></path>'), more: SV('<circle cx="3.5" cy="8" r="1" fill="currentColor"></circle><circle cx="8" cy="8" r="1" fill="currentColor"></circle><circle cx="12.5" cy="8" r="1" fill="currentColor"></circle>'), x: SV('<path d="M4 4l8 8M12 4l-8 8"></path>'), lock: SV('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path>', 13), warn: SV('<path d="M8 2.5l6 10.5H2z"></path><path d="M8 6.5v3M8 11.2v.1"></path>', 14), info: SV('<circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.2v3.6M8 5.2v.1"></path>', 14), grip: SV('<circle cx="6" cy="4" r="1" fill="currentColor"></circle><circle cx="10" cy="4" r="1" fill="currentColor"></circle><circle cx="6" cy="8" r="1" fill="currentColor"></circle><circle cx="10" cy="8" r="1" fill="currentColor"></circle><circle cx="6" cy="12" r="1" fill="currentColor"></circle><circle cx="10" cy="12" r="1" fill="currentColor"></circle>'), down: SV('<path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10"></path>'), grid: SV('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"></rect><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"></rect><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"></rect><rect x="9" y="9" width="4.5" height="4.5" rx="1"></rect>'), rows: SV('<path d="M2.5 4h11M2.5 8h11M2.5 12h11"></path>'), pause: SV('<path d="M6 3.5v9M10 3.5v9"></path>'), upload: SV('<path d="M8 11V3M4.5 6.5L8 3l3.5 3.5M3 13.5h10"></path>') };
+    const EB = (t, c) => `<span style="${M};font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:${c || 'var(--mut)'}">${t}</span>`;
+    const BTN = `display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 14px;border-radius:9px;${SG};font-size:13px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box;`;
+    const bP = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--vbtn);background:var(--vbtn);color:#fff;${x || ''}">${t}</button>`;
+    const bS = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--line2);background:var(--card);color:var(--ink);${x || ''}">${t}</button>`;
+    const bG = (t, x) => `<button type="button" style="${BTN}border:1px solid transparent;background:transparent;color:var(--body);${x || ''}">${t}</button>`;
+    const bD = (t, x) => `<button type="button" style="${BTN}border:1px solid var(--negE);background:var(--card);color:var(--neg);${x || ''}">${t}</button>`;
+    const bDF = (t, x) => `<button type="button" style="${BTN}border:1px solid #b91c1c;background:#b91c1c;color:#fff;${x || ''}">${t}</button>`;
+    const bX = (t, why, x) => `<button type="button" disabled title="${why || ''}" style="${BTN}border:1px solid var(--line2);background:var(--raised);color:var(--mut);cursor:not-allowed;${x || ''}">${t}</button>`;
+    const SM = 'min-height:32px;padding:0 11px;font-size:12.5px;';
+    const LNK = (t, x) => `<a href="#" style="color:var(--vio);font-weight:600;text-decoration:none;${x || ''}">${t}</a>`;
+    const NR = (why, x) => `<span${why ? ` title="${why}"` : ''} style="font-style:italic;color:var(--mut);${SG};${x || ''}">Not recorded</span>`;
+    const SK = (w, h, x) => `<span aria-hidden="true" style="display:block;width:${typeof w === 'number' ? w + 'px' : w};height:${h}px;border-radius:5px;background:var(--sk);${x || ''}"></span>`;
+    const PILL = (t, k) => { const S = { off: ['var(--posT)', 'var(--posT)', 'var(--pos)'], pub: ['var(--posT)', 'var(--posT)', 'var(--pos)'], draft: ['var(--raised)', 'var(--line2)', 'var(--body)'], rev: ['var(--lav)', 'var(--lavE)', 'var(--vdeep)'], wait: ['var(--ambF)', 'var(--ambE)', 'var(--ambT)'], hid: ['transparent', 'var(--line2)', 'var(--mut)'], neg: ['var(--negT)', 'var(--negE)', 'var(--neg)'], hq: ['var(--hq)', 'var(--hq)', '#ffffff'] }[k || 'draft']; return `<span style="display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:1px 9px;border-radius:999px;background:${S[0]};border:1px solid ${S[1]};color:${S[2]};font-size:12px;font-weight:600;white-space:nowrap;box-sizing:border-box;line-height:1.3">${k === 'hq' ? '' : '<span aria-hidden="true" style="width:6px;height:6px;border-radius:999px;background:currentColor;display:block;flex:none"></span>'}${t}</span>`; };
+    const CHIP = (t, on, x) => `<span style="display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 11px;border-radius:999px;border:1px solid ${on ? 'var(--lavE)' : 'var(--line2)'};background:${on ? 'var(--lav)' : 'var(--card)'};color:${on ? 'var(--vdeep)' : 'var(--body)'};font-size:12.5px;font-weight:${on ? 700 : 500};white-space:nowrap;box-sizing:border-box;${x || ''}">${t}</span>`;
+    const TAG = (t, x) => `<span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--line2);font-size:11.5px;color:var(--body);white-space:nowrap;box-sizing:border-box;${x || ''}">${t}</span>`;
+    const PAV = (ini, s) => `<span aria-hidden="true" style="width:${s || 24}px;height:${s || 24}px;flex:none;border-radius:999px;background:var(--raised);border:1px solid var(--line2);display:grid;place-items:center;font-size:${Math.round((s || 24) * 0.36)}px;font-weight:800;color:var(--body);box-sizing:border-box">${ini}</span>`;
+    const MARK = `<span title="AI agent" style="display:inline-flex;align-items:center;gap:4px;min-height:18px;padding:0 6px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);color:var(--vdeep);font-size:10.5px;font-weight:700;white-space:nowrap;box-sizing:border-box"><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style="display:block"><path d="M5 0L6.1 3.9L10 5L6.1 6.1L5 10L3.9 6.1L0 5L3.9 3.9Z" fill="currentColor"></path></svg>AI agent</span>`;
+    const N = (x) => Number(x).toLocaleString('en-US');
+    const APPH = (o) => { o = o || {}; return `<div style="height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line);box-sizing:border-box"><div style="display:flex;align-items:center;gap:9px;width:208px;flex:none"><img src="/axal-mark.png" alt="" style="width:26px;height:26px;display:block;border-radius:6px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span>${PILL('HQ', 'hq')}</div><div style="flex:1;max-width:440px;height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--bg);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:13px;box-sizing:border-box">${ICO.search}Search HQ</div><div style="margin-left:auto;display:flex;align-items:center;gap:6px"><button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.bell}</button><button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:6px;height:36px;padding:0 4px;border:none;background:transparent;color:var(--body);cursor:pointer">${PAV('IC', 30)}<span aria-hidden="true">▾</span></button></div></div>`; };
+    const SROWS = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'AI agents', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const SB = () => `<nav aria-label="HQ" style="width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:1px;padding:12px;box-sizing:border-box"><span style="padding:4px 10px 8px">${EB('HQ')}</span>${SROWS.map(r => `<a href="#"${r === 'AI agents' ? ' aria-current="page"' : ''} style="display:flex;align-items:center;min-height:34px;padding:0 10px;border-radius:9px;font-size:13.5px;font-weight:${r === 'AI agents' ? 700 : 500};color:${r === 'AI agents' ? 'var(--vdeep)' : 'var(--body)'};background:${r === 'AI agents' ? 'var(--lav)' : 'transparent'};text-decoration:none">${r}</a>`).join('')}</nav>`;
+    const KILLB = `<div role="status" style="flex:none;display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--ambF);border-bottom:1px solid var(--ambE);color:var(--ambT);font-size:13px;line-height:1.45"><span>${ICO.pause}</span><span style="flex:1"><b>All AI agents are paused across the platform</b> since [24 Oct 2026, 10:12] by [Admin Name]. Reason: “[Model provider incident]”. Teams can still read and decide proposals.</span>${bS('Resume all AI agents…', SM)}</div>`;
+    const ROB = `<div role="status" style="flex:none;display:flex;align-items:center;gap:10px;padding:9px 20px;background:var(--raised);border-bottom:1px solid var(--line2);color:var(--body);font-size:13px"><span style="color:var(--mut)">${ICO.lock}</span><span><b>Read only.</b> You are an HQ admin without super-admin rights. Every edit is switched off and says why.</span></div>`;
+    const SHELL = (main, o) => { o = o || {}; return `<div style="display:flex;flex-direction:column;${o.h ? 'height:' + o.h + 'px' : 'min-height:900px'}">${APPH()}${o.kill ? KILLB : ''}${o.ro ? ROB : ''}<div style="flex:1;display:flex;min-height:0">${SB()}<main style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--bg)">${main}</main>${o.side || ''}</div></div>`; };
+    const TABL = [['Overview', null], ['Roster', 16], ['Skills library', 80], ['Operations', null]];
+    const SUBS = { 'Skills library': [['From Axal', 80], ['Company skills', 23]], Operations: [['Runs', null], ['Spend', null], ['Policies', null], ['Audit', null], ['Compute', null]] };
+    const HDR = (tab, o) => { o = o || {}; const sub = SUBS[tab]; return `<header style="flex:none;padding:22px 28px 0;display:flex;flex-direction:column"><div style="display:flex;align-items:flex-start;gap:16px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><nav aria-label="Breadcrumb">${EB('HQ › AI agents' + (o.crumb ? ' › ' + o.crumb : ''))}</nav><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.2">${o.title || 'AI agents'}</h1>${o.pill || ''}</div><p style="margin:0;font-size:13px;line-height:1.5;color:var(--mut);max-width:720px">${o.line || 'The agents and skills every team is offered, the caps and models they run on, and how they are used. Every change is logged with your name and a reason.'}</p></div><div style="display:flex;align-items:center;gap:8px;flex:none;padding-top:4px">${o.acts || ''}</div></div>${o.notabs ? '' : `<nav aria-label="AI agents" style="display:flex;gap:22px;margin-top:16px;border-bottom:1px solid var(--line)">${TABL.map(([t, n]) => `<a href="#"${t === tab ? ' aria-current="page"' : ''} style="display:inline-flex;align-items:center;gap:7px;min-height:40px;font-size:13.5px;font-weight:${t === tab ? 700 : 600};color:${t === tab ? 'var(--ink)' : 'var(--mut)'};border-bottom:2px solid ${t === tab ? 'var(--vio)' : 'transparent'};margin-bottom:-1px;text-decoration:none">${t}${n != null ? `<span style="${M};font-size:11.5px;font-weight:500;color:var(--mut)">${n}</span>` : ''}</a>`).join('')}</nav>`}${sub ? `<nav aria-label="${tab}" style="display:flex;gap:6px;margin-top:12px">${sub.map(([t, n]) => `<a href="#"${t === o.sub ? ' aria-current="page"' : ''} style="display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 12px;border-radius:999px;border:1px solid ${t === o.sub ? 'var(--lavE)' : 'var(--line2)'};background:${t === o.sub ? 'var(--lav)' : 'var(--card)'};color:${t === o.sub ? 'var(--vdeep)' : 'var(--body)'};font-size:12.5px;font-weight:${t === o.sub ? 700 : 500};text-decoration:none;box-sizing:border-box">${t}${n != null ? `<span style="${M};font-size:11px;color:var(--mut)">${n}</span>` : ''}</a>`).join('')}</nav>` : ''}</header>`; };
+    const BODY = (h, x) => `<div style="flex:1;min-height:0;overflow:hidden;padding:18px 28px 24px;display:flex;flex-direction:column;gap:14px;${x || ''}">${h}</div>`;
+    const CARD = (title, h, o) => { o = o || {}; return `<section aria-label="${o.al || title}" style="background:var(--card);border:1px solid ${o.err ? 'var(--negE)' : 'var(--line)'};border-radius:12px;padding:${o.pad || '16px 18px'};display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box;${o.x || ''}">${title ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-0.01em">${title}</h2>${o.meta ? `<span style="font-size:12px;color:var(--mut)">${o.meta}</span>` : ''}<span style="margin-left:auto;display:flex;gap:8px;align-items:center">${o.right || ''}</span></div>` : ''}${h}</section>`; };
+    const TBL = (cols, heads, rows, o) => { o = o || {}; const al = (i) => (o.num || []).includes(i) ? 'text-align:right;justify-content:flex-end;' : ''; return `<div role="table" aria-label="${o.al || 'Table'}" style="flex:none;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden"><div role="row" style="position:sticky;top:0;z-index:1;display:grid;grid-template-columns:${cols};gap:12px;align-items:center;padding:9px 14px;background:var(--raised);border-bottom:1px solid var(--line)">${heads.map((h, i) => `<span role="columnheader" style="${M};font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:4px;${al(i)}">${h}</span>`).join('')}</div>${rows.map((r, j) => `<div role="row" style="display:grid;grid-template-columns:${cols};gap:12px;align-items:center;padding:${o.py || 10}px 14px;${j ? 'border-top:1px solid var(--line);' : ''}${(o.hl || []).includes(j) ? 'background:var(--lav);' : ''}">${r.map((c, i) => `<span role="cell" style="min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--body);${al(i)}">${c}</span>`).join('')}</div>`).join('')}${o.foot ? `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--mut)">${o.foot}</div>` : ''}</div>`; };
+    const PAGER = (t) => `<span style="${M}">${t}</span>${bX('Previous', 'This is the first page', SM)}${bS('Next', SM)}`;
+    const MONO = (t, x) => `<span style="${M};font-size:12.5px;color:var(--ink);${x || ''}">${t}</span>`;
+    const MOREB = (al) => `<button type="button" aria-label="${al}" style="width:32px;height:32px;border-radius:7px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.more}</button>`;
+    const TILE = (e, val, sub, o) => { o = o || {}; return `<div style="background:var(--card);border:1px solid ${o.err ? 'var(--negE)' : 'var(--line)'};border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:5px;min-width:0;box-sizing:border-box">${EB(e)}<span style="${M};font-size:${o.small ? 18 : 24}px;font-weight:600;color:var(--ink);line-height:1.2">${val}</span>${sub ? `<span style="font-size:12px;line-height:1.4;color:${o.subc || 'var(--mut)'}">${sub}</span>` : ''}</div>`; };
+    const SEARCH = (t, w) => `<div style="width:${w || 260}px;height:36px;border-radius:7px;border:1px solid var(--line2);background:var(--card);display:flex;align-items:center;gap:8px;padding:0 11px;color:var(--mut);font-size:13px;box-sizing:border-box">${ICO.search}${t}</div>`;
+    const LBL = (t, req) => `<span style="font-size:12.5px;font-weight:700;color:var(--ink)">${t}${req ? '<span style="color:var(--mut);font-weight:500"> · required</span>' : ''}</span>`;
+    const INP = (val, x, mono, ph, dis) => `<div style="min-height:38px;box-sizing:border-box;border:1px solid var(--line2);border-radius:7px;background:${dis ? 'var(--raised)' : 'var(--card)'};display:flex;align-items:center;gap:8px;padding:0 11px;font-size:13px;color:${val ? (dis ? 'var(--mut)' : 'var(--ink)') : 'var(--faint)'};${mono ? M + ';font-size:12.5px;' : ''}${x || ''}">${val || ph || ''}</div>`;
+    const TA = (t, h, ph) => `<div style="min-height:${h || 76}px;box-sizing:border-box;border:1px solid var(--line2);border-radius:7px;background:var(--card);padding:9px 11px;font-size:13px;line-height:1.55;color:${t ? 'var(--ink)' : 'var(--faint)'}">${t || ph || ''}</div>`;
+    const FLD = (lab, ctrl, hint, req) => `<div style="display:flex;flex-direction:column;gap:7px;min-width:0">${LBL(lab, req)}${ctrl}${hint ? `<span style="font-size:12px;color:var(--mut);line-height:1.45">${hint}</span>` : ''}</div>`;
+    const CBX = (t, on, x) => `<span role="checkbox" aria-checked="${!!on}" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--body);${x || ''}"><span aria-hidden="true" style="width:16px;height:16px;flex:none;border-radius:4px;box-sizing:border-box;display:grid;place-items:center;color:#fff;${on ? 'background:var(--vbtn);border:1px solid var(--vbtn)' : 'background:var(--card);border:1.5px solid var(--line2)'}">${on ? ICO.check : ''}</span>${t}</span>`;
+    const SHEET = (title, sub, body, foot, w) => `<aside role="dialog" aria-label="${title}" style="width:${w || 520}px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;box-shadow:-12px 0 32px rgba(24,24,27,.08)"><div style="flex:none;display:flex;align-items:flex-start;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:17px;font-weight:800;letter-spacing:-0.02em">${title}</span>${sub ? `<span style="font-size:12.5px;color:var(--mut)">${sub}</span>` : ''}</div><button type="button" aria-label="Close" style="width:32px;height:32px;border-radius:7px;border:none;background:transparent;color:var(--body);display:grid;place-items:center;cursor:pointer;padding:0">${ICO.x}</button></div><div style="flex:1;min-height:0;overflow:hidden;padding:18px 20px;display:flex;flex-direction:column;gap:16px">${body}</div>${foot ? `<div style="flex:none;display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line)">${foot}</div>` : ''}</aside>`;
+    const DLG = (t, ps, btns, w, extra) => `<div role="dialog" aria-label="${t}" style="width:${w || 480}px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.16);padding:22px 24px;display:flex;flex-direction:column;gap:12px"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em;line-height:1.3">${t}</h2>${ps.map(p => `<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">${p}</p>`).join('')}${extra || ''}<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">${btns}</div></div>`;
+    const REASON = (ph) => FLD('Reason', TA('', 64, ph || 'Why are you making this change?'), 'Logged in Audit with your name, the time, and before and after.', true);
+    const NOTE = (t, k) => `<div role="note" style="display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:10px;font-size:12.5px;line-height:1.5;${k === 'amb' ? 'background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT)' : k === 'neg' ? 'background:var(--negT);border:1px solid var(--negE);color:var(--neg)' : 'background:var(--raised);border:1px solid var(--line);color:var(--body)'}"><span style="margin-top:2px;flex:none">${k === 'amb' || k === 'neg' ? ICO.warn : ICO.info}</span><span>${t}</span></div>`;
+    const DIM = (inner) => `<div style="position:relative;padding:40px 30px;display:flex;gap:28px;justify-content:center;align-items:flex-start;background:var(--bg)">${inner}</div>`;
+    /* ---------- SAQ (#8832) · workspace quota and compute capacity. Shell, header, tabs, tables, chips and type copied from the landed HQ AI Agents canvas (D4137, SA0 to SA9) by way of the Execution Budgets addendum (SA15 to SA19). ---------- */
+    const AMB = dark ? '#fbbf24' : '#d97706';
+    /* annotations, not product copy */
+    const TB = (t) => `<span title="Needs backend work" style="display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:6px;border:1px dashed var(--vio);color:var(--vio);${M};font-size:10.5px;font-weight:600;white-space:nowrap;box-sizing:border-box">◇ ${t}</span>`;
+    const TO = (t) => `<span title="Owner decision" style="display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:6px;border:1px dashed ${AMB};color:var(--ambT);background:var(--ambF);${M};font-size:10.5px;font-weight:600;white-space:nowrap;box-sizing:border-box">⚑ ${t}</span>`;
+    /* the small ◇ beside a value no route serves yet */
+    const D = `<span title="Not served yet · #8832" aria-label="not served yet" style="color:var(--vio);font-size:11px;font-weight:700;margin-left:2px">◇</span>`;
+    /* Platform States (D5129): a glyph and a word, never colour alone */
+    const ST = (g, w, k, x) => { const S = { nr: ['transparent', 'var(--line2)', 'var(--mut)', 'dashed'], unav: ['var(--raised)', 'var(--line2)', 'var(--mut)', 'dotted'], unr: ['var(--negT)', 'var(--negE)', 'var(--neg)', 'dashed'], ref: ['var(--negT)', 'var(--negE)', 'var(--neg)', 'solid'], load: ['var(--raised)', 'var(--line2)', 'var(--mut)', 'solid'], full: ['var(--negT)', 'var(--negE)', 'var(--neg)', 'solid'], lock: ['var(--raised)', 'var(--line2)', 'var(--body)', 'solid'], amb: ['var(--ambF)', 'var(--ambE)', 'var(--ambT)', 'solid'], ok: ['var(--posT)', 'var(--posT)', 'var(--pos)', 'solid'] }[k || 'nr']; return `<span style="display:inline-flex;align-items:center;gap:5px;min-height:20px;padding:0 7px;border-radius:6px;background:${S[0]};border:1px ${S[3]} ${S[1]};color:${S[2]};font-size:11.5px;font-weight:600;white-space:nowrap;box-sizing:border-box;${x || ''}"><span aria-hidden="true" style="display:inline-flex">${g}</span>${w}</span>`; };
+    const NOCAP = ST(ICO.lock, 'No cap set', 'lock');
+    const UNAV = (t) => ST('◌', 'Unavailable' + (t ? ' · ' + t : ''), 'unav');
+    const NREC = (t) => ST('○', t || 'Not recorded yet', 'nr');
+    const UNR = (t) => ST('?', 'Unreadable' + (t ? ' · ' + t : ''), 'unr');
+    const REF = (t) => ST('⊘', 'Refused' + (t ? ' · ' + t : ''), 'ref');
+    const FULL = ST('■', 'Full', 'full');
+    const CODE = (t) => `<span style="${M};font-size:11.5px;padding:1px 6px;border-radius:5px;background:var(--raised);border:1px solid var(--line2);color:var(--ink);white-space:nowrap">${t}</span>`;
+    const EBAD = (s) => `<span aria-hidden="true" style="width:${s || 22}px;height:${s || 22}px;flex:none;border-radius:7px;background:var(--vbtn);color:#fff;display:grid;place-items:center;font-size:${Math.round((s || 22) * 0.5)}px;font-weight:800">E</span>`;
+    const BAR = (p, col, x) => `<span aria-hidden="true" style="display:block;height:6px;border-radius:3px;background:var(--raised);border:1px solid var(--line);overflow:hidden;box-sizing:content-box;${x || ''}"><span style="display:block;height:100%;width:${Math.min(100, p)}%;background:${col}"></span></span>`;
+    /* lease states: word + glyph */
+    const LS = (s) => ({ Waiting: ST('◷', 'Waiting', 'amb'), Running: ST('●', 'Running', 'ok'), Reconciling: ST('↻', 'Reconciling', 'amb'), Released: ST('✓', 'Released', 'lock'), Withdrawn: ST('–', 'Withdrawn', 'nr') })[s];
+    const HEALTH = (h) => ({ Healthy: ST('●', 'Healthy', 'ok'), Degraded: ST('▲', 'Degraded', 'amb'), Down: ST('■', 'Down', 'full'), Unknown: ST('?', 'Unknown', 'nr') })[h];
+
+    /* ---------- sample data: bracketed and invented; every figure agrees on every board ---------- */
+    const READ = '14:02';
+    const DAY = 'Fri 27 Nov 2026';
+    /* provider, provider cap (null = no cap set), holding, waiting, health, regions [name, holding, cap, waiting, reconciling] */
+    const PROV = [
+      ['Cloudflare', 40, 32, 6, 'Healthy', [['eu-west', 12, 20, 0, 0], ['us-east', 20, 20, 2, 1], ['ap-south', 0, null, 4, 0]]],
+      ['Azure', 10, 4, 0, 'Degraded', [['westeurope', 4, 10, 0, 1]]],
+      ['GCP', 10, 2, 0, 'Healthy', [['europe-west1', 2, 10, 0, 0]]],
+      ['AWS', null, 0, 1, 'Unknown', [['us-east-1', 0, null, 1, 0]]],
+      ['Bring your own cloud', null, 0, 0, 'Unknown', []]
+    ];
+    const TOT = { hold: 38, limit: 60, wait: 7, maxWait: 100, rec: 2, reg: '1,000', live: 41, agentsCap: '1,200', liveCap: '50' };
+    /* venture, holding (cap 1), waiting (cap 10), reconciling, oldest wait */
+    const VEN = [['Venture Alder', 1, 3, 0, '13:12'], ['Venture Birch', 1, 2, 1, '13:20'], ['Venture Cedar', 0, 2, 0, '13:35'], ['Venture Dogwood', 1, 0, 1, null]];
+    /* run uid, agent, venture, provider, region, state, since, reason, second line, reserve, basis */
+    const RUNS = [
+      ['r-8a03', 'SEO Agent', 'Venture Alder', 'Cloudflare', 'ap-south', 'Waiting', '13:12', 'No cap set on Cloudflare [ap-south]', '[Venture Alder] runs 1 of 1', '4.00'],
+      ['r-8a07', 'Frontend Builder', 'Venture Birch', 'Cloudflare', 'us-east', 'Waiting', '13:20', 'Cloudflare [us-east] is full · 20 of 20', '[Venture Birch] runs 1 of 1', '6.00'],
+      ['r-8a11', 'Pitch Writer', 'Venture Alder', 'Cloudflare', 'ap-south', 'Waiting', '13:26', 'No cap set on Cloudflare [ap-south]', '[Venture Alder] runs 1 of 1', '2.50'],
+      ['r-8a21', 'Frontend Builder', 'Venture Cedar', 'Cloudflare', 'ap-south', 'Waiting', '13:35', 'No cap set on Cloudflare [ap-south]', '', '4.00'],
+      ['r-8a15', 'Competitor Analyst', 'Venture Birch', 'Cloudflare', 'ap-south', 'Waiting', '13:38', 'No cap set on Cloudflare [ap-south]', '[Venture Birch] runs 1 of 1', '2.50'],
+      ['r-8a19', 'Market Researcher', 'Venture Alder', 'Cloudflare', 'us-east', 'Waiting', '13:44', 'Cloudflare [us-east] is full · 20 of 20', '[Venture Alder] runs 1 of 1', '4.00'],
+      ['r-8a24', 'Data Room Clerk', 'Venture Cedar', 'AWS', 'us-east-1', 'Waiting', '13:51', 'No cap set on AWS', '', '1.50'],
+      ['r-7f88', 'Security Reviewer', 'Venture Birch', 'Cloudflare', 'us-east', 'Reconciling', '13:37', 'Holding until the provider confirms', 'Lease expired · no answer for 25 min', '4.00'],
+      ['r-7f91', 'Finance Assistant', 'Venture Dogwood', 'Azure', 'westeurope', 'Reconciling', '13:37', 'Holding until the provider confirms', 'Cancel not yet confirmed · 25 min', '2.50']
+    ];
+
+    /* ---------- Eadwyn rail (#5130): one shared right rail; proposals are accepted, edited or discarded ---------- */
+    const RAIL = (body, ph) => `<aside aria-label="Eadwyn" style="width:304px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0"><div style="flex:none;display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--line)">${EBAD(24)}<b style="font-size:14.5px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" aria-expanded="true" style="width:32px;height:32px;border-radius:7px;border:none;background:transparent;color:var(--body);cursor:pointer;font-size:15px">→</button></div><div style="flex:1;min-height:0;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:12px">${body}</div><div style="flex:none;display:flex;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)"><div style="flex:1;height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--bg);display:flex;align-items:center;padding:0 11px;font-size:12.5px;color:var(--mut);box-sizing:border-box">${ph || 'Ask about compute…'}</div>${bS('Ask', SM)}</div></aside>`;
+    const RAILC = `<aside aria-label="Eadwyn" style="width:52px;flex:none;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:14px;gap:10px"><button type="button" aria-label="Expand Eadwyn" aria-expanded="false" style="width:36px;height:36px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0">${EBAD(26)}</button></aside>`;
+    const PROP = (eb, title, body, foot) => `<article aria-label="Eadwyn proposal" style="border:1px solid var(--lavE);background:var(--lav);border-radius:12px;padding:13px 14px;display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${EB(eb, 'var(--vdeep)')}${TB('#8832 · read route')}</div><b style="font-size:13.5px;line-height:1.4;color:var(--ink)">${title}</b>${body}<span style="font-size:12px;color:var(--mut);line-height:1.45">${foot}</span><div style="display:flex;gap:6px">${bS('Accept', SM)}${bG('Edit', SM)}${bG('Discard', SM)}</div></article>`;
+    const RAILBODY = PROP('Summary · read ' + READ, 'Why [7] runs are waiting', `<span style="font-size:12.5px;line-height:1.55;color:var(--body)"><span style="${M}">[4]</span> runs wait on Cloudflare [ap-south]: no cap is set there, so nothing is admitted. <span style="${M}">[2]</span> wait on Cloudflare [us-east], which is full at <span style="${M}">20 of 20</span>. <span style="${M}">[1]</span> waits on AWS, which has no cap.</span><span style="font-size:12.5px;line-height:1.55;color:var(--body)"><span style="${M}">[2]</span> runs are reconciling: their provider has not answered for <span style="${M}">[25] min</span>. They keep their slots until it does.</span>`, 'Accept copies this summary. Nothing on the page changes.')
+      + PROP('Draft · note for the owner', 'Propose a cap for Cloudflare [ap-south]', `<span style="font-size:12.5px;line-height:1.55;color:var(--body)">“Four runs from [Venture Alder], [Venture Birch] and [Venture Cedar] have waited up to <span style="${M}">50 min</span> for [ap-south], which has no cap. A cap of <span style="${M}">[10]</span> would keep Cloudflare at its <span style="${M}">40</span> and needs [eu-west] or [us-east] lowered by the same.”</span>`, 'Accept copies the note, or opens it in the caps form ◇ when that exists. Eadwyn never changes a cap or withdraws a run.')
+      + `<span style="font-size:12px;color:var(--mut);line-height:1.5">Eadwyn reads this page. It cannot set a cap, withdraw a run or pause agents.</span>`;
+
+    /* ---------- the Compute view ---------- */
+    const HDRQ = (o) => HDR('Operations', Object.assign({ sub: 'Compute', pill: TO('Q1 · A · new Compute view') }, o || {}));
+    const TOOL = (o) => { o = o || {}; return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;font-size:17px;font-weight:800;letter-spacing:-0.01em">Compute</h2><span style="font-size:12.5px;color:var(--mut)">Containers agent runs hold across providers and regions, now</span>${TB('not served yet')}<span style="margin-left:auto;display:flex;align-items:center;gap:8px">${o.load ? ST('◌', 'Reading…', 'load') : o.unr ? `<span style="font-size:12px;color:var(--mut)">Read <span style="${M}">${READ}</span> · coordinator not answered</span>` : `<span style="font-size:12px;color:var(--mut)">Read <span style="${M};color:var(--ink)">[${READ}]</span></span>`}${bS('Refresh', SM)}${bX('Set provider caps', 'Needs a caps record (backend)', SM)}${TB('caps record')}</span></div>`; };
+    /* the two tiles, never summed, never the same unit */
+    const TILES = (o) => { o = o || {};
+      const reg = o.load ? SK(110, 26) : o.regUnav ? UNAV() : `<span style="${M};font-size:26px;font-weight:600;color:var(--ink);line-height:1.15">[${TOT.reg}]</span>${D}`;
+      const run = o.load ? SK(150, 26) : o.unr ? `<span style="display:flex">${UNR('coordinator')}</span>` : o.nocap ? `<span style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="${M};font-size:26px;font-weight:600;color:var(--ink);line-height:1.15">0</span><span style="font-size:13px;color:var(--body)">running</span>${D}</span>` : o.empty ? `<span style="display:flex;align-items:baseline;gap:8px"><span style="${M};font-size:26px;font-weight:600;color:var(--ink);line-height:1.15">0</span><span style="${M};font-size:14px;color:var(--mut)">of [${TOT.limit}]</span>${D}</span>` : `<span style="display:flex;align-items:baseline;gap:8px"><span style="${M};font-size:26px;font-weight:600;color:var(--ink);line-height:1.15">[${TOT.hold}]</span><span style="${M};font-size:14px;color:var(--mut)">of [${TOT.limit}]</span>${D}</span>`;
+      const runSub = o.load ? SK(220, 12) : o.unr ? 'Couldn’t read the compute coordinator. ' + LNK('Try again') : o.nocap ? `${NOCAP} <span>— nothing is admitted</span>` : o.empty ? 'No run has asked for a container yet' : `<span><span style="${M}">[${TOT.rec}]</span> of them reconciling · the limit is the sum of provider caps</span>`;
+      const live = o.load ? SK(40, 14) : `<span style="${M};color:var(--ink)">[${TOT.live}]</span>${D}`;
+      const wait = o.load ? SK(70, 14) : o.unr ? UNR() : o.empty ? `<span style="${M};color:var(--ink)">0</span> <span style="${M};color:var(--mut)">of 100</span>${D}` : `<span style="${M};color:var(--ink)">[${TOT.wait}]</span> <span style="${M};color:var(--mut)">of 100</span>${D}`;
+      return `<section aria-label="Agents and containers" style="display:flex;flex-direction:column;gap:8px"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:0;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:5px;min-width:0">${EB('Registered agents · now')}<span style="display:flex;align-items:baseline;gap:6px">${reg}</span><span style="font-size:12px;color:var(--mut);line-height:1.4">Agents that exist on the platform. ${o.regUnav ? 'The platform-wide count is not read yet; never shown as 0.' : 'They hold no capacity.'}</span></div>
+        <div style="width:150px;border-left:1px solid var(--line);border-right:1px solid var(--line);background:var(--raised);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 10px;text-align:center"><span aria-hidden="true" style="font-size:16px;color:var(--mut)">≠</span><span style="font-size:11.5px;font-weight:600;color:var(--body);line-height:1.35">Registered agents hold no capacity</span></div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:5px;min-width:0${o.unr ? ';background:var(--negT)' : ''}">${EB('Containers running now')}${run}<span style="font-size:12px;color:var(--mut);line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${runSub}</span></div></div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;padding:0 4px;font-size:12.5px;color:var(--body);align-items:center"><span style="display:flex;align-items:center;gap:6px">Agents with a live run now ${live} <span style="color:var(--mut)">· engine runs, not containers</span></span><span style="display:flex;align-items:center;gap:6px">Waiting for a container ${wait}</span><span style="display:flex;align-items:center;gap:6px;color:var(--mut)">Platform ceilings (Spend › Agent budgets): agents ${o.load ? SK(40, 12) : `<span style="${M};color:var(--ink)">[${TOT.agentsCap}]</span>`} · live at once ${o.load ? SK(30, 12) : `<span style="${M};color:var(--ink)">[${TOT.liveCap}]</span>`}</span></div></section>`; };
+    const PAUSEB = `<div role="status" style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-radius:12px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:13px;line-height:1.45"><span>${ICO.pause}</span><span style="flex:1"><b>AI agents paused</b> by [Iris Chen] at <span style="${M}">[09:10]</span> — “[Model provider incident]”. Nothing new is admitted. ${TO('Q3 · A · one switch')}</span>${LNK('Open Policies')}</div>`;
+    const RUNNINGB = `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--body)">${ST('●', 'Not paused', 'ok')}<span>AI agents are running. The pause on Policies also stops new containers from being admitted.</span>${TO('Q3 · A')}<span style="margin-left:auto">${LNK('Policies')}</span></div>`;
+    /* holding / cap meter */
+    const MTR = (h, cap, o) => { o = o || {};
+      if (o.load) return `<div style="display:flex;flex-direction:column;gap:6px;width:100%">${SK('60%', 12)}${SK('100%', 6)}</div>`;
+      if (o.unr) return UNR();
+      if (cap == null) return `<div style="display:flex;align-items:center;gap:8px">${NOCAP}<span style="font-size:11.5px;color:var(--mut);white-space:nowrap"><span style="${M}">${h}</span> holding · admits nothing</span></div>`;
+      const p = Math.round(h / cap * 100); const full = h >= cap;
+      return `<div role="meter" aria-valuenow="${h}" aria-valuemin="0" aria-valuemax="${cap}" aria-label="${h} of ${cap} holding${full ? ', full' : ''}" style="display:flex;align-items:center;gap:10px;width:100%;min-width:0"><span style="${M};font-size:12.5px;color:var(--ink);white-space:nowrap;width:86px;flex:none">[${h}] <span style="color:var(--mut)">of [${cap}]</span></span>${BAR(p, full ? 'var(--neg)' : 'var(--vio)', 'flex:1;min-width:60px')}${full ? FULL : `<span style="${M};font-size:11.5px;color:var(--mut);width:34px;text-align:right">${p}%</span>`}</div>`; };
+    const PCOLS = '160px 112px minmax(0,1fr) 62px 108px 44px';
+    const PROVT = (o) => { o = o || {}; const rows = [], hl = [];
+      PROV.forEach(([p, cap, h, w, hl8, regs]) => {
+        rows.push([`<span style="display:flex;align-items:center;gap:6px"><span aria-hidden="true" style="color:var(--mut);width:10px">${regs.length ? '▾' : ' '}</span><b style="color:var(--ink)">${p}</b></span>`, `<span style="color:var(--mut);font-size:12px">${regs.length ? 'all regions' : 'no regions'}</span>`, MTR(o.nocap ? 0 : h, o.nocap ? null : cap, o), o.load ? SK(20, 12) : o.unr ? '' : `<span style="${M}">${w}</span>`, o.load ? SK(60, 14) : o.unr ? '' : HEALTH(o.nocap ? 'Unknown' : hl8), o.load ? SK(20, 12) : o.unr ? '' : (o.nocap || cap == null) ? `<span style="color:var(--mut)">—</span>` : `<span style="${M}">${cap - h}</span>`]);
+        regs.forEach(([r, rh, rc, rw]) => rows.push(['', o.load ? SK(80, 12) : `<span style="${M};font-size:12px;color:var(--body);padding-left:4px">[${r}]</span>`, MTR(o.nocap ? 0 : rh, o.nocap ? null : rc, o), o.load ? SK(20, 12) : o.unr ? '' : `<span style="${M}">${rw}</span>`, '', o.load ? SK(20, 12) : o.unr ? '' : (o.nocap || rc == null) ? `<span style="color:var(--mut)">—</span>` : `<span style="${M};${rc - rh === 0 ? 'color:var(--neg);font-weight:700' : ''}">${rc - rh}</span>`]));
+      });
+      return `<section aria-label="Providers" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><h2 style="margin:0;font-size:15px;font-weight:700">Providers</h2><span style="font-size:12px;color:var(--mut)">Holding now against each cap. A provider or region with no cap admits nothing.</span><span style="margin-left:auto">${TB('caps · health')}</span></div>${o.unr ? `<div role="alert" style="display:flex;align-items:center;gap:10px;padding:16px;border:1px dashed var(--negE);border-radius:12px;background:var(--card)">${UNR()}<span style="font-size:13px;color:var(--body);flex:1">Couldn’t read the compute coordinator <span style="${M};font-size:11.5px;color:var(--mut)">admission_unavailable</span>. Nothing here is shown as 0.</span>${bS('Try again', SM)}</div>` : TBL(PCOLS, ['Provider', 'Region', 'Holding / cap · now', 'Waiting', 'Health ◇', 'Free'], rows, { al: 'Providers and regions', num: [3, 5], py: 8 })}</section>`; };
+    const VCOLS = 'minmax(0,1.2fr) 130px 130px 110px 110px 60px';
+    const VENT = (o) => { o = o || {}; const rows = VEN.map(([v, h, w, r, old]) => [`<b style="color:var(--ink)">[${v}]</b>`, `<span style="${M}">${h}</span><span style="${M};color:var(--mut)"> / 1</span>${h >= 1 ? ` <span style="font-size:11px;color:var(--mut)">at cap</span>` : ''}`, `<span style="${M}">${w}</span><span style="${M};color:var(--mut)"> / 10</span>`, r ? `<span style="display:flex;align-items:center;gap:5px"><span aria-hidden="true" style="color:var(--ambT)">↻</span><span style="${M}">${r}</span></span>` : `<span style="${M}">0</span>`, old ? `<span style="${M}">${old}</span>` : `<span style="color:var(--mut)">none waiting</span>`, `<span title="Team run capacity: pending #7078's canvas" style="color:var(--faint);font-size:12px">›</span>`]);
+      return `<section aria-label="Ventures" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><h2 style="margin:0;font-size:15px;font-weight:700">Ventures</h2><span style="font-size:12px;color:var(--mut)">Each venture runs 1 container at a time and queues up to 10. Ventures with runs waiting come first.</span><span style="margin-left:auto">${TB('per-venture read')}</span></div>${o.unr ? `<div role="alert" style="display:flex;align-items:center;gap:10px;padding:14px 16px;border:1px dashed var(--negE);border-radius:12px;background:var(--card)">${UNR()}<span style="font-size:13px;color:var(--body);flex:1">Couldn’t read the compute coordinator.</span>${bS('Try again', SM)}</div>` : TBL(VCOLS, ['Venture', 'Running · now', 'Waiting · now', 'Reconciling', 'Oldest wait', ''], o.load ? VEN.map(() => [SK(130, 14), SK(40, 12), SK(40, 12), SK(20, 12), SK(40, 12), '']) : rows, { al: 'Ventures', py: 8, foot: o.load ? '' : `<span>+ [35] more ventures holding 1 each, none waiting · [38] holding in all</span>${bX('Team run capacity (coming)', 'Pending the #7078 canvas')}${TB('#7078 canvas')}` })}</section>`; };
+    const RCOLS = '66px 150px 124px 100px 44px minmax(0,1fr) 50px';
+    const RUNROWS = (list) => list.map(([u, a, v, p, r, s, t, why, two, res]) => [LNK(`<span style="${M};font-size:12px">[${u}]</span>`), `<span style="display:flex;flex-direction:column;gap:1px;line-height:1.3"><span style="color:var(--ink)">[${a}]</span><span style="font-size:11.5px;color:var(--mut)">[${v}]</span></span>`, `<span style="${M};font-size:11.5px">${p.toLowerCase()}:[${r}]</span>`, LS(s), `<span style="${M};font-size:12px">${t}</span>`, `<span style="display:flex;flex-direction:column;gap:1px;line-height:1.35"><span style="color:var(--ink)">${why.replace('No cap set', ICO.lock.replace('display:block', 'display:inline-block;vertical-align:-2px') + ' No cap set')}</span>${two ? `<span style="font-size:11.5px;color:var(--mut)">${two}</span>` : ''}</span>`, `<span style="${M};font-size:12px">$${res}</span>`]);
+    const RUNT = (o) => { o = o || {}; return `<section aria-label="Waiting and reconciling runs" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><h2 style="margin:0;font-size:15px;font-weight:700">Waiting and reconciling runs</h2><span style="font-size:12px;color:var(--mut)">${o.unr || o.load ? 'Now.' : '[7] waiting · [2] reconciling · now.'} Open a run to see its lease, quote and charge.</span><span style="margin-left:auto">${TB('lease list')}</span></div>${o.unr ? `<div role="alert" style="display:flex;align-items:center;gap:10px;padding:14px 16px;border:1px dashed var(--negE);border-radius:12px;background:var(--card)">${UNR()}<span style="font-size:13px;color:var(--body);flex:1">Couldn’t read the compute coordinator. No run is listed, and none is assumed finished.</span>${bS('Try again', SM)}</div>` : TBL(RCOLS, ['Run', 'Agent · venture', 'Provider:region', 'State', 'Since', 'Why, in words', 'Reserve'], o.load ? [0, 1, 2, 3].map(() => [SK(50, 12), SK(110, 12), SK(90, 12), SK(70, 18), SK(34, 12), SK('80%', 12), SK(36, 12)]) : RUNROWS(o.rows || RUNS), { al: 'Waiting and reconciling runs', num: [6], py: 8, hl: o.hl || [], foot: o.load ? '' : 'Reserve: the most this run can be charged, per run, upper bound' })}</section>`; };
+    const METR = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px dashed var(--line2);background:transparent;color:var(--mut);font-size:12.5px">${EB('Last 7 days')}<span>Queue wait · Start p50/p95 · Errors · Cost per success</span><span style="margin-left:auto">${NREC()}</span>${TB('#5570 metrics')}</div>`;
+
+    const SA32B = (o) => { o = o || {}; return HDRQ() + BODY(TOOL(o) + TILES(o) + (o.paused ? PAUSEB : o.load ? SK('100%', 38, 'border-radius:10px') : RUNNINGB) + `<div style="display:flex;flex-direction:column;gap:14px;${o.paused ? 'opacity:.62' : ''}">` + PROVT(o) + VENT(o) + RUNT(o) + `</div>` + METR) + '|SIDE|' + (o.norail ? RAILC : RAIL(RAILBODY)); };
+
+    /* ---------- SA33 · run lease panel ---------- */
+    const KV = (k, v) => `<div style="display:grid;grid-template-columns:128px minmax(0,1fr);gap:10px;align-items:center;min-height:26px"><span style="font-size:12px;color:var(--mut)">${k}</span><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;color:var(--ink)">${v}</span></div>`;
+    const QL = [['Compute', '1.10'], ['Boot', '0.08'], ['Storage', '0.12'], ['Image pull', '0.14'], ['Egress', '0.00'], ['Idle', '0.18']];
+    const QUOTE = (known) => `<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden">${QL.map(([k, v], i) => `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;${i ? 'border-top:1px solid var(--line);' : ''}font-size:12.5px"><span style="flex:1;color:var(--body)">${k}${known && k === 'Egress' ? ' <span style="color:var(--mut);font-size:11.5px">· no network, a known zero</span>' : ''}</span>${known ? `<span style="${M};color:var(--ink)">$${v}</span>` : UNAV()}</div>`).join('')}<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--line2);background:var(--raised);font-size:12.5px"><b style="flex:1;color:var(--ink)">Total · per run, upper bound</b>${known ? `<b style="${M};color:var(--ink)">$1.62</b>` : UNAV('a line is unavailable')}</div></div>`;
+    const LEASE = (o) => { o = o || {}; const w = o.waiting;
+      const head = `<div style="display:flex;flex-direction:column;gap:2px">${KV('Run', `${LNK(`<span style="${M}">[${w ? 'r-8a21' : 'r-7e40'}]</span>`)} ${LNK('Open run ›', 'font-size:12.5px')}`)}${KV('Agent', `[${w ? 'Frontend Builder' : 'Market Researcher'}]`)}${KV('Venture', `[${w ? 'Venture Cedar' : 'Venture Dogwood'}]`)}${KV('Provider · region', `${w ? 'Cloudflare' : 'GCP'} · <span style="${M}">[${w ? 'ap-south' : 'europe-west1'}]</span>`)}${KV('State', LS(w ? 'Waiting' : 'Released') + D)}${KV('Generation', `<span style="${M}">${w ? 0 : 1}</span>${D}`)}${KV('Queued at', `<span style="${M}">${DAY.slice(4)}, ${w ? '13:35' : '12:58'}</span>${D}`)}${KV('Admitted at', w ? `<span style="color:var(--mut);font-style:italic">Not admitted yet</span>` : `<span style="${M}">27 Nov 2026, 12:58</span>${D}`)}${KV(w ? 'Lease ends at' : 'Released at', w ? `<span style="color:var(--mut);font-style:italic">No lease while waiting</span>` : `<span style="${M}">27 Nov 2026, 13:31</span>${D}`)}</div>`;
+      if (o.load) return `<div style="display:flex;flex-direction:column;gap:10px">${KV('Run', `${LNK(`<span style="${M}">[r-8a21]</span>`)} ${LNK('Open run ›', 'font-size:12.5px')}`)}${[1, 2, 3, 4, 5, 6].map(() => SK('100%', 16)).join('')}${EB('Quote')}${[1, 2, 3, 4].map(() => SK('100%', 22)).join('')}${EB('Charged')}${SK('60%', 18)}</div>`;
+      if (o.unr) return `<div style="display:flex;flex-direction:column;gap:12px">${KV('Run', `${LNK(`<span style="${M}">[r-8a21]</span>`)} ${LNK('Open run ›', 'font-size:12.5px')}`)}<span style="font-size:12px;color:var(--mut)">The run is read from D1 and still opens.</span><div role="alert" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border:1px dashed var(--negE);border-radius:10px;background:var(--negT)">${UNR('lease')}<span style="font-size:13px;color:var(--body);line-height:1.5">Couldn’t read this run’s lease. The lease, the quote and the charge are not shown, and none is shown as 0. <span style="${M};font-size:11.5px;color:var(--mut)">admission_unavailable</span></span><span>${bS('Try again', SM)}</span></div></div>`;
+      if (o.nf) return `<div style="display:flex;flex-direction:column;gap:12px">${KV('Run', `<span style="${M}">[r-6c30]</span>`)}<div role="status" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border:1px dashed var(--line2);border-radius:10px">${ST('∅', 'No lease', 'nr')}<span style="font-size:13px;color:var(--body);line-height:1.5">This run has no container lease. It never asked for a container, or its lease was released and cleared.</span><span>${bS('Open run', SM)}</span></div></div>`;
+      if (o.ref) return `<div role="alert" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border:1px solid var(--negE);border-radius:10px;background:var(--negT)">${REF()}<span style="font-size:13px;color:var(--body);line-height:1.5">Only HQ Super Admins can see compute capacity. Ask a Super Admin.</span></div>`;
+      const why = w ? `<section style="display:flex;flex-direction:column;gap:6px">${EB('Why it waits')}<span style="font-size:13px;line-height:1.55;color:var(--ink)">${ICO.lock.replace('display:block', 'display:inline-block;vertical-align:-2px')} No cap set on Cloudflare [ap-south], so nothing is admitted there. [Venture Cedar] runs nothing else now. ${D}</span></section>` : `<section style="display:flex;flex-direction:column;gap:6px">${EB('Why it waited')}<span style="font-size:13px;line-height:1.55;color:var(--body)">It did not wait: admitted the minute it was queued. ${D}</span></section>`;
+      const q = `<section style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px">${EB('Quote · per run, upper bound')}${TB(w ? 'rate card' : 'needs a rate card')}</div>${QUOTE(!w)}${KV('Upper bound', `<span style="${M}">[$4.00]</span> <span style="font-size:12px;color:var(--mut)">the spec’s ceiling</span>`)}${KV('Reserve', `<span style="${M}">[$${w ? '4.00' : '1.62'}]</span>${D}`)}${KV('Reserve basis', w ? `${ST('◌', 'Spec ceiling (quote unavailable)', 'unav')}${TB('store basis')}` : `<span>From the quote</span>${TB('store basis')}`)}</section>`;
+      const ch = `<section style="display:flex;flex-direction:column;gap:6px">${EB('Charged')}${w ? `<span style="font-size:13px;color:var(--mut);font-style:italic">Not settled: nothing has run.</span>` : `<span style="display:flex;align-items:center;gap:8px"><b style="${M};font-size:16px;color:var(--ink)">[$1.37]</b>${ST('✓', 'Measured', 'ok')}${D}</span><span style="font-size:12px;color:var(--mut)">Settled at 13:31. When metrics are missing the reserve is charged and says “Reserve charged — not measured”, never 0.</span>`}</section>`;
+      return head + why + q + ch; };
+    const PANEL = (o) => { o = o || {}; const w = o.waiting; return SHEET(o.title || (o.nf ? 'Run [r-6c30]' : w || o.load || o.unr ? 'Run [r-8a21]' : 'Run [r-7e40]'), o.sub || 'Container lease, quote and charge · read ' + READ, LEASE(o), (w && !o.load && !o.unr) ? `<span style="margin-right:auto;font-size:12px;color:var(--mut)">Shown only while the run waits</span>${bX('Withdraw this run', 'Needs a route (backend)', SM)}${TB('route')}` : '', o.w || 460); };
+
+    /* ---------- SA34 · empty states ---------- */
+    const EMPTYBOX = (title, txt, act) => `<section role="status" style="display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:26px 28px;background:var(--card);border:1px dashed var(--line2);border-radius:12px"><h2 style="margin:0;font-size:17px;font-weight:800">${title}</h2><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body);max-width:640px">${txt}</p><div style="display:flex;align-items:center;gap:8px">${act}</div></section>`;
+    const SA34A = () => HDRQ() + BODY(TOOL() + TILES({ nocap: 1 }) + EMPTYBOX('No provider has a cap yet', `No provider has a cap yet, so no container is admitted. <span style="${M}">[7]</span> runs are waiting. ${D}`, bX('Set provider caps', 'Needs a caps record (backend)') + TB('caps record · D5586-p3 §5')) + PROVT({ nocap: 1 }) + `<span style="font-size:12px;color:var(--mut)">This is main today: <span style="${M}">COORDINATOR_LIMITS</span> gives no provider a cap, so every lease waits (bounded at 10 per venture, 100 in all) and none is admitted.</span>`) + '|SIDE|' + RAILC;
+    const SA34Bb = () => HDRQ() + BODY(TOOL() + TILES({ empty: 1 }) + EMPTYBOX('No agent run has asked for a container yet', 'No agent run has asked for a container yet. Runs appear here when an agent starts work that needs one.', bS('Open the run log')) + `<span style="font-size:12px;color:var(--mut)">Nothing on this screen fills it: a run asking for a container does. The registered-agents tile keeps its count.</span>`) + '|SIDE|' + RAILC;
+
+    /* ---------- SA35 · states ---------- */
+    const REFV = () => HDR('Operations', { sub: 'Compute' }) + BODY(`<section role="alert" style="max-width:640px;align-items:flex-start;background:var(--card);border:1px solid var(--negE);border-radius:12px;padding:22px 24px;display:flex;flex-direction:column;gap:10px">${REF()}<h2 style="margin:0;font-size:17px;font-weight:800">You can’t see compute capacity</h2><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Only HQ Super Admins can see compute capacity. Ask a Super Admin.</p><span style="font-size:12px;color:var(--mut)">No figure is shown. ${TB('route answers 403')}</span></section>`);
+    const NRV = () => HDRQ() + BODY(TOOL() + TILES({ regUnav: 1 }) + `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start">` + CARD('A quote with no rate card', QUOTE(false) + KV('Reserve basis', ST('◌', 'Spec ceiling (quote unavailable)', 'unav')), { meta: 'per run, upper bound' }) + CARD('Not recorded, not zero', `<div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--body)">${[['A measured zero', `<span style="${M};color:var(--ink)">0</span> running`], ['Unavailable · nobody can say', UNAV()], ['Not recorded yet · no recorder', NREC()], ['Unreadable · the read failed', UNR()], ['No cap set · admits nothing', NOCAP]].map(([k, v]) => `<div style="display:flex;align-items:center;gap:10px;min-height:28px"><span style="flex:1">${k}</span>${v}</div>`).join('')}</div>`) + `</div>` + METR) + '|SIDE|' + RAILC;
+    const FULLROW = () => `<div style="padding:28px;background:var(--bg);height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">${EB('At the cap · a provider:region row')}` + TBL(PCOLS, ['Provider', 'Region', 'Holding / cap · now', 'Waiting', 'Health ◇', 'Free'], [[`<b style="color:var(--ink)">Cloudflare</b>`, `<span style="${M};font-size:12px">[us-east]</span>`, MTR(20, 20), `<span style="${M}">2</span>`, HEALTH('Healthy'), `<span style="${M};color:var(--neg);font-weight:700">0</span>`], ['', `<span style="${M};font-size:12px">[ap-south]</span>`, MTR(0, null), `<span style="${M}">4</span>`, '', `<span style="color:var(--mut)">—</span>`]], { al: 'Full row', num: [3, 5], py: 9 }) + `<span style="font-size:12px;color:var(--mut)">■ Full is a word and a glyph, not only red. No cap set carries the lock and says it admits nothing.</span></div>`;
+    const PSTATES = () => `<div style="display:flex;gap:20px;justify-content:center;align-items:stretch;padding:28px;height:100%;box-sizing:border-box;background:var(--bg)">${[['Loading', { load: 1 }], ['Unreadable', { unr: 1 }], ['Not found', { nf: 1 }], ['Refused', { ref: 1, title: 'Run', sub: 'Container lease' }]].map(([l, o]) => `<div style="display:flex;flex-direction:column;gap:8px">${EB(l)}<div style="flex:1;display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden">${PANEL(Object.assign({ w: 318 }, o))}</div></div>`).join('')}</div>`;
+
+    /* ---------- SA36 · phone 390 ---------- */
+    const PHTOP = (t, back) => `<div style="height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;background:var(--card);border-bottom:1px solid var(--line)"><button type="button" aria-label="${back ? 'Back' : 'Menu'}" style="width:44px;height:44px;border:none;background:transparent;color:var(--ink);font-size:18px;cursor:pointer">${back ? '‹' : '☰'}</button><span style="flex:1;font-size:16px;font-weight:800;letter-spacing:-0.02em">${t}</span>${PILL('HQ', 'hq')}<button type="button" aria-label="Ask Eadwyn" style="width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0">${EBAD(24)}</button></div>`;
+    const PT = (e, v, sub) => `<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:3px">${EB(e)}<span style="display:flex;align-items:baseline;gap:6px">${v}</span><span style="font-size:11.5px;color:var(--mut)">${sub}</span></div>`;
+    const PH36 = () => `<div style="display:flex;flex-direction:column;height:1600px;background:var(--bg)">${PHTOP('Compute')}<div style="flex:1;overflow:hidden;padding:12px 14px;display:grid;align-content:start;gap:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--mut)">Read <span style="${M};color:var(--ink)">[${READ}]</span></span>${TB('not served yet')}<span style="margin-left:auto">${bS('Refresh', 'min-height:44px')}</span></div>${PT('Registered agents · now', `<span style="${M};font-size:22px;font-weight:600">[${TOT.reg}]</span>${D}`, 'Agents that exist. They hold no capacity.')}<div style="display:flex;align-items:center;gap:8px;padding:0 4px;font-size:12px;font-weight:600;color:var(--body)"><span aria-hidden="true" style="color:var(--mut)">≠</span>Registered agents hold no capacity</div>${PT('Containers running now', `<span style="${M};font-size:22px;font-weight:600">[${TOT.hold}]</span><span style="${M};color:var(--mut)">of [${TOT.limit}]</span>${D}`, `[${TOT.rec}] reconciling · live runs [${TOT.live}] · waiting [${TOT.wait}] of 100`)}${RUNNINGB.replace('padding:8px 14px', 'padding:8px 10px;flex-wrap:wrap')}${EB('Providers')}${PROV.slice(0, 2).map(([p, cap, h, w, hl8, regs]) => `<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:14px">${p}</b>${HEALTH(hl8)}<span style="margin-left:auto;${M};font-size:12px">[${h}] of [${cap}]</span></div>${regs.map(([r, rh, rc, rw]) => `<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:6px;font-size:12px"><span style="${M}">[${r}]</span><span style="margin-left:auto;color:var(--mut)">${rw} waiting</span></span>${MTR(rh, rc)}</div>`).join('')}</div>`).join('')}<a href="#" style="display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--vio);font-size:13px;font-weight:600;text-decoration:none;box-sizing:border-box"><span>3 more providers · GCP, AWS, Bring your own cloud</span><span aria-hidden="true">›</span></a>${EB('Ventures')}${VEN.slice(0, 2).map(([v, h, w, r, old]) => `<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:12.5px"><b style="color:var(--ink)">[${v}]</b><span style="${M};color:var(--mut)">oldest ${old}</span><span>Running <span style="${M}">${h} / 1</span> · Waiting <span style="${M}">${w} / 10</span></span><span>${r ? `↻ <span style="${M}">${r}</span>` : ''}</span></div>`).join('')}${EB('Waiting and reconciling runs')}${RUNS.slice(3, 5).concat(RUNS.slice(7, 8)).map(([u, a, v, p, r, s, t, why]) => `<a href="#" style="display:flex;flex-direction:column;gap:5px;min-height:44px;padding:10px 13px;border-radius:12px;background:var(--card);border:1px solid var(--line);text-decoration:none;color:var(--body);box-sizing:border-box"><span style="display:flex;align-items:center;gap:8px"><span style="${M};font-size:12px;color:var(--vio);font-weight:600">[${u}]</span>${LS(s)}<span style="margin-left:auto;${M};font-size:12px">${t} ›</span></span><span style="font-size:13px;color:var(--ink)">[${a}] · [${v}]</span><span style="font-size:12px;color:var(--mut)">${p.toLowerCase()}:[${r}] · ${why}</span></a>`).join('')}<a href="#" style="display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--vio);font-size:13px;font-weight:600;text-decoration:none;box-sizing:border-box"><span>All 9 waiting and reconciling</span><span aria-hidden="true">›</span></a>${METR.replace('padding:10px 14px', 'padding:10px 12px;flex-wrap:wrap')}</div></div>`;
+    const PH36B = () => `<div style="display:flex;flex-direction:column;height:1180px;background:var(--card)">${PHTOP('Run [r-8a21]', 1)}<div style="flex:1;overflow:hidden;padding:14px 16px;display:grid;align-content:start;gap:14px">${LEASE({ waiting: 1 }).replace(/grid-template-columns:128px/g, 'grid-template-columns:112px')}</div><div style="flex:none;display:flex;flex-direction:column;gap:6px;padding:12px 16px 18px;border-top:1px solid var(--line)">${bX('Withdraw this run', 'Needs a route (backend)', 'min-height:44px;width:100%')}<span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut)">Shown only while the run waits ${TB('route')}</span></div></div>`;
+
+    /* ---------- handoff ---------- */
+    const HROW = (t, items) => `<section style="display:flex;flex-direction:column;gap:8px"><h2 style="margin:0;font-size:15px;font-weight:800">${t}</h2><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px">${items.map(i => `<li style="font-size:13px;line-height:1.5;color:var(--body)">${i}</li>`).join('')}</ul></section>`;
+    const C = (t) => `<span style="${M};font-size:12px">${t}</span>`;
+    const HAND = () => `<div style="padding:32px 36px;display:flex;flex-direction:column;gap:20px;background:var(--bg)"><div style="display:flex;flex-direction:column;gap:6px">${EB('SAQ-H · handoff · #8832 for #5570 · continues HQ AI Agents (D4137), boards SA32–SA37')}<h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Compute capacity · what is on main, what is not</h1><p style="margin:0;font-size:13px;color:var(--mut)">Checked on main ${C('d26a93a252')}, ${DAY}. Decision file: ${C('D4137-p6.md')}, beside D4137 (SA25–SA31 are #8823’s, ${C('D4137-p5.md')}; if that lands later or not at all, these ids stay and the landing takes the next free part). <b>No route serves any admission field today:</b> every ◇ value exists in code or storage only.</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 28px">${CARD('', HROW('Checked on main · real', [
+      `${C('durable-objects/workspace-admission.ts')}: the ${C('WorkspaceAdmission')} object, bound as ${C('WORKSPACE_ADMISSION')} in ${C('wrangler.toml')}; ${C('COORDINATOR_LIMITS')} = halted false, 1 running and 10 waiting per venture, 100 waiting, ${C('per_provider_running')} and ${C('per_region_running')} empty, so no lease is admitted (SA34a). Its ${C('/op')} answers only request, settle, withdraw and the swarm ops: there is no ${C('planning')} op.`,
+      `${C('services/agents/workspaceAdmission.ts')}: slot fields (${C('run_uid, tenant_id, agent_id, provider, region, state, generation, enqueued_at, admitted_at, lease_expires_at, compute_reserve_microusd, cancel_requested, settlement')}); ${C('planning()')} returns registered (or ${C('unavailable')}), simultaneous executions, limit, waiting and ${C('by_region')}. Missing metrics charge the reserve with ${C('measured: false')}.`,
+      `${C('services/agents/workspacePlacement.ts')}: six cost lines, ${C('unavailable')} without a rate card; deny network = egress 0; ${C('reserve_basis')} quote or ${C('spec_ceiling')}; reasons ${C('consent … over_budget')}. Pure: no store, no route.`,
+      `${C('workspaceAdmissionStore.ts')}: one key ${C('workspace-admission-v1')} in DO storage.`,
+      `Correction to the brief: since #8686 (D5585-p13) ${C('workGraphReleaseAdmin.ts')} calls the client’s ${C('swarmSnapshotFor')} for one venture’s render admissions. No compute-lease field is read by any route.`,
+      `D1: ${C('team_agents')} (not removed); ${C('agent_task_runs')} admitted/running; ${C('ai_agent_policy.paused*')}, ${C('workspace_agents_cap')}, ${C('workspace_live_agents_cap')} (D8071); ${C('swarm_admission_events')} with ${C('charged_microusd, measured, outcome, code')} (${C('no_capacity, venture_capacity, budget_exhausted')} …).`,
+      `Routes: ${C('GET /api/admin/ai-agents/policy')} (paused, client ${C('adminAiAgentsApi.policy()')}); ${C('GET …/policy/budgets')} (platform ceilings; agents list ${C('LIMIT 500')}; no client method); ${C('GET /api/admin/ai-agents/runs/:uid')} (client ${C('run(uid)')}, SA7).`,
+      `Frontend: ${C('App.jsx')} has ${C('/hq/ai-agents/operations')}, ${C('/spend')}, ${C('/policies')}, ${C('/audit')}; no ${C('/compute')}.`]), { pad: '16px 18px' })}${CARD('', HROW('Backend required · ◇ #8832 / #5570', [
+      `An authenticated Super Admin read route over the coordinator: ${C('planning()')} plus per-provider, per-venture and reconciling counts and the lease list (SA32, SA33). It needs a new coordinator op.`,
+      `A stored record of provider and region caps and the admission halt (D5586-p3 §5), and the write route to set caps (SA32 “Set provider caps”, SA34a).`,
+      `A stored rate card per provider (SA33 quote lines); store ${C('reserve_basis')} on the slot.`,
+      `Store compute-lease refusals with their reason (${C('admission_halted, admission_queue_full, tenant_queue_full')}, placement reasons).`,
+      `Provider health (Healthy · Degraded · Down · Unknown); a platform-wide count of registered and live agents (the budgets read lists 500).`,
+      `#5570 metrics: queue wait, start p50/p95, errors, cost per success, 7 days, and alert thresholds (SA32 muted row).`,
+      `A route for ${C('admission.withdraw')} (SA33 “Withdraw this run”); client methods for all of these and for ${C('GET …/policy/budgets')}.`]), { pad: '16px 18px' })}${CARD('', HROW('Owner questions · ⚑ drawn as A', [
+      'Q1 Where it lives: <b>A) a new Compute view at /hq/ai-agents/operations/compute</b> beside Runs, Spend, Policies and Audit · B) a section under Runs · C) HQ › Platform (D4559).',
+      'Q2 A venture sees its own containers: <b>A) not now; HQ only</b>, the team sees run capacity on #7078’s card · B) one line on that card.',
+      `Q3 Compute admission halt: <b>A) the AI agents pause also halts compute admission, one switch</b> (today ${C('COORDINATOR_LIMITS.halted')} is a constant, not tied to the pause ◇) · B) a separate halt here.`]), { pad: '16px 18px' })}${CARD('', HROW('Acceptance mapped to boards', [
+      'Owner-approved canvas landed in design/incoming/ → this canvas, SA32–SA37 and SAQ-H, with ' + C('D4137-p6.md') + '.',
+      'Every number maps to a recorded field or says Not recorded → SA32 (each value carries ◇ and its field above), SA33 (lease and settlement fields), SA35 Not recorded and Unreadable, SA34a (no caps today).',
+      'Per-tenant / provider / region concurrency → SA32 Providers and Ventures; waiting tasks → SA32 runs table; quoted vs measured cost → SA33 and SA33B; refusals with reasons → SA32 “Why, in words”, SA33.',
+      '1,000 registered agents distinct from 1,000 containers → the two tiles, never summed, “Registered agents hold no capacity” (SA32, SA36).']), { pad: '16px 18px' })}${CARD('', HROW('Frontend only', ['The Compute sub-tab and route; tiles, tables, meters and state words (■ Full, No cap set with a lock, ◌ Unavailable, ○ Not recorded yet, ? Unreadable, ⊘ Refused, ↻ Reconciling).', 'Paused banner reads the existing policy; tables dim but stay readable (SA35E).', 'Eadwyn (#5130) summarises and drafts a note: accept, edit, discard; it changes nothing.', 'Phone 390 with 44 px targets: cards, no table wider than the screen; the lease opens as a full-height sheet.']), { pad: '16px 18px' })}${CARD('', HROW('Handoffs', ['A run row → SA7 run detail (the lease is keyed by the engine’s run uid, so the uid travels).', 'A venture row → that team’s Agents engine card for its run capacity: <b>#7078</b>, pending its canvas; drawn as a disabled ◇ “Team run capacity (coming)”. This view draws no fixed/elastic or sub-agent control.', 'The agents caps → Spend › Agent budgets (SA15).', 'The pause banner → Policies (the kill switch).', 'Sibling #8823 (SA25–SA31, workflow run timeline): the same eight agents; run uids follow SA7.']), { pad: '16px 18px' })}</div><div style="display:flex;flex-direction:column;gap:6px">${EB('Accessibility')}<span style="font-size:13px;line-height:1.55;color:var(--body)">Each holding / cap is ${C('role="meter"')} named “holding of cap, full”. Every state has a word and a glyph; colour never carries it alone. The lease panel is a dialog: focus moves to its title and back to the row on close. Unreadable areas are announced as alerts; Refresh results politely. Phone targets are 44 px.</span></div></div>`;
+
+    /* ---------- frames ---------- */
+    const split = (h) => { const i = h.indexOf('|SIDE|'); return i < 0 ? [h, ''] : [h.slice(0, i), h.slice(i + 6)]; };
+    const PAGE = (h, o) => { o = o || {}; const [m, s] = split(h); return SHELL(m, Object.assign({}, o, { side: s })); };
+    const OVER = (h, panel, H) => `<div style="position:relative;height:${H}px;overflow:hidden">${PAGE(h, { h: H })}<div aria-hidden="true" style="position:absolute;inset:0;z-index:5;background:rgba(17,24,39,.32)"></div><div style="position:absolute;top:0;right:0;bottom:0;z-index:6;display:flex">${panel}</div></div>`;
+    let fr;
+    if (B === 'SA32') fr = { w: 1440, h: 2170, html: PAGE(SA32B(), { h: 2170 }) };
+    else if (B === 'SA33') fr = { w: 1440, h: 1180, html: OVER(SA32B(), PANEL({ waiting: 1 }), 1180) };
+    else if (B === 'SA33B') fr = { w: 1440, h: 1180, html: OVER(SA32B(), PANEL({}), 1180) };
+    else if (B === 'SA34') fr = { w: 1440, h: 1240, html: PAGE(SA34A(), { h: 1240 }) };
+    else if (B === 'SA34B') fr = { w: 1440, h: 760, html: PAGE(SA34Bb(), { h: 760 }) };
+    else if (B === 'SA35') fr = { w: 1440, h: 1300, html: PAGE(SA32B({ load: 1, norail: 1 }), { h: 1300 }) };
+    else if (B === 'SA35B') fr = { w: 1440, h: 1000, html: PAGE(NRV(), { h: 1000 }) };
+    else if (B === 'SA35C') fr = { w: 1440, h: 1000, html: PAGE(SA32B({ unr: 1, norail: 1 }), { h: 1000 }) };
+    else if (B === 'SA35D') fr = { w: 1440, h: 560, html: PAGE(REFV() + '|SIDE|' + RAILC, { h: 560 }) };
+    else if (B === 'SA35E') fr = { w: 1440, h: 2170, html: PAGE(SA32B({ paused: 1, norail: 1 }), { h: 2170 }) };
+    else if (B === 'SA35F') fr = { w: 1440, h: 300, html: FULLROW() };
+    else if (B === 'SA35G') fr = { w: 1440, h: 640, html: PSTATES() };
+    else if (B === 'SA36') fr = { w: 390, h: 1600, html: PH36() };
+    else if (B === 'SA36B') fr = { w: 390, h: 1180, html: PH36B() };
+    else if (B === 'SA37') fr = { w: 1440, h: 2170, html: PAGE(SA32B(), { h: 2170 }) };
+    else if (B === 'SA37B') fr = { w: 390, h: 1600, html: PH36() };
+    else if (B === 'SAQH') fr = { w: 1200, h: 0, html: HAND() };
+    else fr = { w: 1440, h: 2170, html: PAGE(SA32B(), { h: 2170 }) };
+    const html = `<div style="${VARS};width:${fr.w}px;${fr.h ? 'height:' + fr.h + 'px;' : ''}box-sizing:border-box;overflow:hidden;position:relative;background:var(--bg);color:var(--ink);${SG};font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">${fr.html}</div>`;
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

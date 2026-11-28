@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ AI Agents Workflow Run Timeline · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ › AI agents › Operations › Runs › Workflow run · #8823 · addendum to HQ AI Agents (D4137), boards SA25 to SA31</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ AI agents workflow run timeline — one Startup Assessment run, its four assessments in dependency order, and a final brief that never reads as complete when one is missing</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The timeline is its own page under Operations › Runs, for Super Admins only (owner pick Q1 A; Q2 A). It reads one run of the HQ reference workflow: the run header and frozen budget, the four nodes by level with state, attempts, the model used, each attempt’s own charged cost, failure codes in plain words, outputs and evidence, then the final brief with its notice, the “n of 4 included” line and a Complete, Partial or Missing mark per section. Node, run and per-version cost totals read Not recorded until #4536. It continues the landed HQ AI Agents canvas (SA0 to SA24) with the same shell, tabs, tables, pills, sheet and tokens. States follow Platform States (D5129): Not recorded, Unavailable and Refused never look like zero, and every node, run, section and source state is a word and a glyph. Cancelling and deciding the brief go through a confirmation; Eadwyn only proposes (accept, edit, discard). Violet dashed ◇ tags mark what #4535, #4536 and #8823 must add (no route reads a workflow run on main today); amber ⚑ tags mark owner picks.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main d26a93a252 · the venture ([Northwind Kelp]), people ([R. Okafor], [Iris Chen], [Noah Brandt]), agents, evidence, run and attempt ids, times and figures ($0.41, $0.58, $0.47) are bracketed and fictional; node titles and skill slugs are the reference workflow’s own</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ AI Agents Workflow Run Timeline Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SA25', 'Workflow run timeline · desktop 1440', 'Mid-way sample: Market research Succeeded (1 of 2), Financial analysis Failed after 2 of 2 (read_unavailable), Legal and compliance review Waiting for a decision, Product assessment Running. Run header with the frozen budget line, the level graph with the Final brief card (not assembled, waits on 2), and the list reading of the same nodes. Primary Cancel run (◇); secondary Open in run log. Then the cancel confirmation, and Eadwyn open on the failed node.', [F('SA25', false, 1500), F('SA25B', 'Cancel run · confirm', 900), F('SA25C', 'Eadwyn open · proposal on the failed node', 1480)]],
+      ['SA26', 'Node detail panel · desktop 1440', 'A right-hand panel over SA25: the node’s plan, each attempt (status, times, model used, charged cost or Not recorded, failure in plain words with the code, Open attempt to SA7 with Provenance), then the output. Failed Financial analysis with two attempts; succeeded Market research whose findings went to Product assessment.', [F('SA26', 'Financial analysis · failed twice', 1120), F('SA26B', 'Market research · succeeded', 1120)]],
+      ['SA27', 'Final brief · partial · desktop 1440', 'The notice verbatim, “3 of 4 assessments included · Financial analysis failed”, nine sections with Complete, Partial or Missing and their sources (Included sources show the executed version and attempt; others show “pinned v1”). Accept, Edit, Discard (◇ Q4). Eadwyn proposes a summary of what is missing. Then the Accept confirmation (Q3 A) and the page before assembly.', [F('SA27', false, 1840), F('SA27B', 'Accept with 1 missing · confirm', 900), F('SA27C', 'Before assembly · no decision actions', 760)]],
+      ['SA28', 'No workflow runs yet · empty state', 'The SA7 run log with the Workflow runs chip (◇) on and no rows; activation waits on #4667, #4533 and #4536. One action: See the Startup Assessment workflow (◇, read-only). No Start button.', [F('SA28', false, 640)]],
+      ['SA29', 'States · desktop 1440', 'Loading; running (with the free-slot wording, which this workflow cannot reach); failed node with the run continuing; failed node stopping the run; cancel requested then cancelled (a late result is not counted); paused: plan changed; Not recorded against a measured zero and Unavailable; the run unreadable; one attempt unreadable; refused; brief decision saving, refused (not_manager), not saved, and a cancel not saved; brief not assembled yet.', [F('SA29', 'Loading', 760), F('SA29B', 'Running', 860), F('SA29C', 'Failed node · run continues', 780), F('SA29D', 'Failed node · run stopped', 780), F('SA29E', 'Cancel requested · then Cancelled', 1580), F('SA29F', 'Paused: plan changed', 340), F('SA29G', 'Not recorded · zero · Unavailable', 490), F('SA29H', 'Run unreadable · Try again', 560), F('SA29I', 'One attempt unreadable', 1000), F('SA29J', 'Refused · Super Admins only', 520), F('SA29K', 'Brief decision · saving, refused, not saved', 440), F('SA29L', 'Brief not assembled yet', 470)]],
+      ['SA30', 'Phone 390', 'Run header and budget, the nodes grouped “Starts first” and “After Market research”, then the Final brief card. A node opens as a full-screen sheet with stacked attempt cards; the brief opens as a full-screen sheet with Accept, Edit and Discard pinned at the bottom; Eadwyn opens as a bottom sheet. 44 px targets.', [P('SA30', 'Timeline'), P('SA30B', 'Node sheet · Financial analysis'), P('SA30C', 'Final brief sheet'), P('SA30D', 'Eadwyn bottom sheet')]],
+      ['SA31', 'Dark · desktop 1440', 'SA25 and SA27 on the dark tokens; every state keeps its word and glyph.', [F('SA31', 'Timeline · dark', 1500), F('SA31B', 'Final brief · dark', 1840)]],
+      ['SAW-H', 'Handoff', 'What was checked on main, every figure and its source field, what #4535, #4536 and #8823 must add (◇), the owner picks Q1 to Q4 and a new open Q5 (⚑), acceptance mapped to boards, handoffs to SA7 and the sibling #8832, and the decision file D4137-p5.md.', [W('SAWH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
