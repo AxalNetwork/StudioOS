@@ -25,6 +25,11 @@
  * Investment stage and Source use. A fund whose list was withdrawn is refused
  * with 410 `source_withdrawn`, never as `not_in_directory`.
  *
+ * D7748 (#7748): each fund member's `values` gains Geography and Cheque cells
+ * beside Manager and Stage, from one `readFundStatements` read for the whole
+ * comparison: the wording as text, its qualifier, every statement with its
+ * source. `ATTRIBUTES.fund` is unchanged.
+ *
  * AN ARCHIVED PROJECT IS READ-ONLY (409 `project_archived`), as in part 1.
  * Every write leaves an audit receipt. All SQL is bound; a list of uids is one
  * bound JSON array read through `json_each`.
@@ -46,8 +51,10 @@ import { logAdminAction } from '../services/adminAudit';
 import { presentMetrics } from '../services/researchCompanyDirectory';
 import { directoryColumns, loadFundSources, presentFund, type DirectoryRow as FundRow, type FundSourceRow } from '../services/researchFundDirectory';
 import {
-  SOURCE_WITHDRAWN_MESSAGE, loadVehicleFacts, presentFact, rowProvenance, type FactRow, type ProposedField,
+  PAST_ONLY_REASON, PROPOSED_REASONS, SOURCE_WITHDRAWN_MESSAGE, factsOf, fieldStatements, leadOf, oldCutoff, presentFact,
+  provenanceOf, rowProvenance, statementParts, type FactRow, type FieldStatements, type ProposedField,
 } from '../services/researchFundProfile';
+import { readFundStatements, type FundStatements } from '../services/researchFundObservations';
 import type { RouteMount } from '../util/routeRegistry';
 import { checkProjectOwner, defaultTitle as defaultProjectTitle, readField as readProjectField } from './research_projects';
 
@@ -153,8 +160,16 @@ export function companyCells(r: Row): Record<string, Cell> {
  * `review` is its list's terms review and `facts` its proposed fields, where
  * `null` means the facts could not be read (those cells are left out, which
  * the page reads as Unavailable, never as Not recorded).
+ *
+ * D7748: `statements` is the fund's answer from `readFundStatements`; given,
+ * Stage reads it and Geography and Cheque cells are added (`ATTRIBUTES.fund`
+ * is unchanged, so the page draws them with #7759). Left out, the cells are
+ * main's.
  */
-export function fundCells(raw: FundRow, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map()): Record<string, Cell> {
+export function fundCells(
+  raw: FundRow, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map(),
+  statements?: FundStatements | null, today: Date = new Date(),
+): Record<string, Cell> {
   const r = presentFund(raw);
   const source = { name: r.source_name ?? null, url: r.source_url ?? null };
   const reviews = new Map(review ? [[raw.source_name, review]] : []);
@@ -177,19 +192,68 @@ export function fundCells(raw: FundRow, review?: FundSourceRow, facts: Map<Propo
   };
   if (facts) {
     for (const [key, field] of [['manager', 'manager_name'], ['stage', 'investment_stage']] as const) {
+      // D7748: with the fund's statements given, Stage reads them as the profile does.
+      if (key === 'stage' && statements !== undefined) continue;
       const v = presentFact(field, facts.get(field), reviews);
       out[key] = v.status === 'recorded'
         ? { status: 'recorded', value: v.value, source: { name: v.provenance.list_name, url: v.provenance.published_url }, as_of: v.provenance.reported_on, provenance: v.provenance }
-        : { status: 'not_recorded', reason: `Not recorded: ${v.reason.charAt(0).toLowerCase()}${v.reason.slice(1)}` };
+        : { status: 'not_recorded', reason: notRecorded(v.reason) };
+    }
+    if (statements !== undefined) {
+      const cutoff = oldCutoff(today);
+      for (const [key, field] of STATEMENT_CELLS) out[key] = statementCell(field, fieldStatements(statements, field), reviews, cutoff);
     }
   }
   return out;
 }
 
+const notRecorded = (reason: string) => `Not recorded: ${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+
+/** D7748: the fund cells read from the fund's statements, and the field each reads. */
+const STATEMENT_CELLS = [['stage', 'investment_stage'], ['geography', 'investment_geography'], ['cheque', 'initial_cheque']] as const;
+
+/**
+ * D7748: one statement-backed cell. The value is the leading statement's
+ * wording as text (null when the first two are tied, so none is picked), with
+ * its qualifier; every current statement is listed with its own source. No
+ * rank, order key or converted amount is added.
+ */
+function statementCell(field: ProposedField, fs: FieldStatements, reviews: Map<string, FundSourceRow>, cutoff: string): Cell {
+  if (!fs.current.length) {
+    const reason = fs.past.length ? PAST_ONLY_REASON : PROPOSED_REASONS[field];
+    return fs.past.length
+      ? { status: 'not_recorded', reason: notRecorded(reason), past_statements: statementParts(fs, reviews, cutoff).past_statements } as Cell
+      : { status: 'not_recorded', reason: notRecorded(reason) };
+  }
+  const lead = leadOf(fs);
+  const provenance = lead ? provenanceOf(lead.source_name, lead.source_url, lead.reported_on, lead.imported_on, reviews.get(lead.source_name)) : null;
+  return {
+    status: 'recorded',
+    value: lead ? text(lead.wording) : null,
+    ...(field === 'initial_cheque' ? { qualifier: lead ? lead.qualifier : null } : {}),
+    ...statementParts(fs, reviews, cutoff),
+    source: { name: provenance?.list_name ?? null, url: provenance?.published_url ?? null },
+    as_of: provenance?.reported_on ?? null,
+    provenance,
+  };
+}
+
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
+/** D7748: one fund's vehicle facts and statements from the comparison's one read; both `null` when that read failed. */
+function fundStatementsOf(all: Map<string, FundStatements> | null, uid: string): [Map<ProposedField, FactRow> | null, FundStatements | null] {
+  if (!all) return [null, null];
+  const st = all.get(uid) ?? { current: [], past: [] };
+  return [factsOf(st), st];
+}
+
 /** A listed member's cells; a row whose cells cannot be built at all reads Unreadable in every row (D7177). */
-export function memberCells(kind: Kind, row: Row, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map()): Record<string, Cell> {
+export function memberCells(
+  kind: Kind, row: Row, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map(),
+  statements?: FundStatements | null, today: Date = new Date(),
+): Record<string, Cell> {
   try {
-    return kind === 'company' ? companyCells(row) : fundCells(row as FundRow, review, facts);
+    return kind === 'company' ? companyCells(row) : fundCells(row as FundRow, review, facts, statements, today);
   } catch {
     return unreadableCells(kind);
   }
@@ -342,8 +406,9 @@ comparisons.get('/:uid/comparisons', async (c) => {
   };
   // D7167: each fund cell's provenance needs its list's review and the proposed
   // fields. Either failing leaves those parts out (Unavailable), not the column.
+  // D7748: the fields come from one statement read for every listed fund.
   let reviews = new Map<string, FundSourceRow>();
-  let facts: Map<string, Map<ProposedField, FactRow>> | null = new Map();
+  let statements: Map<string, FundStatements> | null = new Map();
   for (const kind of KINDS) {
     const uids = subjects.filter((s) => s.kind === kind).map((s) => s.directory_uid);
     if (!uids.length) continue;
@@ -352,7 +417,7 @@ comparisons.get('/:uid/comparisons', async (c) => {
       if (kind === 'fund') {
         read[kind].withdrawn = await withdrawnFunds(c.env, uids.filter((u) => !read[kind].rows.has(u)));
         reviews = await loadFundSources(c.env).catch(() => new Map());
-        facts = await loadVehicleFacts(c.env, [...read[kind].rows.keys()]).catch(() => null);
+        statements = await readFundStatements(c.env, [...read[kind].rows.keys()]).catch(() => null);
       }
     } catch {
       read[kind].state = 'unreadable';
@@ -378,7 +443,7 @@ comparisons.get('/:uid/comparisons', async (c) => {
         const view = subjectView(s);
         const row = read[s.kind].rows.get(s.directory_uid);
         const values = view.state === 'listed' && row
-          ? memberCells(s.kind, row, reviews.get(String(row.source_name)), facts ? (facts.get(s.directory_uid) ?? new Map()) : null)
+          ? memberCells(s.kind, row, reviews.get(String(row.source_name)), ...fundStatementsOf(statements, s.directory_uid))
           : null;
         return { ...view, values };
       }),

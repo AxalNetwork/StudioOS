@@ -200,6 +200,8 @@ function fixture() {
   db.exec(ddl('229_research_market_directory.sql'));
   db.exec(ddl(byPrefix('202611180052_7166_')));
   db.exec(read(byPrefix('202611180053_7167_')));
+  // D7748: the fund read's fields come from the statement store (D7743), which it reads once.
+  db.exec(read(byPrefix('202611191932_7743_')));
   db.exec(M7744);
   db.prepare(`INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Fin', 'fin@axal.example')`).run(USER);
   const ins = db.prepare(`INSERT INTO research_fund_directory (uid, name, fund_number, fund_size_cents, fund_size_currency, fund_year, source_name, source_url, as_of)
