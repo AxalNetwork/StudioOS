@@ -75,9 +75,11 @@
     "state": "unreviewed"
   },
   "GET /api/public/p/:partner_slug": {
-    "review": "no_gate_found",
+    "review": "optional_auth",
     "kind": "public_content",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/partner_card_members_only_8958.test.ts",
+    "note": "D8958: a partner's directory profile is Members only. Only partners the directory lists (active and listed) are read; a missing, inactive or unlisted one is the same 404 for every caller. A signed-in caller gets the profile; a signed-out caller gets the display name and members_only only. Never cached."
   },
   "GET /api/public/partners": {
     "review": "no_gate_found",
