@@ -11,6 +11,14 @@ const sent = (reader) => ({ uid: UID, status: 'sent', view: reader ? 'reader' : 
   recipients: [{ name: 'Private recipient', audience: 'investor', delivered: true }], documents: [], meets: [],
 });
 
+/** `GET /api/report-questions/reports/:uid` (routes/report_questions.ts) with no questions, as each viewer reads it. */
+const questions = ({ reader, investor }) => {
+  const view = investor ? 'asker' : reader ? 'read_only' : 'team';
+  return { ok: true, report_uid: UID, view, can_ask: view === 'asker', can_reply: view === 'team',
+    write_refusal: view === 'read_only' ? 'Only the company’s founders answer a question. This view is read only.' : null,
+    limits: { question: 600, reply: 1200 }, questions: [] };
+};
+
 async function open(page, request, { dark = false, reader = false, printFailure = false, investor = false, phone = false } = {}) {
   const m = await prepare(page, request, investor ? { as: 'security' } : {});
   if (phone) await page.setViewportSize({ width: 390, height: 844 });
@@ -37,6 +45,8 @@ async function open(page, request, { dark = false, reader = false, printFailure 
     reads.push(route.request().method());
     return route.fulfill({ json: sent(reader) });
   });
+  // #6225: the sent report and the investor's reader read the report's questions; nobody has asked yet.
+  await page.route(`**/api/report-questions/reports/${UID}`, (route) => route.fulfill({ json: questions({ reader, investor }) }));
   if (investor) {
     const company = { uid: 'p-print6094', name: 'Synthetic Company', duties: [{ uid: 'd-print', kind: 'quarterly_kpi', title: 'Quarterly KPI report', cadence: 'quarterly', source: {}, holding: { route: 'direct' } }],
       periods: [{ uid: 'period-print', duty_uid: 'd-print', label: '2026-Q3', state: 'sent', sent_at: '2026-10-02', report_uid: UID }] };
@@ -85,6 +95,8 @@ for (const { dark, reader, investor, phone } of [{ dark: true, reader: false }, 
 
 test('an unavailable browser print leaves the report readable and offers retry', async ({ page, request }) => {
   const reads = await open(page, request, { printFailure: true });
+  // The Questions section has read its (empty) threads, so the only alert below is the print's.
+  await expect(page.getByTestId('questions-none')).toBeVisible();
   await page.getByTestId('report-print').click();
   await expect(page.getByRole('alert')).toContainText('The print copy could not be prepared');
   await expect(page.getByTestId('report-print')).toBeEnabled();
