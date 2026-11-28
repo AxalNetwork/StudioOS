@@ -9,4 +9,5 @@ reuse a publisher's material.
 | Folder | Purpose |
 | --- | --- |
 | `file_storage/` | Existing repository assets. |
+| `research-companies/` | D7828: reviewed manifests of sourced company business facts, compiled into `research_company_facts` migrations (#9029). |
 | `research-funds/` | D7325: independently verified fund-manager identities and their primary-source evidence. |
