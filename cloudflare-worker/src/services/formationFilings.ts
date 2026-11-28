@@ -17,7 +17,11 @@
  * THE RULES (the issue's "Done when"):
  *   - An incorporation filing is not submitted without the founder's approval
  *     of its pack: founder_approved_sha256 must equal pack_sha256. A new pack
- *     clears the approval. (The consent-to-act check is #6706's.)
+ *     clears the approval.
+ *   - D6706: nor while an appointee of the case (APPOINTEE_ROLES) has no
+ *     consent_to_act_at (`consent_to_act_required`); the store's trigger
+ *     (202611270510_6706_formation_case_documents.sql) holds it too. A v2 case
+ *     reaches ready_to_file only when both the approval and every consent hold.
  *   - An incorporation filing is not accepted without the registration number,
  *     the registry's date and the certificate document.
  *   - A rejected or withdrawn filing keeps the case at its stage; a new
@@ -27,7 +31,9 @@
  * V2 CASES. The incorporation filing drives the case through `transition`
  * (formationCase.ts), in that transition's batch and guarded on the filing as
  * read (`filingAsRead`):
- *   ready_to_file   markReadyToFile: preparing → ready_to_file, writing
+ *   ready_to_file   markReadyToFile: preparing → ready_to_file, once the
+ *                   founder approved the pack and every appointee consented
+ *                   (D6706), writing
  *                   incorporations.packet_ready_at and the pack as the order's
  *                   packet document.
  *   submitted       submit: ready_to_file → submitted (a later attempt, with
@@ -72,6 +78,12 @@ export const DOCUMENT_CLASSES = Object.freeze([
   'filing_pack', 'certificate', 'registry_receipt', 'registry_query', 'rejection_notice', 'evidence', 'other',
 ] as const);
 export const VISIBILITY = Object.freeze(['all', 'hq_partner', 'hq_only'] as const);
+/**
+ * D6706: the roles whose holder consents to act before an incorporation filing
+ * is submitted (directors, the secretary and the legal representative). The
+ * store's trigger lists the same five.
+ */
+export const APPOINTEE_ROLES = Object.freeze(['director', 'resident_director', 'managing_director', 'secretary', 'legal_representative'] as const);
 
 export interface FilingRow {
   id: number; uid: string; case_id: number; kind: FilingKind; state: FilingState; revision: number; attempt: number;
@@ -138,6 +150,23 @@ export async function readFiling(env: Env, id: number): Promise<FilingRow | null
 function dayError(v: unknown, field: string, now: string): string | null {
   if (!isCalendarDate(v)) return `${field}_invalid`;
   if ((v as string) > now) return `${field}_future`;
+  return null;
+}
+
+/** D6706: the case's appointees (current people holding an APPOINTEE_ROLES role) with no consent to act recorded, by id. */
+export async function appointeesWithoutConsent(env: Env, caseId: number): Promise<number[]> {
+  const rows = (await env.DB.prepare(
+    `SELECT DISTINCT p.id FROM formation_case_people p JOIN formation_case_person_roles r ON r.person_id = p.id
+      WHERE p.case_id = ? AND p.removed_at IS NULL AND p.consent_to_act_at IS NULL
+        AND r.role IN (SELECT value FROM json_each(?)) ORDER BY p.id`,
+  ).bind(caseId, JSON.stringify(APPOINTEE_ROLES)).all<{ id: number }>()).results || [];
+  return rows.map((r) => Number(r.id));
+}
+
+/** D6706: what an incorporation filing still needs before it is filed: the founder's approval of this pack, and every consent. */
+async function filingReadiness(env: Env, f: FilingRow): Promise<string | null> {
+  if (!f.pack_sha256 || !f.founder_approved_at || f.founder_approved_sha256 !== f.pack_sha256) return 'founder_approval_required';
+  if ((await appointeesWithoutConsent(env, f.case_id)).length) return 'consent_to_act_required';
   return null;
 }
 
@@ -325,6 +354,9 @@ export async function markReadyToFile(env: Env, filingId: number, actor: Actor):
   if (f.state !== 'prepared') return fail(409, 'filing_not_prepared');
   if (!f.pack_document_id || !f.pack_sha256) return fail(409, 'pack_missing');
   if (kase.stage !== 'preparing') return fail(409, 'case_not_preparing');
+  // D6706: ready_to_file is reached only when the founder approved this pack and every appointee consented.
+  const missing = await filingReadiness(env, f);
+  if (missing) return fail(409, missing);
   const t = await transition(env, kase.id, 'ready_to_file', actor, {
     orderSet: { packet_document_id: f.pack_document_id, packet_ready_by: actor.userId ?? null }, orderNow: ['packet_ready_at'],
     filingAsRead: { id: f.id, state: f.state }, expectRevision: kase.revision,
@@ -350,7 +382,8 @@ export async function submitFiling(
   const bad = dayError(input.submittedOn, 'submitted_on', now);
   if (bad) return fail(400, bad);
   if (f.kind === 'incorporation') {
-    if (!f.pack_sha256 || !f.founder_approved_at || f.founder_approved_sha256 !== f.pack_sha256) return fail(409, 'founder_approval_required');
+    const missing = await filingReadiness(env, f);
+    if (missing) return fail(409, missing);
   }
   const evidence = input.evidenceDocumentId == null ? null : posInt(input.evidenceDocumentId);
   if (input.evidenceDocumentId != null && (!evidence || !(await documentExists(env, evidence)))) return fail(400, 'evidence_document_not_found');

@@ -20,10 +20,18 @@
  *     due runs nothing. A `done` record is never run again.
  *   · `sweepEffects` — the Worker tick's retry: pending and failed records,
  *     oldest first, until `MAX_EFFECT_ATTEMPTS`.
+ *
+ * D6706 (#6706) adds an OWED effect: `formation_case_signed`, the signed copy
+ * of an envelope a formation case sent, landing on the case (and, for a
+ * consent to act, the person's consent). It is not in REQUIRED_EFFECTS: the
+ * case writes its record when it sends the envelope (`owedEffectStatement`),
+ * so the completion batch never names a formation table. A record runs only
+ * once its envelope is completed — the claim and the sweep both require it —
+ * so an owed record waits, untouched, until the signature completes.
  */
 import type { Env } from '../types';
 
-export type EffectKind = 'staged_next_stage';
+export type EffectKind = 'staged_next_stage' | 'formation_case_signed';
 export type EffectState = 'pending' | 'done' | 'failed';
 
 /** Every run counts, the first included. A record at the cap stays failed until an operator retries it. */
@@ -47,7 +55,28 @@ const HANDLERS: Record<EffectKind, Handler> = {
     const { runStagedNextStage } = await import('./stagedSigning');
     return runStagedNextStage(env, uuid, appUrl);
   },
+  formation_case_signed: async (env, uuid) => {
+    const { onCaseEnvelopeCompleted } = await import('./formationCaseSigned');
+    return onCaseEnvelopeCompleted(env, uuid);
+  },
 };
+
+/** Kinds a sender declares owed when it sends the envelope, rather than the completion batch. */
+export const OWED_AT_SEND: readonly EffectKind[] = Object.freeze(['formation_case_signed']);
+
+/**
+ * D6706: the statement that records an effect owed by the sender, to ride in
+ * the sender's own batch after the envelope exists. `INSERT OR IGNORE`: a
+ * second send of the same envelope never resets a record.
+ */
+export function owedEffectStatement(env: Env, envelopeId: number, kind: EffectKind) {
+  if (!OWED_AT_SEND.includes(kind)) throw new Error('effect_not_owed_at_send');
+  return env.DB.prepare(`INSERT OR IGNORE INTO esign_effects (envelope_id, effect_kind) SELECT id, ? FROM esign_envelopes WHERE id = ?`)
+    .bind(kind, envelopeId);
+}
+
+// D6706: a record is due only once its envelope is completed (a record written at completion always is):
+// the claim and the sweep below both carry that EXISTS.
 
 export type EffectRow = {
   id: number; envelope_id: number; effect_kind: EffectKind; state: EffectState;
@@ -91,7 +120,7 @@ export type EffectOutcome = { ran: boolean; state: EffectState | 'missing'; atte
 export async function runEffect(env: Env, id: number, appUrl: string, opts: { force?: boolean } = {}): Promise<EffectOutcome> {
   const claim = await env.DB.prepare(
     `UPDATE esign_effects SET attempts = attempts + 1, last_attempt_at = datetime('now'), updated_at = datetime('now')
-      WHERE id = ? AND state IN ('pending', 'failed') AND (? = 1 OR attempts < ?)`,
+      WHERE id = ? AND state IN ('pending', 'failed') AND (? = 1 OR attempts < ?) AND EXISTS (SELECT 1 FROM esign_envelopes ce WHERE ce.id = esign_effects.envelope_id AND ce.status = 'completed')`,
   ).bind(id, opts.force ? 1 : 0, MAX_EFFECT_ATTEMPTS).run();
   const row = await env.DB.prepare(
     `SELECT x.id, x.envelope_id, x.effect_kind, x.state, x.attempts, x.last_error_class, e.envelope_uuid
@@ -134,7 +163,7 @@ export type SweepSummary = { due: number; done: number; failed: number; at_cap: 
 export async function sweepEffects(env: Env, appUrl: string): Promise<SweepSummary> {
   const due = await env.DB.prepare(
     `SELECT id FROM esign_effects
-      WHERE state IN ('pending', 'failed') AND attempts < ? AND datetime(updated_at) <= datetime('now', ?)
+      WHERE state IN ('pending', 'failed') AND attempts < ? AND datetime(updated_at) <= datetime('now', ?) AND EXISTS (SELECT 1 FROM esign_envelopes ce WHERE ce.id = esign_effects.envelope_id AND ce.status = 'completed')
       ORDER BY id LIMIT ?`,
   ).bind(MAX_EFFECT_ATTEMPTS, `-${RETRY_AFTER_MINUTES} minutes`, SWEEP_LIMIT).all<{ id: number }>();
   const out: SweepSummary = { due: 0, done: 0, failed: 0, at_cap: 0 };
