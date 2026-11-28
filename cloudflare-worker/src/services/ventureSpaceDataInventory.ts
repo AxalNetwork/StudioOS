@@ -347,6 +347,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['readiness_scores', 'p', 'cascade'],
   ['reference_checks', 'c', 'company'],
   ['report_documents', 'p', 'refuses'],
+  ['report_questions', 'p', 'refuses'],
   ['reporting_duties', 'p', 'refuses'],
   ['reporting_events', 'p', 'refuses'],
   ['reporting_reminder_settings', 'p', 'refuses'],
