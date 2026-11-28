@@ -41,13 +41,15 @@ const asAdmin = ROWS.map((r) => ({ ...r, can_move: true, you_lead: false }));
 
 // ── The model ─────────────────────────────────────────────────────────────────
 
-test('the address: Board by default, Table, Not raising and intake\'s alone, each a link', () => {
+test('the address: Table by default (D5916, DX12), Board, Not raising and intake\'s alone, each a link', () => {
   // Mutations checked: `by=intake` honoured without Not raising; the default view written into the address.
-  assert.deepEqual(studioViewOf(''), { view: 'board', notRaising: false, intakeOnly: false });
-  assert.deepEqual(studioViewOf('?view=table&round=not_raising&by=intake'), { view: 'table', notRaising: true, intakeOnly: true });
+  assert.deepEqual(studioViewOf(''), { view: 'table', notRaising: false, intakeOnly: false, stage: null, attention: null });
+  assert.deepEqual(studioViewOf('?view=table&round=not_raising&by=intake'), { view: 'table', notRaising: true, intakeOnly: true, stage: null, attention: null });
+  assert.equal(studioViewOf('?view=board').view, 'board');
   assert.equal(studioViewOf('?by=intake').intakeOnly, false);
   assert.equal(studioViewHref({}), '/deals');
-  assert.equal(studioViewHref({ view: 'table', notRaising: true, intakeOnly: true }), '/deals?view=table&round=not_raising&by=intake');
+  assert.equal(studioViewHref({ view: 'board' }), '/deals?view=board');
+  assert.equal(studioViewHref({ view: 'table', notRaising: true, intakeOnly: true }), '/deals?round=not_raising&by=intake');
 });
 
 test('a row, the investors line, and who set Not raising: intake never reads as a pass, a missing count never as 0', () => {
@@ -152,18 +154,21 @@ test('mounted for an admin: the board on the round\'s status, the intake notice,
   const s = stub(asAdmin);
   const v = await mount({ role: 'admin', view: BOARD });
   try {
-    assert.match(v.of('studio-lens'), /Studio › Deal flow.*Every round on the platform, how it scores, and who is looking at it\./s);
+    assert.match(v.of('studio-lens'), /Studio › Deal flow.*Every active round, who owns it, who is engaged and what needs attention\./s);
     assert.ok(v.has('studio-draft'));
     assert.match(v.of('studio-col-applied'), /In intake\s*1.*\$500K in asks.*Alpha.*Founder applied.*2 invited · 1 interested · 1 committed/s);
     assert.match(v.of('studio-col-scored'), /Screened\s*1.*1 with none recorded.*Beta.*Not invited yet/s);
     assert.ok(!v.has('studio-col-rejected') && !/Delta/.test(v.of('studio-board')), 'Not raising is a filter, not a column');
     assert.match(v.of('studio-intake-notice'), /1 round was set to Not raising by intake scoring, not by a person\..*Review them/s);
-    assert.equal(v.props('studio-intake-review').href, '/deals?view=table&round=not_raising&by=intake');
+    assert.equal(v.props('studio-intake-review').href, '/deals?round=not_raising&by=intake');
     assert.ok(!v.has('studio-partner-note'));
     assert.match(v.of('stage-analytics'), /Stage funnel/);
     assert.match(v.of('pass-intake-apart'), /1 round set to Not raising by intake scoring is not counted here: intake is not a pass\./);
     await v.click('studio-menu-72');
-    assert.match(v.of('studio-menu-72-list'), /Advance.*Pass….*Invite investors.*Edit terms/s);
+    // D5916 (DX12): Advance sits on the row; More holds the rest.
+    assert.ok(v.has('studio-row-advance-72'));
+    assert.match(v.of('studio-menu-72-list'), /Pass….*Invite investors.*Edit terms/s);
+    assert.doesNotMatch(v.of('studio-menu-72-list'), /Advance/);
     assert.equal(v.props('studio-menu-72-invite').href, '/deals/72/invitations');
   } finally { await v.unmount(); s.restore(); }
 });
@@ -175,10 +180,10 @@ test('mounted for an Operating Partner: read only, moves only on the round they 
   try {
     assert.equal(v.of('studio-partner-note'), PARTNER_NOTE);
     assert.ok(!v.has('studio-draft'));
-    assert.match(v.of('studio-row-71'), /Alpha.*You lead this.*In intake.*\$500K.*You.*2 invited · 1 interested · 1 committed.*Founder applied/s);
+    assert.match(v.of('studio-row-71'), /Alpha.*You lead this.*In intake.*You.*2 invited · 1 interested · 1 committed.*\$500K.*1 investor.*Not recorded.*Founder applied/s);
     assert.ok(v.has('studio-menu-71'));
     assert.ok(!v.has('studio-menu-72') && !v.has('studio-menu-73'), 'a move menu on a round they do not lead');
-    assert.match(v.of('studio-row-72'), /Beta.*Screened.*Not recorded.*Olu Other.*Not invited yet/s);
+    assert.match(v.of('studio-row-72'), /Beta.*Screened.*Olu Other.*Not invited yet.*Not recorded/s);
   } finally { await v.unmount(); s.restore(); }
 });
 
@@ -191,8 +196,7 @@ test('Advance says where the round goes, writes only on Move, and a refusal stay
   const s = stub(asAdmin, { 'POST /api/deals/72/advance': () => (refuse ? json({ code: 'not_your_round', detail: 'You can move only the rounds you lead. The studio moves the rest.' }, 403) : json({ id: 72, status: 'active' })) });
   const v = await mount({ role: 'admin', view: BOARD });
   try {
-    await v.click('studio-menu-72');
-    await v.click('studio-menu-72-advance');
+    await v.click('studio-row-advance-72');
     assert.match(v.of('studio-advance'), /Move Beta to Raising\?.*Beta moves from Screened to Raising for every investor, and the founder is told\./s);
     assert.equal(s.seen.filter((x) => x.method === 'POST' && !READS.test(x.path)).length, 0, 'written before Move');
     await v.click('studio-advance-go');
