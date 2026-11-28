@@ -72,6 +72,7 @@ and StudioHome at `/raise/pitch`).
 
 | `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
 | `login_journeys_6959.spec.mjs` | #6959: /login's Sign In v2 journeys (#6958, D6957) on the desktop card at 1440 and the phone sheet under the iPhone 13, iPhone SE and Pixel 7 descriptors at 390 and 320 (Chromium, not Safari): three actions, the Email methods, Apple and Google returns through mocked callbacks, the sheet's focus, axe, keyboard-open and 200% text, destination continuity; screenshots only to `LOGIN_EVIDENCE_DIR`, no baselines. |
+| `eadwyn_panel_a11y_9289.spec.mjs` | D9289 (#9289): Eadwyn's chat on the founder's `/studio`, with only `/api/advisor/start` changed to give a long question. At 390: the composer is named, grows with a long answer and keeps two lines when the window is cut to 500px; the question wraps to two lines; no horizontal scroll. At 1440: the panel tabs by arrows, Home and End, Tab into the panel, and the fullscreen view's focus trap and focus return. A screenshot goes to the output folder (and `EADWYN_EVIDENCE_DIR`); no baselines. |
 
 ### Run it
 

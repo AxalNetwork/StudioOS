@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -38,18 +38,68 @@ export const PANEL_TABS = [
   { id: 'tickets', label: 'My tickets' },
 ];
 
+/**
+ * D9289 (#9289) — the strip follows the WAI-ARIA tab pattern, and every rule
+ * reads `tabs`, so a new tab (#9282's Teams) is one more entry and no key code:
+ *
+ *   · Left and Right move to the previous and next tab and wrap; Home and End
+ *     go to the ends. The move selects the tab (automatic activation) and
+ *     focus follows it.
+ *   · A roving `tabindex`: only the selected tab is in the Tab order, so Tab
+ *     from the strip lands in the selected panel (`tabPanelProps`), not on the
+ *     next tab.
+ *   · Each tab has an `id`, and the selected one names its panel with
+ *     `aria-controls`. Only the selected panel is drawn, so only the selected
+ *     tab carries it: an `aria-controls` naming an id that is not on the page
+ *     points a screen reader at nothing.
+ *
+ * `idBase` keeps the ids apart when two chats are on one page; the caller
+ * draws the panel with the same base.
+ */
+export const panelTabId = (base, id) => `${base}-tab-${id}`;
+export const panelPanelId = (base, id) => `${base}-panel-${id}`;
+
+/** Where a key moves the selection from `current`, or null for a key the strip leaves alone. */
+export function panelTabAfterKey(tabs, current, key) {
+  const ids = tabs.map((t) => t.id);
+  if (!ids.length) return null;
+  const at = Math.max(0, ids.indexOf(current));
+  if (key === 'ArrowRight') return ids[(at + 1) % ids.length];
+  if (key === 'ArrowLeft') return ids[(at - 1 + ids.length) % ids.length];
+  if (key === 'Home') return ids[0];
+  if (key === 'End') return ids[ids.length - 1];
+  return null;
+}
+
+/** What the selected tab's panel carries: its role, its id, the tab that names it, and a stop in the Tab order. */
+export const tabPanelProps = (base, id) => ({
+  role: 'tabpanel', id: panelPanelId(base, id), 'aria-labelledby': panelTabId(base, id), tabIndex: 0,
+});
+
 /** The canvas's tab strip above the panel. */
-export function PanelTabs({ tab, onTab, className = '' }) {
+export function PanelTabs({ tab, onTab, className = '', tabs = PANEL_TABS, idBase = 'eadwyn' }) {
+  const buttons = useRef({});
+  const onKeyDown = (e) => {
+    const next = panelTabAfterKey(tabs, tab, e.key);
+    if (!next) return;
+    e.preventDefault();
+    if (next !== tab) onTab(next);
+    buttons.current[next]?.focus?.();
+  };
   return (
-    <div role="tablist" aria-label="Eadwyn panel" className={`flex gap-0.5 border-b border-gray-100 px-3 pt-2 dark:border-gray-800 ${className}`}>
-      {PANEL_TABS.map((t) => {
+    <div role="tablist" aria-label="Eadwyn panel" onKeyDown={onKeyDown} className={`flex gap-0.5 border-b border-gray-100 px-3 pt-2 dark:border-gray-800 ${className}`}>
+      {tabs.map((t) => {
         const on = t.id === tab;
         return (
           <button
             key={t.id}
+            ref={(n) => { buttons.current[t.id] = n; }}
             type="button"
             role="tab"
+            id={panelTabId(idBase, t.id)}
             aria-selected={on ? 'true' : 'false'}
+            aria-controls={on ? panelPanelId(idBase, t.id) : undefined}
+            tabIndex={on ? 0 : -1}
             onClick={() => onTab(t.id)}
             data-testid={`eadwyn-tab-${t.id}`}
             className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${on

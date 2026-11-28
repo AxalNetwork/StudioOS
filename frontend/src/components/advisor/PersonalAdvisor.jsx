@@ -43,7 +43,7 @@
  *   GET  /advisor/progress     → { total, answered, skipped, percent, complete, conversation_id }
  *   GET  /advisor/conversations/:id → { messages, answers, progress }
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { safeExternalUrl } from '../../lib/url';
 import { Link } from 'react-router-dom';
 import {
@@ -64,7 +64,9 @@ import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
-import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
+import { PanelTabs, TasksPanel, TicketsPanel, tabPanelProps } from './EadwynPanels';
+import { useAssistantAnnouncement, useAutoGrow, useFocusOnReturn, useTranscriptFollow } from '../../lib/eadwynChatA11y';
+import { useLightboxFocus } from '../../ui/Lightbox';
 import { PhoneFocus, PhoneTicketCard, threadLabel, useFootFill, useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
@@ -220,6 +222,11 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
   const isDesktop = useIsDesktop();
+  // D9289: the tab strip's and panels' ids, apart per chat on the page; and
+  // focus back on the card's fullscreen button when the fullscreen view closes.
+  const panelIds = `eadwyn${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const maximizeRef = useRef(null);
+  useFocusOnReturn(viewMode === 'normal', maximizeRef);
   // The phone frame reaches the scroll's foot, so the composer stands there.
   const [phoneFrame, phoneFill] = useFootFill();
 
@@ -396,14 +403,9 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     },
   });
 
-  // Auto-scroll the transcript on new messages / streaming tokens.
-  // `viewMode` is a dep so switching between the embedded card and the
-  // fullscreen overlay (which mounts a fresh Transcript at scrollTop 0)
-  // lands the user on the latest message rather than the top.
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, question, tutor, viewMode]);
+  // The transcript follows new lines itself (D9289, `useTranscriptFollow`):
+  // only while the reader is at its foot, so reading older lines is never
+  // interrupted. A fresh Transcript (the card ⇄ fullscreen swap) starts there.
 
   // ---------- Send answer -------------------------------------------------
   const submit = useCallback(async (rawValue, evidenceArg) => {
@@ -905,6 +907,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         onCloseTicket={closeTicket}
         panelTab={panelTab}
         onPanelTab={setPanelTab}
+        panelIds={panelIds}
         onSuggestTask={suggest}
         onStartTask={startTask}
       />
@@ -996,6 +999,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         persona={persona}
         progress={progress}
         onMaximize={() => setViewMode('fullscreen')}
+        maximizeRef={maximizeRef}
         onOpenTicket={headerTicket}
         ticketOpen={ticketShown}
       />
@@ -1004,7 +1008,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       {/* D606 — on a phone the panel's tabs sit above the card's body, and
           Conversation is the chat itself (the canvas hides the chat column
           below 760px and shows the panel). */}
-      {!isDesktop && <PanelTabs tab={panelTab} onTab={setPanelTab} />}
+      {!isDesktop && <PanelTabs tab={panelTab} onTab={setPanelTab} idBase={panelIds} />}
 
       <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'}>
         {/* Chat column. On mobile we cap the height to ~60vh so the chat
@@ -1015,7 +1019,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
             min-h-[260px] lets it shrink) scrolls internally while the
             current-question line and composer stay pinned at the bottom,
             and no blank gap opens beneath the task panel as the chat grows. */}
-        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px] max-h-[640px]' : `flex flex-col min-h-0 max-h-[60vh] ${panelTab === 'conversation' ? '' : 'hidden'}`}>
+        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px] max-h-[640px]' : `flex flex-col min-h-0 max-h-[60vh] ${panelTab === 'conversation' ? '' : 'hidden'}`}
+          {...(!isDesktop && panelTab === 'conversation' ? tabPanelProps(panelIds, 'conversation') : {})}>
           <Transcript
             ref={scrollerRef}
             messages={messages}
@@ -1054,25 +1059,27 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
             My tickets. */}
         {isDesktop ? (
           <aside className="bg-gray-50 dark:bg-gray-950/40 max-h-[640px] overflow-y-auto sticky top-4" data-testid="eadwyn-panel">
-            <PanelTabs tab={panelTab} onTab={setPanelTab} />
-            {panelTab === 'conversation' ? (
-              <div className="p-4">
-                <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
-                <AdvisorProgressWidget
-                  focusSection={focusSection}
-                  pendingEvidence={pendingEvidence}
-                  currentQuestion={question}
-                  labState={labState}
-                  progressBumpToken={progressBumpToken}
-                  onPickQuestion={handlePickQuestion}
-                />
-              </div>
-            ) : panelTab === 'tasks'
-              ? <TasksPanel onSuggest={suggest} onStart={startTask} />
-              : <TicketsPanel />}
+            <PanelTabs tab={panelTab} onTab={setPanelTab} idBase={panelIds} />
+            <div {...tabPanelProps(panelIds, panelTab)}>
+              {panelTab === 'conversation' ? (
+                <div className="p-4">
+                  <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+                  <AdvisorProgressWidget
+                    focusSection={focusSection}
+                    pendingEvidence={pendingEvidence}
+                    currentQuestion={question}
+                    labState={labState}
+                    progressBumpToken={progressBumpToken}
+                    onPickQuestion={handlePickQuestion}
+                  />
+                </div>
+              ) : panelTab === 'tasks'
+                ? <TasksPanel onSuggest={suggest} onStart={startTask} />
+                : <TicketsPanel />}
+            </div>
           </aside>
         ) : panelTab !== 'conversation' && (
-          <div className="max-h-[60vh] overflow-y-auto" data-testid="eadwyn-panel">
+          <div className="max-h-[60vh] overflow-y-auto" data-testid="eadwyn-panel" {...tabPanelProps(panelIds, panelTab)}>
             {panelTab === 'tasks' ? <TasksPanel onSuggest={suggest} onStart={startTask} /> : <TicketsPanel />}
           </div>
         )}
@@ -1083,7 +1090,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
 
 // ---------- Subcomponents -----------------------------------------------
 
-function Header({ persona, progress, onMaximize, onOpenTicket, ticketOpen }) {
+function Header({ persona, progress, onMaximize, maximizeRef, onOpenTicket, ticketOpen }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
@@ -1111,9 +1118,12 @@ function Header({ persona, progress, onMaximize, onOpenTicket, ticketOpen }) {
           </button>
         )}
         <button
+          ref={maximizeRef}
+          type="button"
           onClick={onMaximize}
           className="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-gray-800/60"
           title="Open fullscreen"
+          data-testid="eadwyn-fullscreen-open"
         >
           <Maximize2 size={16} />
         </button>
@@ -1136,15 +1146,23 @@ function FullscreenView({
   sectionStats, focusSection, pickFocus,
   pendingEvidence, labState, progressBumpToken, onPickQuestion,
   ticketOpen, ticketPreset, onToggleTicket, onTicketFiled, onCloseTicket,
-  panelTab = 'conversation', onPanelTab, onSuggestTask, onStartTask,
+  panelTab = 'conversation', onPanelTab, onSuggestTask, onStartTask, panelIds = 'eadwyn-fullscreen',
 }) {
-  useEscapeClose(onExit);
+  // D9289: the shell `ui/Lightbox.jsx` uses — focus moves in, Tab stays
+  // inside, the page behind is inert and still, Escape closes the top dialog
+  // only. Focus goes back to the card's fullscreen button (`useFocusOnReturn`).
+  const box = useRef(null);
+  const onTab = useLightboxFocus(box, { onClose: onExit });
   const vvStyle = useVisualViewportStyle();
   return (
     <div
+      ref={box}
       role="dialog"
       aria-modal="true"
       aria-label="Eadwyn AI"
+      tabIndex={-1}
+      onKeyDown={onTab}
+      data-testid="eadwyn-fullscreen"
       style={vvStyle || undefined}
       className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900 h-[100dvh] max-h-[100dvh] overflow-hidden"
     >
@@ -1190,22 +1208,24 @@ function FullscreenView({
         <aside className="flex-shrink-0 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950/40 max-h-[38dvh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96" data-testid="eadwyn-panel">
           {/* D606 — the same three tabs as the card's rail. The chat stays in
               view here at every width, so Conversation is its rail. */}
-          {onPanelTab && <PanelTabs tab={panelTab} onTab={onPanelTab} />}
-          {panelTab === 'conversation' || !onPanelTab ? (
-            <div className="p-4">
-              <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
-              <AdvisorProgressWidget
-                focusSection={focusSection}
-                pendingEvidence={pendingEvidence}
-                currentQuestion={question}
-                labState={labState}
-                progressBumpToken={progressBumpToken}
-                onPickQuestion={onPickQuestion}
-              />
-            </div>
-          ) : panelTab === 'tasks'
-            ? <TasksPanel onSuggest={onSuggestTask} onStart={onStartTask} />
-            : <TicketsPanel />}
+          {onPanelTab && <PanelTabs tab={panelTab} onTab={onPanelTab} idBase={panelIds} />}
+          <div {...(onPanelTab ? tabPanelProps(panelIds, panelTab) : {})}>
+            {panelTab === 'conversation' || !onPanelTab ? (
+              <div className="p-4">
+                <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+                <AdvisorProgressWidget
+                  focusSection={focusSection}
+                  pendingEvidence={pendingEvidence}
+                  currentQuestion={question}
+                  labState={labState}
+                  progressBumpToken={progressBumpToken}
+                  onPickQuestion={onPickQuestion}
+                />
+              </div>
+            ) : panelTab === 'tasks'
+              ? <TasksPanel onSuggest={onSuggestTask} onStart={onStartTask} />
+              : <TicketsPanel />}
+          </div>
         </aside>
       </div>
     </div>
@@ -1290,9 +1310,22 @@ function FocusChips({ sectionStats, focusSection, pickFocus }) {
 }
 
 const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick, minHClass = 'min-h-[260px]', phone = false }, ref) {
+  // D9289 — the thread is a `log`; what Eadwyn adds is read out by the polite
+  // region beside it (not the log itself, which would read the member's own
+  // line back and every streamed token of an explanation). It follows a new
+  // line only while the reader is at its foot.
+  const own = useRef(null);
+  const setRef = useCallback((n) => {
+    own.current = n;
+    if (typeof ref === 'function') ref(n); else if (ref) ref.current = n;
+  }, [ref]);
+  const onScroll = useTranscriptFollow(own, messages, tutor);
+  const said = useAssistantAnnouncement(messages);
   // D701 — on the phone frame the thread is part of the page's one scroll.
   return (
-    <div ref={ref} className={phone ? 'px-[22px] py-2 space-y-2.5' : `flex-1 overflow-y-auto px-4 py-3 space-y-3 ${minHClass}`}>
+    <>
+    <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="eadwyn-announce">{said}</div>
+    <div ref={setRef} onScroll={onScroll} role="log" aria-live="off" aria-label="Conversation with Eadwyn" data-testid="eadwyn-transcript" className={phone ? 'px-[22px] py-2 space-y-2.5' : `flex-1 overflow-y-auto px-4 py-3 space-y-3 ${minHClass}`}>
       {loadError && (
         <div className="text-xs text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900 rounded p-2">
           {loadError}
@@ -1312,6 +1345,7 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
       )}
       {tutor && <TutorPanel tutor={tutor} onClose={onCloseTutor} />}
     </div>
+    </>
   );
 });
 
@@ -1586,7 +1620,8 @@ function AdvisorTicketPanel({ onFiled, onClose, initialType = null }) {
 function CurrentQuestion({ q, onExplain }) {
   return (
     <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 bg-violet-50/30 dark:bg-violet-950/10 flex items-start gap-2">
-      <div className="text-xs text-violet-700 dark:text-violet-300 font-medium flex-1 min-w-0 truncate">
+      {/* D9289: two lines, then an ellipsis (never one cut line); the full prompt is the transcript's last line. */}
+      <div className="text-xs text-violet-700 dark:text-violet-300 font-medium flex-1 min-w-0 line-clamp-2 break-words" title={q.prompt} data-testid="eadwyn-current-question">
         Currently: <span className="text-gray-700 dark:text-gray-200 font-normal">{q.prompt}</span>
       </div>
       <button
@@ -1787,6 +1822,10 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
     setInput((prev) => (prev && prev.trim() ? `${prev.replace(/\s+$/, '')} ${text}` : text));
   }, [setInput]);
   const mic = useMicRecorder(appendTranscript);
+  // D9289: the field is named (a placeholder is not a name) and grows with its text.
+  const fieldId = useId();
+  const field = useRef(null);
+  useAutoGrow(field, input);
   // D771 (#2097): recording or transcribing a voice answer is the rail's option.
   useRailOption(mic.state === MIC.RECORDING || mic.state === MIC.TRANSCRIBING ? 'transcribe:voice-answer' : null, 'Record a voice answer');
   // Render the option chips for select/multiselect kinds.
@@ -1808,7 +1847,11 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
         </div>
       )}
       <div className="flex items-end gap-2">
+        <label htmlFor={fieldId} className="sr-only">Message Eadwyn</label>
         <textarea
+          ref={field}
+          id={fieldId}
+          data-testid="eadwyn-composer-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKey}
@@ -1816,7 +1859,7 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
           placeholder={disabled ? 'All caught up — nothing more to ask.' : 'Type your answer, or "explain …"'}
           disabled={busy || disabled}
           data-density-target
-          className="flex-1 resize-none rounded-lg border border-gray-200 dark:border-gray-700 bg-[var(--app-input-bg,#fff)] dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-[var(--app-input-bg,#fff)] dark:bg-gray-800 text-sm leading-5 px-3 py-2 max-h-40 max-sm:min-h-[58px] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
         />
         <MicButton state={mic.state} onToggle={mic.toggle} busy={busy} disabled={disabled} />
         {skipAllowed && !disabled && (
