@@ -28,6 +28,8 @@ export interface BotRun {
   status: BotStatus; failure_code: string | null; scheduled_at: number; started_at: number | null; ended_at: number | null;
   minutes: number | null; participant_count: number | null; heartbeat_at: number | null; limit_minutes: number;
   cost_per_minute_microusd: number; rate_per_minute_microusd: number; reservation_uid: string | null; settled_at: number | null; created_at: number;
+  /** D1368 (migration 655): the bot's own `<code>@<step>` codes. Creator-only diagnostics; absent before 655. */
+  failure_detail?: string | null;
 }
 /** B2/B8 provide an idempotent runtime: start/stop use uid as their idempotency key. Never log the input. */
 export interface BotRuntime {
@@ -73,8 +75,30 @@ export async function botRow(env: Env, uid: string): Promise<BotRun | null> {
 export async function sessionBot(env: Env, sessionId: number, userId: number): Promise<BotRun | null> {
   return env.DB.prepare('SELECT * FROM meeting_bots WHERE session_id = ? AND user_id = ? ORDER BY created_at DESC, uid DESC LIMIT 1').bind(sessionId, userId).first<BotRun>();
 }
+/**
+ * D5813 (D1451 part 3): the member-safe reason a Teams tenant refused Eadwyn AI.
+ * Only these three exact `failure_detail` values, which the bot reports from its
+ * fixed `TEAMS_STAGES` list (D5812), are recognised; every other value, a Teams
+ * lobby timeout, a Meet or Zoom step, or a shape a newer bot might send, is null
+ * and the member keeps the generic failure. The raw detail itself never enters
+ * this view.
+ */
+export const TEAMS_BLOCKED = Object.freeze({
+  'platform_blocked@teams_anonymous_blocked': 'guests_off',
+  'platform_blocked@teams_bot_blocked': 'bot_blocked',
+  'platform_blocked@teams_captcha': 'captcha',
+} as const);
+export type TeamsBlocked = typeof TEAMS_BLOCKED[keyof typeof TEAMS_BLOCKED];
+export function botBlocked(run: Pick<BotRun, 'platform' | 'status' | 'failure_code'> & { failure_detail?: unknown }): TeamsBlocked | null {
+  // The bot reports a refusal as `platform_blocked`, which the callback stores as `runtime_failed`.
+  if (run.platform !== 'teams' || run.status !== 'failed' || run.failure_code !== 'runtime_failed') return null;
+  const detail = run.failure_detail;
+  return typeof detail === 'string' && Object.hasOwn(TEAMS_BLOCKED, detail) ? TEAMS_BLOCKED[detail as keyof typeof TEAMS_BLOCKED] : null;
+}
 export function botView(run: BotRun) {
   return { uid: run.uid, platform: run.platform, status: run.status, failure_code: run.failure_code,
+    // D5813: guests_off | bot_blocked | captcha for a recognised Teams refusal, else null.
+    blocked: botBlocked(run),
     scheduled_at: run.scheduled_at, started_at: run.started_at, ended_at: run.ended_at,
     minutes: run.minutes, participant_count: run.participant_count, limit_minutes: run.limit_minutes,
     rate_per_minute_microusd: run.rate_per_minute_microusd,

@@ -13,6 +13,9 @@
  * A read that failed says "Unreadable", never "Not connected" or "Off".
  */
 
+// D5813: the bot row's words are the run view's too, so the two never disagree.
+import { TEAMS_BOT_GUEST, TEAMS_BOT_OFF } from '../founder/meetingBotSession.js';
+
 const SIGN_IN_FROM = 'axal.connectors.signInFrom';
 const SIGN_IN_TTL_MS = 15 * 60_000;
 const FROM_KEYS = new Set(['teams']);
@@ -64,7 +67,7 @@ export function teamsCapabilityRows(p, caps) {
             : row('create', 'Create a Teams meeting', 'Connect first', 'neutral', 'Connect Microsoft to create work or school Teams meetings from Axal.');
   const bot = loading ? row('bot', 'Eadwyn AI joins Teams calls', 'Checking…', 'neutral')
     : unread ? row('bot', 'Eadwyn AI joins Teams calls', 'Unreadable', 'warn', 'Axal could not read whether Eadwyn AI can join Teams calls.')
-      : teams.can_join_as_bot === true ? row('bot', 'Eadwyn AI joins Teams calls', 'Available', 'ok', 'It joins as a guest with the meeting link, whichever account hosts it. It does not need this connection.')
-        : row('bot', 'Eadwyn AI joins Teams calls', 'Not available here', 'neutral', 'Upload the recording or paste the transcript after the call.');
+      : teams.can_join_as_bot === true ? row('bot', 'Eadwyn AI joins Teams calls', 'Available', 'ok', TEAMS_BOT_GUEST)
+        : row('bot', 'Eadwyn AI joins Teams calls', 'Not available here', 'neutral', TEAMS_BOT_OFF);
   return [connection, create, bot];
 }

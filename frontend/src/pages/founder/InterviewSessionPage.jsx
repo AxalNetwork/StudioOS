@@ -494,9 +494,13 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const showLife = botSession ? botRead !== undefined : (imported || recordingOther || !!data.processing?.stage);
   const life = showLife ? lifecycle({ bot: botSession && botRead?.bot !== null ? (bot || { status: 'unreadable' }) : null, session, processing: data.processing }) : null;
   // #1588: while this tab records another session, the page only shows the stage (`processing-here`); it starts nothing here.
-  const failure = life && !recordingOther ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
+  const botShown = bot ? botView({ bot }) : null;
+  // D5813: a recognised Teams refusal brings its cause, the organizer's action and the fallbacks.
+  const failure = life && !recordingOther ? failureView(life, { botFailure: botShown?.failure ?? null, processingError: data.processing?.error || null, blocked: botShown?.blocked ? botShown : null }) : null;
   const interviewId = interview?.id ?? session.interview_id ?? null;
   const retryHref = interviewId != null ? `/validate/record?interview=${encodeURIComponent(interviewId)}&project_id=${encodeURIComponent(session.project_id)}` : null;
+  // D5813: the member's own interview record, so a refused run never strands them on this session.
+  const interviewHref = interviewId != null ? `/validate/customer-research/${encodeURIComponent(interviewId)}?project_id=${encodeURIComponent(session.project_id)}` : null;
   const setupIncomplete = session.setup_complete_at === null;
   const setupHref = retryHref && session.client_key
     ? `${retryHref}&setup_key=${encodeURIComponent(session.client_key)}`
@@ -577,7 +581,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         <ChannelVoiceNotes api={api} session={session} chunks={chunks} consent={data.channel_consent} />
         {life && <SessionStepper view={life} />}
         {botSession && botRead?.bot !== null && <ParticipantsTimeline participants={botParticipants} bot={botRead?.bot || null} segments={segments} />}
-        {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} />}
+        {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} interviewHref={failure.retry === 'new-session' ? interviewHref : null} />}
         {!setupIncomplete && botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
         {!setupIncomplete && session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />

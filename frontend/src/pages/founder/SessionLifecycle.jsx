@@ -5,6 +5,7 @@
  */
 import { Link } from 'react-router-dom';
 import { stepLine } from './sessionLifecycle.js';
+import { TEAMS_BOT_GUEST, TEAMS_BOT_OFF } from './meetingBotSession.js';
 
 const DOT = {
   done: 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600',
@@ -46,6 +47,7 @@ export function SessionStepper({ view }) {
   </section>;
 }
 
+const FALLBACK_LINK = 'text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center';
 const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] px-3.5 text-[12.5px] font-bold max-lg:min-h-[44px]';
 
 /**
@@ -56,13 +58,21 @@ const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] 
  * the Worker refuses a second dispatch on one session, `session_in_use`).
  * "See details" holds the codes and times, for support.
  */
-export function SessionFailure({ failure, details = [], onRetry, retrying = false, retryHref = null, error = null }) {
+export function SessionFailure({ failure, details = [], onRetry, retrying = false, retryHref = null, interviewHref = null, error = null }) {
   if (!failure) return null;
-  return <section role="alert" className="space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-[13px] dark:border-red-900 dark:bg-red-950/30" data-testid="session-failure" data-retry={failure.retry}>
+  return <section role="alert" className="space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-[13px] dark:border-red-900 dark:bg-red-950/30" data-testid="session-failure" data-retry={failure.retry} data-blocked={failure.blocked || undefined}>
     <p className="m-0 font-bold text-red-800 dark:text-red-200">{failure.title}</p>
     {failure.causes.length > 0 && <div>
-      <p className="m-0 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Likely causes</p>
+      <p className="m-0 text-[12px] font-semibold text-axal-ink dark:text-gray-200">{failure.blocked ? 'Cause' : 'Likely causes'}</p>
       <ul className="m-0 mt-1 list-disc pl-5 text-axal-ink dark:text-gray-200" data-testid="session-failure-causes">{failure.causes.map((c) => <li key={c}>{c}</li>)}</ul>
+    </div>}
+    {failure.organizer && <p className="m-0 text-axal-ink dark:text-gray-200" data-testid="session-failure-organizer"><span className="font-semibold">What the organizer can do: </span>{failure.organizer}</p>}
+    {failure.fallback && <div className="space-y-1" data-testid="session-failure-fallback">
+      <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">{TEAMS_BOT_GUEST} {TEAMS_BOT_OFF}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Link to="/validate/record/calls/upload" className={FALLBACK_LINK} data-testid="session-failure-upload">Upload the recording</Link>
+        {retryHref && <Link to={retryHref} className={FALLBACK_LINK} data-testid="session-failure-paste">Paste the transcript</Link>}
+      </div>
     </div>}
     <div className="flex flex-wrap items-center gap-2">
       {failure.retry === 'process'
@@ -70,7 +80,8 @@ export function SessionFailure({ failure, details = [], onRetry, retrying = fals
         : retryHref && <Link to={retryHref} className={`${BTN} bg-violet-700 text-white dark:bg-violet-600`} data-testid="session-failure-retry">Try again with a new session</Link>}
       {failure.retry === 'process' && retryHref && <Link to={retryHref} className={`${BTN} border border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="session-failure-import">Import the recording or transcript instead</Link>}
     </div>
-    {failure.retry !== 'process' && retryHref && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Record a session also takes the call’s recording or transcript, if you have it.</p>}
+    {failure.retry !== 'process' && retryHref && !failure.fallback && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Record a session also takes the call’s recording or transcript, if you have it.</p>}
+    {interviewHref && <Link to={interviewHref} className={FALLBACK_LINK} data-testid="session-failure-interview">Back to the interview</Link>}
     {error && <p className="m-0 font-semibold text-red-700 dark:text-red-300" data-testid="session-failure-error">{error}</p>}
     {details.length > 0 && <details data-testid="session-failure-details">
       <summary className="cursor-pointer text-[12px] font-semibold text-axal-muted dark:text-gray-400">See details</summary>

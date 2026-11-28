@@ -320,6 +320,12 @@ not always the same. Unknown codes are failures to investigate, never success.
   Re-enter it privately; never paste it into an issue or log.
 - **`platform_blocked` → `runtime_failed`:** check the host/tenant's guest,
   admission, chat and recording permissions. Do not blindly redispatch.
+  For Teams, three exact `failure_detail` stages are shown to the member as
+  their own reason (`blocked` on the bot read, D5813):
+  `platform_blocked@teams_anonymous_blocked` is `guests_off`,
+  `…@teams_bot_blocked` is `bot_blocked` and `…@teams_captcha` is `captcha`,
+  each with the organizer's action (none for a captcha) and the upload and
+  paste fallbacks. Any other detail keeps the generic sentence.
 - **`obf_unavailable` → `runtime_failed` (Zoom):** confirm the founder granted
   the updated app/scope and is already in the meeting. Reconnect through Axal
   when needed; never collect a token manually.
