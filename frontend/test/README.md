@@ -30,12 +30,14 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `claude_file_map_workers_9063.test.mjs` | #9063: CLAUDE.md's file map has a row, saying how it ships, for every folder a wrangler config names; root documents carry no dead relative link. |
 | `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
 | `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
 | `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |
 | `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
+| `run_worker_first_docs_9058.test.mjs` | #9058: the docs that describe `run_worker_first` read the list from `wrangler.toml` (or quote all of it) instead of enumerating a stale part of it; the production list mirrors `[assets]`. |
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |

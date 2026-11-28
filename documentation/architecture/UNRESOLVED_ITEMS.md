@@ -641,8 +641,9 @@ exists. It is an edge challenge on a cold runner IP, not a routing fault; a
 `frontend/public/_worker.js`, which ran only on the Pages mirror (both now
 retired, D36), and `cloudflare-worker/src/middleware/securityHeaders.ts`,
 which runs on API responses. On `axal.vc` and `app.axal.vc`, requests for
-paths outside `run_worker_first` (`/api/*`, `/landing/*`, `/p/*`,
-`/assets/*`) are answered by the Worker's `[assets]` binding without invoking
+paths outside `run_worker_first` (four patterns on that date, `/api/*` and
+`/assets/*` among them; `wrangler.toml` `[assets]` holds today's list) are
+answered by the Worker's `[assets]` binding without invoking
 the Hono app — so neither file ran for `/login` or `/dashboard` there.
 
 **Why it is a blocker and not a judgement call.** Whether those responses
