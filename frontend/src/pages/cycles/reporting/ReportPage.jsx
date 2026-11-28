@@ -13,6 +13,8 @@
  *
  *   THE SENT REPORT (RPT6): who received and opened it, the revision strip,
  *   the report as frozen, and Correct, which opens the next revision's draft.
+ *   D6225 (#6225, GRQ23): the investors' questions on it, each answered once
+ *   from its card (`ReportQuestions.jsx`).
  *   Anyone else the Worker lets read a sent report (an admin, an advisor or a
  *   partner of the venture) reads it with "Read only" (RPT14, RPT15).
  *
@@ -41,6 +43,8 @@ import {
 import { shortDay } from './deskModel.js';
 import { CorrectDialog, SendDialog } from './ReportingDialogs.jsx';
 import ReportPrintButton from './printing/ReportPrintButton.jsx';
+import { FounderQuestions } from './ReportQuestions.jsx';
+import { periodWord } from '../../investor/portfolioReportsModel.js';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -507,6 +511,9 @@ function Sent({ report, navigate, search, justSent }) {
           ) : <p className={MUTED}>No recipient is recorded.</p>}
         </section>
       )}
+      {/* D6225: the investors' questions on this revision, above the report as frozen (GRQ23). */}
+      <FounderQuestions reportUid={report.uid} period={report.period?.label ? periodWord(report.period.label) : null}
+        figures={Object.fromEntries((report.figures || []).map((f) => [f.key, { label: f.label, value: valueText(f) }]))} />
       <FrozenBody report={report} reader={!team} />
       <Documents report={report} sent />
       {correcting && (

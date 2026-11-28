@@ -137,10 +137,10 @@ test('the admin sees every line with its sums, the checklist, the transfers and 
 test('an investor sees their own line and the round’s confirmed total, never the checklist or transfers', async () => {
   const v = await mount(h(ClosingRoom, { dealId: 7, role: 'investor' }), { ...ROUTES, '/deals/7/commitments': [LINES[0]] });
   try {
-    assert.match(v.text('closing-lines'), /Your line/);
-    assert.match(v.text('closing-head'), /Confirmed in the round \$400,000/);
-    assert.ok(v.has('closing-wait-roundTotal'));
-    for (const id of ['closing-checklist', 'closing-transfers', 'closing-lines-sums', 'closing-wait-activity']) assert.ok(!v.has(id), id);
+    // D8926: before the studio opens a closing, the investor meets the v2 canvas's DE38: their own commitment only.
+    assert.match(v.text('closing-not-opened'), /The studio has not opened the closing for this deal yet\./);
+    assert.match(v.text('closing-commitment'), /Your commitment \$400,000 ✓ Confirmed Held for Harbor Ventures/);
+    for (const id of ['closing-lines', 'closing-checklist', 'closing-transfers', 'closing-lines-sums', 'closing-wait-activity']) assert.ok(!v.has(id), id);
     assert.ok(!v.asked.includes('/deals/7/transfers'), 'the transfers read is never made for an investor');
   } finally { await v.close(); }
 });

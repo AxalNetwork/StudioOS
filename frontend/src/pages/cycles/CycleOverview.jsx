@@ -11,7 +11,8 @@ import { MODULES } from './modules';
 import { mvpTargetHref } from './mvpTable.js';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
-import { GROW_MODULE_TITLES, growTabs, reportingHref, growArea, growSubsections } from './growOverviewModel';
+import { GROW_MODULE_TITLES, growTabs, growArea, growSubsections } from './growOverviewModel';
+import { GrowReportingLink } from './GrowRelated';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -131,7 +132,8 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {!record && action?.onClick
             ? <button type="button" className={btn} onClick={action.onClick} disabled={!!action.disabled} data-testid="cycle-action">{label}</button>
             : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
-          {meta.key === 'grow' && !record ? <Link className="inline-flex min-h-[44px] items-center rounded-[9px] border border-axal-hairline px-3 py-2 text-[12px] font-bold text-axal-violet-deep dark:border-gray-700 dark:text-violet-300" to={reportingHref(search)} aria-label="Reporting utility" aria-current={active === 'reporting' ? 'page' : undefined}>Reporting</Link> : null}
+          {/* D4866 (#4866, GR-10): Reporting is a utility on every Grow header, a record's included, never one of the area tabs. */}
+          {meta.key === 'grow' ? <GrowReportingLink search={search} current={!record && active === 'reporting'} /> : null}
           {more}
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>

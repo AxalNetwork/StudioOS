@@ -224,7 +224,10 @@ const letterOf = (p) => {
   const letter = n && typeof n === 'object' ? n.letter : null;
   return Array.isArray(letter) && letter.some((x) => typeof x === 'string' && x.trim());
 };
-const deliveryRecorded = (p) => p?.delivery_count != null || p?.delivered_count != null || p?.delivery_status != null || p?.delivered_at != null;
+// D6240: a reply that carries per-LP counts is recorded only when they are; a period issued before them is not.
+const deliveryRecorded = (p) => (p?.lp_delivery && typeof p.lp_delivery === 'object'
+  ? p.lp_delivery.state === 'recorded'
+  : p?.delivery_count != null || p?.delivered_count != null || p?.delivery_status != null || p?.delivered_at != null);
 
 /** `/funds/<zone>?fund=<id>`, or the period editor of one period. */
 export const zoneHref = (zone, fundId) => (fundId == null || fundId === '' ? `/funds/${zone}` : `/funds/${zone}?fund=${encodeURIComponent(String(fundId))}`);

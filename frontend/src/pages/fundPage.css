@@ -84,3 +84,25 @@
 .fd-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .fd-three > div, .fd-reader-grid > div { min-width: 0; }
 @media (max-width: 1000px) { .fd-three { grid-template-columns: minmax(0, 1fr); } }
+/* D6240: the period page's per-LP delivery list. A table on desktop, one card per LP at phone width. */
+.fd-delivery table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fd-delivery th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #686b7b; padding: 0 8px 7px 0; }
+.fd-delivery td { border-top: 1px solid #e4e5ec; padding: 8px 8px 8px 0; vertical-align: top; }
+.fd-delivery > p { font-size: 11px; color: #686b7b; margin: 10px 0 0; }
+.fd-delivery-opened { color: #08705d; background: #eaf9f0; border-color: #bfe8d2; }
+.fd-delivery-made_available { color: #6d28d9; background: #f4f0fe; border-color: #ddd0fb; }
+.fd-delivery-failed { color: #b42318; background: #fef3f2; border-color: #fecdca; }
+.dark .fd-delivery td { border-color: #383b4d; }
+.dark .fd-delivery th, .dark .fd-delivery > p { color: #adb0c2; }
+.dark .fd-delivery-opened { color: #8fd6b1; background: #12301f; border-color: #1f5a3a; }
+.dark .fd-delivery-made_available { color: #c4b5fd; background: #2a1f4a; border-color: #4c3a8a; }
+.dark .fd-delivery-failed { color: #fda29b; background: #3a1512; border-color: #7a271a; }
+@media (max-width: 640px) {
+  .fd-delivery thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fd-delivery table, .fd-delivery tbody, .fd-delivery tr, .fd-delivery td { display: block; }
+  .fd-delivery tr { border-top: 1px solid #e4e5ec; padding: 9px 0; }
+  .fd-delivery td { border-top: 0; padding: 3px 0; }
+  .fd-delivery td[data-label] { display: flex; justify-content: space-between; gap: 12px; text-align: right; }
+  .fd-delivery td[data-label]::before { content: attr(data-label); color: #686b7b; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
+  .dark .fd-delivery tr { border-color: #383b4d; }
+}

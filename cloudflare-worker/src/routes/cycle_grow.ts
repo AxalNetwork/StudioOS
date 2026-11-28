@@ -92,6 +92,11 @@
  *   PUT    /facebook/page                          { project, page_id | null } the member whose connection chose the Page
  *   POST   /facebook/sync                          { project } the member whose connection holds the venture's link
  *   DELETE /facebook/facts/:id?project=            a writer; it stays deleted
+ * D8815 (#8815, part 3a of #2403): the founder's own X. Distribution's and
+ * Revenue and traction's reads carry `parts.from_x` (`services/x/growFeeds.ts`),
+ * for the venture's team only. Each sync reads from the founder's monthly X budget.
+ *   POST   /x/sync                                 { project } the member whose X serves the venture (the first sync links it)
+ *   DELETE /x/facts/:id?project=&kind=audience|post  a writer; it stays deleted
  *
  * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
  * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
@@ -156,6 +161,11 @@ import {
   FACEBOOK_SLUGS, SENTENCES as FACEBOOK_SENTENCES, acceptFacebookProposal, dismissFacebookProposal, deleteFacebookFact, facebookPart as facebookModulePart, linkOf as facebookLinkOf,
   linkPage as linkFacebookPage, syncFacebook, unlinkPage as unlinkFacebookPage, type FacebookSlug,
 } from '../services/facebook/grow';
+import { XError } from '../services/xClient';
+import { xReadsFor } from '../services/x/reads';
+import { budgetLeft, founderBudget } from '../services/x/budget';
+import { SENTENCES as X_SENTENCES, X_SLUGS, claimVenture as claimXVenture, deleteXRow, syncX, xPart as xModulePart, type XSlug } from '../services/x/growFeeds';
+import { isTeamViewer as isXTeamViewer } from '../services/mercury/teamViewer';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { feedbackCounts, markFeedbackToldMany, themeWeight } from '../services/feedbackLoop';
@@ -615,6 +625,7 @@ r.get('/modules/:slug', async (c) => {
     const parts = { ...(recs.parts ?? {}), ...(meta.slug === 'durable-company-building' ? { can_write: writer } : {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
       ...(await tiktokPart(c, user, pid, meta.slug)),
       ...(await facebookPart(c, user, pid, meta.slug)),
+      ...(await xPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
     // D6103 adds Feedback and the KPIs to the modules with one (`hasGrowExport`).
@@ -1450,6 +1461,94 @@ r.post('/facebook/proposals/:id/dismiss', facebook(async (c, user) => {
   await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id,
     action: 'grow_facebook_channel_dismissed', summary: 'Facebook channel proposal dismissed' });
   return c.json({ ok: true, id, state: 'dismissed' });
+}));
+
+// ── D8815 (#8815, part 3a of #2403): the founder's own X ───────────────────
+
+/** Distribution's and Revenue and traction's X part, for the venture's team; a failed read is `unreadable` and the rest of the module still loads. */
+async function xPart(c: C, user: User, pid: number, slug: string): Promise<{ from_x?: unknown }> {
+  if (!(X_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid), team: await isXTeamViewer(c.env, user, pid) };
+    return { from_x: await xModulePart(c.env, pid, slug as XSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] x part unreadable:', slug, (e as Error).name);
+    return { from_x: { state: 'unreadable', reason: X_SENTENCES.unreadable } };
+  }
+}
+
+class XRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never X's text. */
+export const X_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s X.',
+  x_not_connected: 'X is not connected. Sign in with X on your Connectors page first.',
+  company_not_enabled: 'Your X is not switched on for this venture’s company. Switch it on on the X connector page.',
+  venture_served: 'A teammate’s X already serves this venture. Only they can sync it.',
+  serves_other_venture: 'Your X already serves another venture. One X account serves one venture.',
+  x_monthly_cap_reached: 'You have used this month’s X reads. Nothing was read from X; sync again next month.',
+  sign_in_again: 'X asked you to sign in again.',
+  rate_limited: 'X asked us to wait. Try again in a few minutes.',
+  x_busy: 'Your X connection is being renewed. Try again in a minute.',
+  x_unreadable: 'X could not be read. Nothing changed; try again.',
+  bad_kind: 'Say which X figure: kind=audience or kind=post.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const SIGN_IN_AGAIN = new Set(['x_unauthorized', 'x_refresh_missing', 'x_oauth_refresh_failed', 'x_connection_unreadable', 'x_config_missing']);
+const xReadRefusal = (e: XError): XRefused =>
+  e.code === 'x_monthly_cap_reached' ? new XRefused(429, 'x_monthly_cap_reached')
+    : e.code === 'rate_limited' ? new XRefused(429, 'rate_limited')
+      : SIGN_IN_AGAIN.has(e.code) ? new XRefused(409, 'sign_in_again')
+        : e.code === 'x_refresh_busy' ? new XRefused(503, 'x_busy') : new XRefused(502, 'x_unreadable');
+
+const xRoute = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new XRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof XRefused ? e : e instanceof XError ? xReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: X_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+r.post('/x/sync', xRoute(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'x' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new XRefused(409, 'x_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new XRefused(403, 'company_not_enabled');
+  // Owner decision 2: a spent month is refused before the link, the token or any billed call.
+  if ((await budgetLeft(c.env, user.id)).left < 1) throw new XRefused(429, 'x_monthly_cap_reached');
+  const claim = await claimXVenture(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id });
+  if (claim === 'served') throw new XRefused(409, 'venture_served');
+  if (claim === 'elsewhere') throw new XRefused(409, 'serves_other_venture');
+  const counts = await syncX(c.env, xReadsFor(c.env, row, founderBudget(c.env, user.id)), {
+    integrationId: Number(row.id), projectId: pid, today: new Date().toISOString().slice(0, 10),
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_x_synced',
+    summary: `Grow synced from X: ${counts.snapshots} snapshot, ${counts.posts} posts, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}${counts.capped ? ', monthly reads used' : ''}` });
+  const { used, left, cap } = await budgetLeft(c.env, user.id);
+  return c.json({ ok: true, counts, reads: { used, left, cap } });
+}));
+
+r.delete('/x/facts/:id', xRoute(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const kind = c.req.query('kind');
+  if (kind !== 'audience' && kind !== 'post') throw new XRefused(400, 'bad_kind');
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteXRow(c.env, kind, pid, id) : null;
+  if (!slug) throw new XRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: kind === 'audience' ? 'grow_x_snapshot_deleted' : 'grow_x_post_deleted',
+    summary: kind === 'audience' ? 'X audience snapshot deleted' : 'X post figures deleted' });
+  return c.json({ ok: true, id });
 }));
 
 export default r;
