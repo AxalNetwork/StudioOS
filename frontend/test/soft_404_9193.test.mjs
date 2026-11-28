@@ -48,8 +48,8 @@ async function appAt(route) {
   let shown; let left;
   try {
     await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route] }, h(App))); });
-    for (let i = 0; i < 120; i += 1) {
-      await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
+    for (let i = 0; i < 5000; i += 1) {
+      await act(() => new Promise((r) => setImmediate(r)));
       if (select(doc, 'h1').length) break;
     }
     shown = { ...headNow(), h1s: select(doc, 'h1').map((n) => n.textContent.trim()) };
