@@ -23,6 +23,11 @@
  *     and gives focus back to the button that opened it, with 44 px actions;
  *   · Eadwyn (SE12) offers the security prompts first, and models, usage and
  *     top-up are one link away rather than on the page.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D4803 (#4803, #4800 §7): HQ › Security's
+ * seven workspaces at 1440, 768 and 390, light and dark — zero serious or critical axe violations,
+ * no page wider than its viewport; the workspace keys, the phone select and findings at 44 px, the
+ * revoke sheet's focus on a phone, and Eadwyn's security prompts; no screenshots
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

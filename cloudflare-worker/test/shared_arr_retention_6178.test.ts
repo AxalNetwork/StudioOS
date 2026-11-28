@@ -1,4 +1,9 @@
-/** #6178: recorded ARR/net retention, source proof, immutable sharing and investor isolation. */
+/** #6178: recorded ARR/net retention, source proof, immutable sharing and investor isolation.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `shared_arr_retention_6178.test.ts`
+ * covers recorded ARR/net retention, founder snapshot/context/save/send, source proof, unit
+ * rejection, Report Figures parity, sent immutability and investor sharing/NDA boundaries.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

@@ -1,4 +1,8 @@
-/** D7917: exact-run deletion with a fake CLI, refusal/retry, and bounded workflow cleanup after cancellation. */
+/** D7917: exact-run deletion with a fake CLI, refusal/retry, and bounded workflow cleanup after cancellation.
+ *
+ * From frontend/test/README.md (moved by #6472): D7917: fake-CLI exact-run cleanup, unsafe-record
+ * refusal, retry and workflow timeout/always contract.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync,writeFileSync,readFileSync,existsSync,symlinkSync,rmSync } from 'node:fs';

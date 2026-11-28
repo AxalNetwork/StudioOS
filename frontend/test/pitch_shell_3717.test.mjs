@@ -1,4 +1,8 @@
-/** #3717: real pitch frames over synthetic reads; no accounts or live writes. */
+/** #3717: real pitch frames over synthetic reads; no accounts or live writes.
+ *
+ * From frontend/test/README.md (moved by #6472): #3717: pitch route/frame/crumb integration,
+ * shared gutter and responsive grids, with restored-old-behavior mutations.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

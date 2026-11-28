@@ -1,4 +1,8 @@
-/** #6094: frozen report provenance, audience privacy and literal print content. */
+/** #6094: frozen report provenance, audience privacy and literal print content.
+ *
+ * From frontend/test/README.md (moved by #6472): #6094: frozen print provenance, zero/absence,
+ * literal narrative and reader/private-recipient boundaries.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -13,6 +13,11 @@
  * This file drives the real, exported functions against a real
  * node:sqlite database built from the full baseline — not a mock, and not
  * a re-implementation of the SQL.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `aggregator_false_zeros_d301.test.ts`
+ * checks real SQLite aggregator counts, unreadable tables and draft suppression. Its first-day
+ * booking regression pins the clock so the seeded timestamp and preview share the exact window
+ * boundary.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

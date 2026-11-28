@@ -10,6 +10,17 @@
 //
 // Registered by `_airailRender.mjs` before it imports App, after the deck
 // loader, so a frontend source arrives here already transformed.
+//
+// From frontend/test/README.md (moved by #6472): D781 (#2106) renders the whole app.
+// `_airailRender.mjs` mounts the real `App` in a `MemoryRouter` at every route in D768's page map,
+// signed in as a member of the route's profile, on `_appDom.mjs` (a DOM that keeps elements,
+// attributes and text, and answers the browser APIs App calls inertly), with
+// `_airailRender-hook.mjs` loading JSON modules and an empty `import.meta.env`. The Worker is
+// never called: a fixture table answers the session and the pages that need data before they draw,
+// and every other request answers 503, then 200 `{}`. The six
+// `airail_render_<profile>_d781.test.mjs` files each render one profile, and fail on a route that
+// does not draw exactly one rail with its page key unless `RENDER_NOT_YET` lists it.
+// `airail_every_page_d781.test.mjs` holds the rules to fixtures.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

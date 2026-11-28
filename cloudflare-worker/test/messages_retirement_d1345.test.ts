@@ -1,4 +1,8 @@
-/** D1345: mounted tombstones and scoped Email handoffs on real SQLite. */
+/** D1345: mounted tombstones and scoped Email handoffs on real SQLite.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): Phase 1: real mounted 410s and own-LP /
+ * own-advisor Email recipient scopes on migrated SQLite.
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';

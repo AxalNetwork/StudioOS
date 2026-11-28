@@ -1,4 +1,8 @@
-/** D5673: real SQLite source journal, paginated provider fixtures and hostile metadata/redirection refusals. */
+/** D5673: real SQLite source journal, paginated provider fixtures and hostile metadata/redirection refusals.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5673: `cloudflare_sources_5673.test.ts`
+ * covers paginated provider metadata, real SQLite replay/CAS and protected source reads.
+ */
 import test, { before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

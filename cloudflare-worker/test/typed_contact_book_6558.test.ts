@@ -1,4 +1,9 @@
-/** D6558: mounted own-book writes, pending matches, isolation, support refusal and transactional provenance. Synthetic people only. */
+/** D6558: mounted own-book writes, pending matches, isolation, support refusal and transactional provenance. Synthetic people only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6558: mounted own-book typed writes,
+ * pending duplicate reviews, isolation, validation, support refusal and atomic provenance
+ * rollback.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

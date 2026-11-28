@@ -1,4 +1,9 @@
-/** D1191: real routers and SQLite; all identities and investor records are synthetic. */
+/** D1191: real routers and SQLite; all identities and investor records are synthetic.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1191: real-route access, staff
+ * summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the
+ * canonical schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';

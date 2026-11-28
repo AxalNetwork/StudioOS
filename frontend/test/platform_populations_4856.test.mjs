@@ -4,6 +4,10 @@
  * another's denominator.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/platform_populations_4856.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): `platform_populations_4856.test.mjs` checks HQ ›
+ * Platform › Storage's populations: the split in the total's note, the members tile's own
+ * denominator, and no zero when the plans cannot be read (D4856).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

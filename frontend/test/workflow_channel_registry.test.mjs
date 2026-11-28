@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D6370: validate operator registry construction
+ * against private Slack membership.
+ */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { botMemberships, buildRegistry } from '../../scripts/build-workflow-slack-registry.mjs';

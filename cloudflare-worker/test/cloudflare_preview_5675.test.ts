@@ -1,4 +1,9 @@
-/** D5675: provider-free signed preview callback, existing host lifecycle, promotion refusal and synthetic cleanup. No cloud resources or messages. */
+/** D5675: provider-free signed preview callback, existing host lifecycle, promotion refusal and synthetic cleanup. No cloud resources or messages.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5675: `cloudflare_preview_5675.test.ts`
+ * exercises signed preview-only callback, host replay/cleanup and promotion guards without a
+ * customer meeting.
+ */
 import { spawnSync } from 'node:child_process';
 import test, { before, after, mock } from 'node:test';import assert from 'node:assert/strict';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync,existsSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';

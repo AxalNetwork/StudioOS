@@ -1,4 +1,9 @@
-/** D7815 (#7815): overlapping mounted add-member requests retain the column limit and distinct positions on SQLite. */
+/** D7815 (#7815): overlapping mounted add-member requests retain the column limit and distinct positions on SQLite.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7815: overlapping mounted add-member
+ * requests in all arrival orders preserve the live limit, distinct positions and duplicate
+ * response.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';

@@ -1,3 +1,9 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): `_baseline.mjs` pulls one table's
+ * `CREATE TABLE` out of `schema_baseline.sql` so a fixture is the schema production has rather
+ * than a hand-copy that drifts from it — three tests had each grown their own copy of that reader,
+ * and one of the copies had already been caught reading a column name production does not use.
+ */
 import { readFileSync } from 'node:fs';
 
 /**

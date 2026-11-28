@@ -9,6 +9,9 @@
  * whose self-heal writes `tos_v1` and `privacy_v1` as pending, and from then on `/auth/me` says
  * `terms_acceptance_pending` and the app draws the terms screen in place of every page. B reaches that strip only
  * at 1440px, and only when the venture page lives long enough to read it, which is how step 5 failed some runs.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): What `server.ts` seeds for that spec: two
+ * onboarded accounts per width that own nothing yet; made-up names
  */
 import { createJWT } from '../../../cloudflare-worker/src/auth.ts';
 import { recordTermsAcceptance, seedObligations } from '../../../cloudflare-worker/src/services/trust.ts';

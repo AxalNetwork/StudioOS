@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1151: encoded deal clients preserve response
+ * states.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

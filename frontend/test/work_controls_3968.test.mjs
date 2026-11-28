@@ -1,4 +1,7 @@
 // D1614 (#3968): the existing WK1–WK3 controls must change reads and charts.
+//
+// From frontend/test/README.md (moved by #6472): WK1–WK3 filter and burn-up interactions through
+// real clients, attribution, failed reads and late responses (#3968).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

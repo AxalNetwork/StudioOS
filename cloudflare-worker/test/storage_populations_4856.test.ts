@@ -4,6 +4,11 @@
  * unknown-size files, and the total is their sum.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/storage_populations_4856.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4856 (#4856):
+ * `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule
+ * (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage
+ * read's members, staff and unattributed populations to their sum.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

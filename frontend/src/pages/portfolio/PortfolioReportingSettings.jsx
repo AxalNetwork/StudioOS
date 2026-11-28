@@ -1,4 +1,9 @@
-/** D6214: approved PF-13–19 reporting-settings sheet; revisions apply from the current period. */
+/** D6214: approved PF-13–19 reporting-settings sheet; revisions apply from the current period.
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `PortfolioReportingSettings.jsx` —
+ * D6214: approved reporting-rule sheet with independent cadence reads, GP edits, attribution and
+ * revision conflicts.
+ */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Sheet from '../../ui/Sheet.jsx';
 import './reportingSettings.css';

@@ -8,6 +8,10 @@
  * (`interviewIntake.writableSession`). Call it after `interview_sessions`
  * exists. Every step is skipped when the world already has it, so a fixture
  * that builds part of this itself keeps working.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_engine_schema.mjs` (D757) gives a
+ * world whose sessions reach the Validate engine what it reads: migrations 453, 465 and 487,
+ * `queue_jobs`, and the member and venture columns `writableSession` checks.
  */
 import { readFileSync } from 'node:fs';
 import { tableFromBaseline } from './_baseline.mjs';

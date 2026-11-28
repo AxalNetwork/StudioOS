@@ -20,6 +20,11 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deal_flow_thesis_6147.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6147: New for you's thesis source: the
+ * High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared
+ * on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an
+ * isolated failed fit read.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

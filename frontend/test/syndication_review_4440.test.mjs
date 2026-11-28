@@ -1,4 +1,9 @@
-/** D4440 (#4440): regressions for all eight confirmed post-merge syndication findings. */
+/** D4440 (#4440): regressions for all eight confirmed post-merge syndication findings.
+ *
+ * From frontend/test/README.md (moved by #6472): D4440: all eight confirmed review findings,
+ * actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect
+ * and ticket-link validation.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act, useState } from 'react';

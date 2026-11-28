@@ -1,4 +1,8 @@
 // D6024: confirmed record removal returns to the list, and removed plan targets have no stale link.
+//
+// From frontend/test/README.md (moved by #6472): D6024: mounted record
+// confirmation/cancel/refusal/retry and list return for both removal actions; retained plan
+// history suppresses removed/demoted record links.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { act } from 'react';

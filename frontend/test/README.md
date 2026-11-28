@@ -1,6 +1,6 @@
 # frontend/test — what the frontend guarantees
 
-`ci_capacity_auth_composition_8011.test.mjs` exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains the real Linux profile/executor composition and its success, failure, revocation and incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+<!-- index: none -->
 
 ```
 node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
@@ -23,45 +23,15 @@ that a method exists on both sides, that a component is mounted and not merely
 defined, that a page reads the shape the worker actually returns, and that a
 number on screen traces back to a column.
 
-D1180 retired the old Financials page and the suite that mounted it (D1174's);
-`capital_model_retired_d1180.test.mjs` pins the retirement, and Forecast's own
-suite (`use_of_funds_d1178.test.mjs`) holds the model. The cap-table suite
-also exercises a `project_id` deep link.
+## Adding a test
 
-| File | Guarantee |
-| --- | --- |
-| `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
-| `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
-| `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |
-| `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
-| `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
-| `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
-| `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
-| `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
-| `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
-| `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
-| `dr_cleanup_7917.test.mjs` | D7917: fake-CLI exact-run cleanup, unsafe-record refusal, retry and workflow timeout/always contract. |
-| `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
-| `d1_backup_stream_d7142.test.mjs` | D7142: the backup manifest and the drill split stream the export: byte-identical to the frozen pre-D7142 code (`fixtures/d7142_old_*.mjs`) at read sizes down to one byte, a statement or `;` across a read boundary counted once, and an export bigger than the heap read under a heap cap (the >600 MiB run with `D7142_LARGE=1`). |
-| `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
-| `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
-| `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
-| `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
-| `_landingDecision_6476.mjs` | D6476-p7: a synthetic `readLandingDecision()` result built by the real `landPr.decide()`, one option per gate to break; read by the ejection handler's policy and recovery suites. |
-| `landing_bot_ejection_policy_6476.test.mjs` | D6476-p7: the ejection handler re-queues only after a fresh landing decision for the exact head allows it (LANDING_AUTO now and on the report, #5500, the merge-queue rule, the stalled alert); each refusal waits or hands back with its reason, including through the real reader. |
-| `landing_gate_classifier_5606.test.mjs` | D5606: coexisting aggregate gates preserve setup fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check failures remain excluded. |
-| `queue_stall_chains_7125.test.mjs` | D7125: the queue-stall alert opens only when one failure identity is in two merge-queue chains on three heads, names the base or the PR it starts at, replays 2026-11-17 (`fixtures/queue_stall_7125.json`), and `test-drift-parts.mjs` writes the escaped `ci-failure-id` annotations only under `merge_group`. |
-| `build_parts_contract_5507.test.mjs` | D5507: THE contract for Build's connector parts: every module's complete, ordered list, written by hand; provider suites assert only their own key. Update it, once, when a part is added, removed or moved. |
-| `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
-| `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
-| `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
-| `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
-| `runner_admission.test.mjs` | D7886: durable receipt bindings, source/queue/child provenance and fail-closed missing authority. |
-| `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
-
-| `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
-
-| `deal_summary_menu_7771.test.mjs` | #7771: labelled Share menu availability on desktop/phone, PDF filename and blob, Worker refusals and abort on unmount. |
+This README lists no files (D6472, #6472). A test file explains itself in its
+own header comment: the decision or issue it holds, what went wrong, and what
+it guarantees. Adding a test adds its file and nothing else; a table row or a
+paragraph here naming one file fails `scripts/check-folder-docs.mjs`. A file
+whose name starts with `_` is a helper the tests import, described the same way.
+`fixtures/` holds the small synthetic trees and recordings the tests and helpers
+read, never real pages or personal data.
 
 ## Conventions
 
@@ -70,7 +40,7 @@ also exercises a `project_id` deep link.
 - Assert against code, not comments — several of these tests were first written
   against a doc comment and passed over broken code.
 - When a test bans a word, check the file's own comments do not use it.
-- `_deck-loader.mjs` is the JSX/asset loader; every run needs `--import` on it.
+- Every run imports the JSX/asset loader, `--import ./frontend/test/_deck-loader.mjs`.
 - A test that asks a whole-app route question (is this path registered, what
   does its guard admit, does the admin walk reach it) reads
   `readRoutesSource()` from `_routesSource.mjs`, never `App.jsx` alone: since
@@ -86,221 +56,9 @@ also exercises a `project_id` deep link.
   in the re-export block reads `apiModulesBlock()` from `_apiModulesBlock.mjs`:
   the block is generated into `frontend/src/lib/apiModules.generated.js`, not `api.js`.
 
-D1604's editor suites (`pitch_v2_chrome_d1604.test.mjs`,
-`pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck editor through
-`_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
-restored on close. Its `onDocument` hook (D1515) runs after the synthetic
-document is installed and before the editor renders, so
-`pitch_editing_ops_d1515.test.mjs` can put a fake IndexedDB, kept across two
-mounts, and a keydown recorder on the window.
-
-D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
-parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
-(allowlisted content, dated download and one-page measured bounds).
-`record_mode_d696.test.mjs` checks mounted record reads and writes; its mutation targets the record-mode guard separately from Distribution tab guards.
-`_record_d696.mjs` supplies synthetic records and isolated mutation imports.
-Each behavioral assertion group runs against the original source, against
-changes it must reject, and again against the restored source; no checkout
-file is changed by a mutation. No live API or personal data is used.
-
-D695's independent form UI is exercised by `add_lightbox_d695.test.mjs`.
-`_form_d695.mjs` supplies a small React DOM/effect harness and isolated source
-mutations. The tests drive real inputs, payloads, loaded choices, refusals,
-done views, responsive page transitions and modal focus/Escape behavior.
-`add_addresses_d695.test.mjs` pins every form's `key` and `cta`, the T, CH
-and CK kinds in `initialValues` and `validate` (each legacy form checked
-against the rules it had before), the four `/:slug/new` routes and Customer
-research's redirect, and the Add link's `state`. The helper resolves an
-extensionless or directory import in a mutated source as the loader hook does.
-`add_routes_d695.test.mjs` renders every registered form in the dialog, and
-mounts the real `CycleRoute` (the Worker stubbed) for the `/new` addresses, the
-phone page, `?add=1`, a save's re-read and Edit through `state.editing`, each
-against source mutations of `CycleRoute.jsx` too.
-`form_options_d695.test.mjs` is test 11's client half: `formOptions`'s path and
-query for every cycle module against a stubbed `request`, the refused cycles
-and slugs, and the drift parser's `GET /cycles/:p/modules/:p/form-options`.
-`add_forms_validate_d695.test.mjs` mounts Validate's five specs and their
-Edits against a stubbed write table, with PR 2b's registration, chip loaders,
-search and record-opened Edits. It reads each body's keys against
-`cloudflare-worker/src/routes/cycle_validate.ts` on `main`;
-`cloudflare-worker/test/cycle_forms_d695.test.ts` sends them through the real routes.
-`add_forms_build_d695.test.mjs` does the same for Build's six specs (PR 3a) and
-PR 3b's registration, loaders, Proof and stored words, reading each body
-against `cloudflare-worker/src/routes/cycle_build.ts` on `main`.
-`add_forms_raise_grow_d695.test.mjs` mounts Grow's and Raise's seven canvas
-forms and their Edits (#1657) against a stubbed write table, Raise's with each
-module's `form-options` reply, and checks their client writes.
-`cloudflare-worker/test/cycle_forms_raise_grow_d695.test.ts` sends Raise's
-bodies through the real routes.
-Registry and routing integration cases follow when their dependencies merge.
-
-D755 CR7 (#1985): `checkout_token_pack_d755.test.mjs` mounts the checkout and
-confirmation with stubbed API/Stripe modules, drives billing country, payment,
-redirects and bounded polling, and checks 14 scenarios against 31 isolated
-source mutations. Every mutant must fail its scenario and the restored source
-must pass. No real payment or credit write runs. `ai_topup_cart_d629.test.mjs`
-keeps the ordinary cart regression; the top-up cart path is retired.
-
-The CR7 suite also mounts `TokenPacksSection.jsx` with fixture public reads, covering Buy identifiers (including the environment fallback), visitor sign-in links, unavailable/unreadable/retry and cart exclusion. Shared-model regression/mutation checks keep ready packs authoritative over the deprecated product switch and centralize the UI destination without rejecting API endpoints.
-
-D781 (#2106) renders the whole app. `_airailRender.mjs` mounts the real `App`
-in a `MemoryRouter` at every route in D768's page map, signed in as a member
-of the route's profile, on `_appDom.mjs` (a DOM that keeps elements,
-attributes and text, and answers the browser APIs App calls inertly), with
-`_airailRender-hook.mjs` loading JSON modules and an empty `import.meta.env`.
-The Worker is never called: a fixture table answers the session and the pages
-that need data before they draw, and every other request answers 503, then
-200 `{}`. The six `airail_render_<profile>_d781.test.mjs` files each render one
-profile, and fail on a route that does not draw exactly one rail with its page
-key unless `RENDER_NOT_YET` lists it. `airail_every_page_d781.test.mjs` holds
-the rules to fixtures.
-
-D1123 extends the Lab desks, overview and operations tests for Formation scope, cohort details, structured admission and grant/refusal states.
-
-| File | Purpose |
-|---|---|
-| `raise_evidence_client_d1263.test.mjs` | D1263: request methods, project paging, snapshot/version guards and encoded evidence/claim paths. |
-| --- | --- |
-| `deal_insights_client_d1151.test.mjs` | D1151: encoded deal clients preserve response states. |
-| `safari_regex_compat_3592.test.mjs` | #3592: number segments and image descriptions match the previous expressions; an empty-allowlist source guard rejects regex lookbehind. |
-| `messages_retirement_d1345.test.mjs` | EM10 routing and acknowledgment, blocked storage, account isolation, GP fund selection, and retirement of old client calls. |
-| `linkedin_brand_d1355.test.mjs` | D1355: official logo/button source pins, unchanged asset bytes, approved theme variants, minimum sizing and truthful sign-in/import entry points. |
-| `route_error_recording_3593.test.mjs` | #3593: recording-safe chunk-error copy, SPA return links, deferred manual reload and unchanged idle recovery. |
-| `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
-| `pitch_diagrams_d1542.test.mjs` | D1542 (#3780): `deckV2Adapter.diagrams` swapped to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the canvas, and the check line. |
-| `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening; four failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up refresh and refusal reset), plus missing-task text during a board reload. |
-| `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
-| `general_counsel_4421.test.mjs` | #4421: rendered rule book, open/history queue, proposal and Ask notices; answered payment/plan pills removed. |
-| `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |
-| `redirect_retirement_d2319.test.mjs` | D2319 (#2319), #4415: retired aliases, protected outside links and retained beacon groups. |
-| `_retiredRedirects_2319.mjs` | D2319: recorded policy for route-pin tests, including concrete addresses matching retired dynamic patterns. |
-| `comarketing_split_4439.test.mjs` | D4439: founder Partner network door and counted forward, partner Offers, investor guard and navigation, and visit attribution path. |
-| `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
-| `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
-| `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
-| `distribution_results_4491.test.mjs` | D4491: Results' named Not recorded reasons, cost-per-lead rounding, the MRR note and link, the read-error card with no raw error, the window check and the CycleRoute line. |
-| `learning_home_actions_4481.test.mjs` | D4481: desktop/phone Register and refusals, rapid double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats through existing clients. |
-| `distribution_inbox_4494.test.mjs` | D4494: real Inbox/composer behavior, actual count/empty states, client requests, source alignment, and stale selection/search guards. |
-| `distribution_newsletter_4495.test.mjs` | D4495: the not-connected copy, the disabled Connect with its visible reason, Not recorded results, and no request at all (never `/api/newsletter`). |
-| `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
-
-`team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
-| `account_licences_4472.test.mjs` | D4472: account licence client paths, payload and verbs. |
-| `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
-| `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
-| `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
-| `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
-| `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
-| `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
-| `hub_freeze_5615.test.mjs` | D5615: every name in the five hub files is on `scripts/hub-freeze.json`; a new `api` key, `app.route(…)`, import or advisors registration fails naming the entry and its `HUBS.md` section; a removal passes with no list edit; `CycleRoute.jsx` holds no cycle entry. |
-
-- `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
-
-- `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
-
-- `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
-`distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
-`platform_populations_4856.test.mjs` checks HQ › Platform › Storage's populations: the split in the total's note, the members tile's own denominator, and no zero when the plans cannot be read (D4856).
-
-`venture_context_5074.test.mjs` checks D5074: every venture alias resolves to one context, the one `?project_id=` form, legacy redirects keeping the query and hash, the Data room on the shared context only, and its controls drawn from the Worker's capabilities. `_data_room_capabilities.mjs` holds those capability maps for fixtures; the Worker's `data_room_capabilities_5074.test.ts` pins them to `cloudflare-worker/src/services/dataRoomCapabilities.ts`.
-
-`raise_refused_no_data_5079.test.mjs` checks D5079: a refused authoritative read ends the rendering of authoritative data for that Raise tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure and not a refusal, a Data room `summary` answer says it is not the room rather than drawing nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line is broken in a temporary copy of `frontend/src` and `frontend/test` (every other entry links to the checkout) and the file re-run there in a child process filtered to the tests that must then fail, because the refusal travels from a tool's read through `CycleRoute` into the module page. The checkout is never written to, so test files running in parallel never import a broken line.
-
-- `scan_triggers_5602.test.mjs` — D5602 admission, artifact fencing, real alert CLI transitions and mutation coverage.
-`runner_lanes_5611.test.mjs` checks branch-only benchmark triggers, exact merged suite-step parity and free-runner placement of non-token secret jobs (D5611).
-`pipeline_accessibility_4705.test.mjs` checks native studio deal entry, shared creation-sheet semantics, associated fields, fixed failure copy, retained drafts and a synthetic API-call baseline (D4705).
-`delivery_stale_writes_4710.test.mjs` mounts all four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a stale Mark sent never claims success or retries on reload (D4710).
-| `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
-
-| `notification_routing_5666.test.mjs` | D5666: lifecycle, shared incidents, claim ambiguity, required-check cutover and SQLite rollback/replay. |
-| `health_alert_repair_5663.test.mjs` | D5663: health episode concurrency, crash/retry and future-clock evidence regressions. |
-| `engineering_events_5664.test.mjs` | D5664: signed metadata ingress, immutable attempts, capped REST reconciliation and Workers SQLite restart. |
-| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
-| `cloudflare_delivery_5671.test.mjs` | D5671: authenticated source, isolation, replay, paging, sharing and Workers restart. |
-| `platform_policy_5672.test.mjs` | D5672: sensor states, denominator, persistence prerequisites and episode recovery. |
-| `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
-| `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
-| `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
-| `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
-| `shared_arr_retention_6178.test.mjs` | #6178: canonical ARR/retention tiles, typed provenance, as-of, zero/absence and the existing founder Metrics step. |
-| `onboarding_followups_d6135.test.mjs` | D6135: actual investor wizard failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal and role-safe fund handoff. |
-| `diligence_doors_d6292.test.mjs` | D6292: investor sidebar eligibility, scoped recorded context links, shared URL reload, filters/search/history/paging and stale response protection. |
-| `report_print_6094.test.mjs` | #6094: frozen print provenance, zero/absence, literal narrative and reader/private-recipient boundaries. |
-| `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
-| `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
-| `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
-| `build_feature_removal_6024.test.mjs` | D6024: mounted record confirmation/cancel/refusal/retry and list return for both removal actions; retained plan history suppresses removed/demoted record links. |
-| `unused_imports_attributes_6381.test.mjs` | D6381: attributed and side-effect imports preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow delivery regression stays clean. |
-
-| `fund_admin_prepare_6397.test.mjs` | D6397: consume the scoped call-preparation navigation once, retaining blank amount/date and verified preview permission. |
-
-| `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
-| `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
-| `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
-| `practice_delivery_shell_4833.test.mjs` | D4833-p4: Delivery in the Practice v2 shell: PX-06's heading, line and header primary read from the canvas, the primary in every list state, no chips over an empty or unread list, the PX-06 A order, and the card's Client Sheet. |
-| `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
-| `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
-
-| `deal_flow_attention_6424.test.mjs` | D6424: recorded stale/new/waiting badges, unset rule, firm setting and failed attention-source rendering. |
-| `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
-| `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
-| `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
-| `scan_remediation_6935.test.mjs` | D6935/D7899 alert tracking, S21 handoff, existing-PR linking, retries and default-branch verification without GitHub AI or generated fixes. |
-| `free_security_workflows_7899.test.mjs` | D7899 immutable PR/queue dependency comparisons, read-only review authority, trusted public-main posture admission and successful-only SARIF uploads, with mutation/restoration cases. |
-| `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
-| `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
-| `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
-| `grow_export_6103.test.mjs` | D6103: `canExport` covers only Feedback and KPIs, `exportCsv`'s path and query against the Worker route, Export drawn only with `onExport` (and only on `can_export` in CycleRoute), the saved row count and the Worker's refusal sentence. |
-| `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |
-| `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
-| `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
-
-| `research_errors_7587.test.mjs` | D7587: recording Start recovery, microphone release, preserved queued audio and explicit session navigation. |
-`release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
-
-| File | Guarantee |
-| --- | --- |
-| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
-| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
-| `verdict_v10_6018.test.mjs` | Unselected form, evidence gaps, Stop policy and recorded-decision separation. |
-| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
-| `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
-| `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
 Prefer scoped business clocks and explicit observable outcomes to a fixed count
 of event-loop turns. The migration inventory and first changed-test command are
 in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
 run remains the integration signal for JavaScript, SQLite and child processes.
-| `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
-| `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
-
-`company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
-`portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
-`icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
-`build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
-
-| `runner_capacity_7888.test.mjs` | D7888: bounded read-only capacity metadata, pagination, identity/timing/privacy, failure/cancel/restart and CLI GET-only checks. |
-`runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
-| `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
-
-| `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
-| `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
-| `csv_safe_parity_7811.test.mjs` | D7811: shared formula-safe literal cases and opt-in serialization parity. |
-| `csv_private_copies_7811.test.mjs` | D7811: file-keyed pending CSV copies and detection of new private escapers. |
-| `_csv_safe_7811.mjs` | D7811: one literal CSV case table shared with Worker tests. |
-
-| `research_changed_interfaces_7815.test.mjs` | D7815: actual project Compare retry/status recovery, tab results return and stale catalogue/dossier responses after route changes. |
-| `portfolio_reporting_settings_6214.test.mjs` | Reporting settings loading, partial reads, read-only defaults and GP save states. |
-| `revenue_metrics_5952.test.mjs` | D5952: quarterly ledger metric states, currency/period joins, per-licence receipts and AI, automatic promo report and coverage metadata; rendered components over synthetic envelopes. |
-| `fund_report_reader_6250.test.mjs` | Issued report prose, frozen figures, attribution, correction links, absence and Print. |
-| `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
-| `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
-| `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
-
-`company_attribution_7812.test.mjs` walks the canonical publisher reference across company table, responsive cards, profile and analysis subject attribution, including missing/unreviewed provenance and field-read failure.
-`hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
-| `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
-| `effective_legal_facts_8831.test.mjs` | D8831: approved policy corrections, protected regulatory rows, email-only notice and existing receipt versions. |
-| `licence_statements_initial_invoice_9112.test.mjs` | D9112 L46 and L46B invoice rendering, status, PDF and partial failure. |
-`capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.

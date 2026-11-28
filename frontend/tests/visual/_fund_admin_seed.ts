@@ -11,6 +11,10 @@
  * one Mercury account with two credits, a proposed match and a match that
  * needs review. The viewer is HQ Security's Super Admin (9001,
  * `_security_seed.ts`). Every name, digit and reference is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): What `server.ts` seeds for that spec,
+ * read through the real routes as HQ Security's Super Admin: one fund with three LPs, an overdue
+ * call line, fee periods, a prepared pack and two bank matches. Made-up names
  */
 
 const day = (now: number, n: number) => new Date(now + n * 86_400_000).toISOString().slice(0, 10);

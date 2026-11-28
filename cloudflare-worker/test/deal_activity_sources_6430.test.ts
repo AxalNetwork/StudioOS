@@ -1,4 +1,9 @@
-/** D6430: real migrated SQLite and mounted deal activity, with each source's own privacy gates. Synthetic records only. */
+/** D6430: real migrated SQLite and mounted deal activity, with each source's own privacy gates. Synthetic records only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6430: mounted real-SQLite data-room
+ * grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and
+ * per-source failures.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

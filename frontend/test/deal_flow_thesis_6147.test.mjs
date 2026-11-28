@@ -6,6 +6,10 @@
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deal_flow_thesis_6147.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D6147: New for you's thesis matches: the chip,
+ * the reasons line, the cap line, Set your thesis when none is set, and the unreadable source
+ * named while the rest list.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

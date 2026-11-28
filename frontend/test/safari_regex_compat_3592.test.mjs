@@ -1,4 +1,7 @@
 // #3592: the old expressions are test-only oracles; nothing here enters the SPA.
+//
+// From frontend/test/README.md (moved by #6472): #3592: number segments and image descriptions
+// match the previous expressions; an empty-allowlist source guard rejects regex lookbehind.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';

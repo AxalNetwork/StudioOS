@@ -1,4 +1,8 @@
-/** D4472 (#4472): synthetic accounts, real SQLite batches, licence union and appointment rollback. */
+/** D4472 (#4472): synthetic accounts, real SQLite batches, licence union and appointment rollback.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4472: additional licence union, grants,
+ * auth, atomic appointment rollback and co-marketing admission/revocation with primary-only HQ.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

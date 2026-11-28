@@ -1,4 +1,9 @@
-/** D1345 phase 2: guarded removal, after the retirement Worker is deployed. */
+/** D1345 phase 2: guarded removal, after the retirement Worker is deployed.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): Post-rollout phase: migration
+ * `202611022352_retire_messages` asserts all four retired Messages stores are empty before
+ * dropping them, preserving Email. Release only after the retirement Worker is confirmed live.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

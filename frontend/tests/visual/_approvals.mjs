@@ -7,6 +7,10 @@
  * here; a read with no fixture (the shell's own) answers {}, and each POST is
  * answered ok and listed in `log`. Every name
  * is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): The reads Approvals makes, answered for
+ * that spec: the glance, inbox, item, weekly, Decided and the boards, as the Worker answers them;
+ * made-up names
  */
 import { NOW } from './_editor.mjs';
 

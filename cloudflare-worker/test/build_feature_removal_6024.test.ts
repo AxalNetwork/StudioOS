@@ -1,4 +1,8 @@
 // D6024: real Build record actions, protected references, atomic removal and honest plan history.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D6024: real record gates,
+// protected/racing references, FK cascades and atomic actor audit, must-have demotion, canonical
+// metrics and retained plan history.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';

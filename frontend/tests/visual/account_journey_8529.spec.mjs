@@ -14,6 +14,11 @@
  *
  *   npm run build                                                   (repo root)
  *   cd frontend && npx playwright test -c tests/visual/playwright.config.mjs account_journey_8529
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D8529 (#8529): the whole account journey
+ * at 1440 and 390 — company and projects, an emailed invitation read from the outbox, sign-in
+ * returning to it, one seat, the right settings after a reload, an old address resolving after a
+ * move, and a revoked seat
  */
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';

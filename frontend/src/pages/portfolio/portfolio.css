@@ -1,5 +1,9 @@
 /* D4817 part 1 (#5311): the Portfolio v2 frame and its shared patterns.
-   Tokens on .pf-shell, redefined under .dark; every board reuses these classes. */
+   Tokens on .pf-shell, redefined under .dark; every board reuses these classes.
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `portfolio.css` — the frame's
+ * tokens (redefined under `.dark`) and its tablet (1100px, 850px) and phone (600px) layouts.
+ */
 .pf-shell{--pf-bg:#f4f3f7;--pf-card:#fff;--pf-raised:#f8f7fb;--pf-ink:#18181b;--pf-mu:#5f5a6b;--pf-hair:#e7e5ee;--pf-hair2:#d3d0dc;--pf-vt:#6d28d9;--pf-vi:#7c3aed;--pf-lav:#f3effe;--pf-lavE:#ddd2fb;--pf-pos:#047857;--pf-posBg:#ecfdf5;--pf-posE:#a7f3d0;--pf-neg:#b91c1c;--pf-negBg:#fef2f2;--pf-negE:#fecaca;--pf-amT:#92400e;--pf-amBg:#fffbeb;--pf-amE:#fcd34d;--pf-skel:#e7e5ee;
   display:flex;align-items:stretch;min-height:100%;color:var(--pf-ink);font-family:var(--font-app);position:relative}
 .dark .pf-shell{--pf-bg:#0f0e17;--pf-card:#171622;--pf-raised:#1d1c2a;--pf-ink:#f3f2f7;--pf-mu:#a6a2b8;--pf-hair:#2c2b3c;--pf-hair2:#3b3a4f;--pf-vt:#c4b5fd;--pf-vi:#a78bfa;--pf-lav:#251f3d;--pf-lavE:#443f8a;--pf-pos:#6ee7b7;--pf-posBg:#0c2a22;--pf-posE:#14532d;--pf-neg:#fca5a5;--pf-negBg:#2a1215;--pf-negE:#7f1d1d;--pf-amT:#fcd34d;--pf-amBg:#2a210c;--pf-amE:#78591a;--pf-skel:#2a293b}

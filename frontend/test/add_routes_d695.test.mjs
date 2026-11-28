@@ -5,6 +5,11 @@
  * replaces (test 5); an Edit is the same URL with `state.editing`, opened with
  * the row's values and closed by Back (test 6). The routing cases run against
  * `CycleRoute.jsx` and against source mutations it must reject.
+ *
+ * From frontend/test/README.md (moved by #6472): `add_routes_d695.test.mjs` renders every
+ * registered form in the dialog, and mounts the real `CycleRoute` (the Worker stubbed) for the
+ * `/new` addresses, the phone page, `?add=1`, a save's re-read and Edit through `state.editing`,
+ * each against source mutations of `CycleRoute.jsx` too.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

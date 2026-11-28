@@ -13,6 +13,11 @@
  * store (`_dr_fakes.mjs`) and decrypted with the real `age`.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/restore_d1_d5337.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D5337: `scripts/restore-d1.sh` run against a fake
+ * `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup
+ * refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared
+ * path with the drill, and the runbook's reasons.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

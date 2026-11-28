@@ -29,6 +29,13 @@
  * crumb, which then links back to `/portfolio`), `nav` (the board's own local
  * navigation in place of Portfolio's) and `docTitle` (the document title in
  * place of `portfolioTitle(tab)`).
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `PortfolioFrame.jsx` — the one
+ * frame: skip link, the content as a named section (the app owns the one `<main>`), the crumb, the
+ * heading, the basis context, the local navigation (Overview · Positions · Reports · Performance ·
+ * Value-add, the shell's `ZoneNav` with Performance added through `row.extra`), the route-aware
+ * document title (`portfolioTitle`) and the rail slot. A board passes its own `WorkerRail` as
+ * `rail`.
  */
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';

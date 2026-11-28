@@ -1,4 +1,9 @@
-/** D4483 (#4483) — campaign details, sources, funnels and creative gates over migrated SQLite. */
+/** D4483 (#4483) — campaign details, sources, funnels and creative gates over migrated SQLite.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `grow_ads_4490.test.ts` checks migrated
+ * Ads reads, missing months, Mercury precedence, team visibility, authentication and venture
+ * isolation.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

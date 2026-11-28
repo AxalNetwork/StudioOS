@@ -1,4 +1,8 @@
-/** #7587: a cancelled cold request cannot strand the next recording behind its promise. Real Workers requests, synthetic database only. */
+/** #7587: a cancelled cold request cannot strand the next recording behind its promise. Real Workers requests, synthetic database only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7587: real Workers requests prove an
+ * abandoned bootstrap cannot strand the next request, with per-binding readiness.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

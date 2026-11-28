@@ -7,6 +7,17 @@
  * have no prefix plan gate (D1206). The fixture is the production
  * baseline plus the real migrations. Every row is synthetic: `example.test`
  * addresses, `Fixture` names, made-up titles and join links.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `calendar_d1206.test.ts` checks mounted
+ * Free-investor reads and subscriptions, Professional-only IC creation, advisor fallback
+ * ownership, partial-source error codes and safe diagnostics, and Calendly exclusion from both
+ * provider copies. It also checks local-licence scopes, HQ elevation, constant-query populated
+ * memberships, private-kind exclusions, unavailable remote coverage and personal sync/export
+ * isolation after a scope read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed
+ * subscriptions with token ownership, revocation and join-link boundaries intact. Staff-view audit
+ * tests verify both existing stores contain only scope/window details, repeated views are
+ * recorded, and personal/refused/invalid reads create no staff-view audit entry. Every provider
+ * call is stubbed or refused; all rows are synthetic.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

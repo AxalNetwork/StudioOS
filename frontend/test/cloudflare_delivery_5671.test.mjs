@@ -1,4 +1,7 @@
 // D5671: provider authentication, strict metadata, isolation, durable episode replay and shared Slack transport failures.
+//
+// From frontend/test/README.md (moved by #6472): D5671: authenticated source, isolation, replay,
+// paging, sharing and Workers restart.
 import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
 import {normalizeCloudflare,receiveCloudflare} from '../../engineering-notifications/cloudflare-receiver-5671.mjs';
 import {CloudflareDelivery} from '../../engineering-notifications/cloudflare-outbox-5671.mjs';

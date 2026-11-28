@@ -1,3 +1,7 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D5569: local migration, venture scope,
+ * revocation and disabled publisher contract over SQLite.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test, type TestContext } from 'node:test';

@@ -1,4 +1,9 @@
-/** D5676: independent SQLite receipt/check loop with actual writer protocol, conditional R2 faults and metadata-only inspection. */
+/** D5676: independent SQLite receipt/check loop with actual writer protocol, conditional R2 faults and metadata-only inspection.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5676: `cloudflare_archive_5676.test.ts`
+ * covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary
+ * loss and guard mutations.
+ */
 import test, { before, after, mock } from 'node:test';import assert from 'node:assert/strict';import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
 import { d1Over } from './_d1_sqlite.mjs';

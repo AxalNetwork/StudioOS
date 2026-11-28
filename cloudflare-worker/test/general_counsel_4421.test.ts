@@ -1,4 +1,7 @@
 // D4421: one copy source on canonical agent proposals/queue DTOs and the actual run instruction.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): #4421: canonical role metadata on
+// proposal/queue reads, owner isolation, spoof prevention and the shared run instruction.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { world, AGENT, SPONSOR, STRANGER } from './_agent_engine_fixture.ts';

@@ -10,6 +10,10 @@
  * `main` (`routes/cycle_build.ts`, #1695's first PR, #1769), or against
  * #1695's write table for the roadmap and filing fields its closing PR adds.
  * Each group runs on `forms.js`, on mutants of it that must fail, and again.
+ *
+ * From frontend/test/README.md (moved by #6472): `add_forms_build_d695.test.mjs` does the same for
+ * Build's six specs (PR 3a) and PR 3b's registration, loaders, Proof and stored words, reading
+ * each body against `cloudflare-worker/src/routes/cycle_build.ts` on `main`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

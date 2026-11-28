@@ -1,4 +1,7 @@
 // D2319 (#2319), #4415: the owner's retired-address policy, independent of live routes.
+//
+// From frontend/test/README.md (moved by #6472): D2319: recorded policy for route-pin tests,
+// including concrete addresses matching retired dynamic patterns.
 import { readFileSync } from 'node:fs';
 import { matchPath } from 'react-router-dom';
 const decision = readFileSync(new URL('../../documentation/architecture/decisions/D2319.md', import.meta.url), 'utf8');

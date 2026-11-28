@@ -1,4 +1,8 @@
-/** D5504 (#5504): waits observe the result even with a frozen Date clock. */
+/** D5504 (#5504): waits observe the result even with a frozen Date clock.
+ *
+ * From frontend/test/README.md (moved by #6472): A delayed result is awaited, and missing/wrong
+ * results still fail while the business Date clock is frozen.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';

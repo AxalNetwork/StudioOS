@@ -1,4 +1,8 @@
-/** D5565: synthetic workspace, atomic memory store and faultable fake executor; never imported by production. */
+/** D5565: synthetic workspace, atomic memory store and faultable fake executor; never imported by production.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5565: synthetic specification, atomic
+ * memory store and faultable fake executor; tests only.
+ */
 import { executorEligibility, executionTransition, sameExecution, trustedWorkspaceSpec, workspaceRefusal,
   type ExecutionRef, type ExecutionStatus, type ExecutorAdapter, type ExecutorCapabilities, type WorkspaceResult, type WorkspaceSpec, type WorkspaceState } from '../src/services/agents/workspaceSpec.ts';
 import type { RunnerIdentity, RunnerRecord, RunnerStore } from '../src/services/agents/runnerProtocol.ts';

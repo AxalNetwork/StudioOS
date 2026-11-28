@@ -8,6 +8,10 @@
  *   · no lists, editor or subscribers are drawn; the tab is mounted for tab="newsletter".
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/distribution_newsletter_4495.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D4495: the not-connected copy, the disabled
+ * Connect with its visible reason, Not recorded results, and no request at all (never
+ * `/api/newsletter`).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

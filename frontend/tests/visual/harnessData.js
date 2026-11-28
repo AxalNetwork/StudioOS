@@ -3,6 +3,9 @@
 // Worker's own modules and fails on when they change: the model, every theme
 // the Worker serves, the 17 structures, each aspect's Grid and the accepted
 // one-click deck.
+//
+// From frontend/tests/visual/README.md (moved by #6472): The harness's data for one run, read from
+// `fixture.json`.
 import { readFileSync } from 'node:fs';
 
 const F = JSON.parse(readFileSync(new URL('./fixture.json', import.meta.url), 'utf8'));

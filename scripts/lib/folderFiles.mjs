@@ -228,3 +228,75 @@ export function perFileRows(readme, names) {
   });
   return out;
 }
+
+// ── #6472: a marked README takes no per-file note and no per-part paragraph ──
+
+/**
+ * The README's lines outside its generated block and outside fenced code,
+ * `{ line, text, opens }` each (1-based). `opens` is true when the line can
+ * start a paragraph: the first line, after a blank line, a heading, a table
+ * row or a marker, or after a line that ends a sentence (the habit of one
+ * line per file with no blank between). A wrapped line inside a sentence
+ * does not open one, so a rule that wraps onto a backticked name is not a note.
+ */
+function proseLines(readme) {
+  const src = String(readme ?? '');
+  const block = findBlock(src);
+  const outside = block && !block.broken ? withBlock(src, '') : src;
+  const out = [];
+  let fenced = false;
+  let prev = '';
+  outside.split('\n').forEach((text, i) => {
+    if (/^\s*(```|~~~)/.test(text)) { fenced = !fenced; prev = ''; return; }
+    if (fenced) return;
+    const p = prev.trim();
+    const opens = p === '' || /^(#{1,6}\s|\||<!--)/.test(p) || /[.!?]$/.test(p);
+    out.push({ line: i + 1, text, opens });
+    prev = text;
+  });
+  return out;
+}
+
+/**
+ * #6472: what a marked README must not say about one of its folder's files (`names`):
+ * a table row (`perFileRows`), a list item that opens with the file's backticked
+ * name (`- \`x.test.mjs\` — …`), or a line that opens with it (`\`x.test.mjs\`
+ * checks …`, the one-paragraph-per-test habit). A file named inside a sentence
+ * (a rule that points at a helper) is not one. `{ line, name, kind }` each, `kind`
+ * 'row', 'item' or 'paragraph'.
+ */
+export function perFileNotes(readme, names) {
+  const files = new Set(names);
+  const rows = new Map(perFileRows(readme, names).map((r) => [r.line, r]));
+  const out = [];
+  for (const { line, text, opens } of proseLines(readme)) {
+    if (rows.has(line)) { out.push({ ...rows.get(line), kind: 'row' }); continue; }
+    const item = /^\s*(?:[-*+]|\d+[.)])\s+`([^`]+)`/.exec(text);
+    if (item && files.has(item[1])) { out.push({ line, name: item[1], kind: 'item' }); continue; }
+    const para = opens ? /^`([^`]+)`/.exec(text) : null;
+    if (para && files.has(para[1])) out.push({ line, name: para[1], kind: 'paragraph' });
+  }
+  return out;
+}
+
+/**
+ * #6472: the per-decision paragraphs in a README: a line (or list item) that
+ * opens with a decision id and then its part, its issue or a colon —
+ * `D4817 part 9 (addendum …)`, `D4811 (#4811) part 7:`, `D6208 (#6208) adds`,
+ * `D717: …`, `D4833-p4 …`. Each is the record of one landed part, which lives
+ * in its decision file (`D<n>.md`, `D<n>-p<k>.md`, D5615), not in a folder
+ * README that every part would append to. A decision named inside a sentence
+ * is not one. `{ line, id, part }` each, `part` null when none is named.
+ */
+export function partNotes(readme) {
+  const out = [];
+  for (const { line, text, opens } of proseLines(readme)) {
+    if (!opens && !/^\s*[-*+]\s/.test(text)) continue;
+    const m = /^\s*(?:[-*+]\s+)?(?:#\d+ \()?D(\d+)(?:-p(\d+))?\)?(?:\s+part\s+(\d+))?(\s+\(#\d+[^)]*\))?(?:\s+part\s+(\d+))?(:)?/.exec(text);
+    if (!m) continue;
+    const part = m[2] ?? m[3] ?? m[5] ?? null;
+    if (part == null && !m[4] && !m[6]) continue;
+    out.push({ line, id: Number(m[1]), part: part == null ? null : Number(part) });
+  }
+  return out;
+}

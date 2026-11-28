@@ -1,4 +1,8 @@
-/** D6636: mounted names-only shared-resource candidates and consent requests on the real migrated schema. Synthetic people only. */
+/** D6636: mounted names-only shared-resource candidates and consent requests on the real migrated schema. Synthetic people only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6636: real migrated SQLite
+ * authorization, consent, failure and concurrency regressions.
+ */
 import test from 'node:test';import assert from 'node:assert/strict';import {Hono} from 'hono';import {SignJWT} from 'jose';
 import partnernet from '../src/routes/partnernet';import {AUTH_ERROR_STATUSES} from '../src/util/authErrors';import {migratedDatabase,removeMigratedDatabases} from './_storage_schema.ts';import {d1Over} from './_d1_sqlite.mjs';
 test.after(removeMigratedDatabases);const secret='synthetic-6636-test-only-'.repeat(4);

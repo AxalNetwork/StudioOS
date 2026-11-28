@@ -1,3 +1,8 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D5035: the mounted HQ Support sheet returns
+ * keyboard focus to its opener, the next escalation, or the Queue link when the last item is
+ * decided.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

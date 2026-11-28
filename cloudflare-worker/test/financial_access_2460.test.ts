@@ -1,4 +1,11 @@
-/** #2460: real mounted routers and SQLite, synthetic principals only. */
+/** #2460: real mounted routers and SQLite, synthetic principals only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `financial_access_2460.test.ts` mounts
+ * the financial, revenue and legal routers over the real SQLite schema. It checks every outside
+ * role, residual founder ids, company boundaries, unchanged models after refused writes, and
+ * owner/admin access. It also pins the separate deal-room partner reader and the recompute edit
+ * gate so future read-only relationships cannot acquire writes accidentally.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

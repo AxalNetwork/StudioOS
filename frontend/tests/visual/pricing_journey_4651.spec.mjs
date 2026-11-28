@@ -13,6 +13,10 @@
  *   · the email link (verify, then Continue, a full load of /dashboard) lands on the checkout sheet of that plan;
  *   · the Google return (`/pricing?…&google=ok`) opens the same sheet once the session is read, never "no longer offered";
  *   · a failed catalogue read on registration says so, and Try again reads it.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #4651/D4655: pricing-to-signup return
+ * flows plus comparison semantics, tab keyboard/focus behavior, billing/FAQ state, shared signup
+ * labels, 320px reflow and axe; desktop/phone evidence screenshots, no pixel baselines.
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

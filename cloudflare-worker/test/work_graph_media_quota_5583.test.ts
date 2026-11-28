@@ -1,4 +1,8 @@
-/** D5583 part 2 — cumulative media storage uses D1170's actual migrated member meter; synthetic rows only. */
+/** D5583 part 2 — cumulative media storage uses D1170's actual migrated member meter; synthetic rows only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5583 part 2: actual migrated cumulative
+ * owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

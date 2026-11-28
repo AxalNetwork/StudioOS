@@ -1,4 +1,9 @@
-/** D6292 (#6292): investor access, recorded context links and the real Cases desk driven by its address. */
+/** D6292 (#6292): investor access, recorded context links and the real Cases desk driven by its address.
+ *
+ * From frontend/test/README.md (moved by #6472): D6292: investor sidebar eligibility, scoped
+ * recorded context links, shared URL reload, filters/search/history/paging and stale response
+ * protection.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

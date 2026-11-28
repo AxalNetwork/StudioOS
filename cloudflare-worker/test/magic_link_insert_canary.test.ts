@@ -1,4 +1,9 @@
-/** #1008 — the private scheduled canary exercises the real Worker fetch and correlates its own two writes. */
+/** #1008 — the private scheduled canary exercises the real Worker fetch and correlates its own two writes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): The production-only scheduled insert
+ * probe claims each slot once, records its own token and send row IDs, and rejects stale
+ * completions.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';

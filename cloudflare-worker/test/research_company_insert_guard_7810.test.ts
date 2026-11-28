@@ -1,4 +1,9 @@
-/** D7810 (#7810): every physical directory insert explicitly supplies both source fields, including constant-built SQL. */
+/** D7810 (#7810): every physical directory insert explicitly supplies both source fields, including constant-built SQL.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic
+ * inputs and the canonical migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';

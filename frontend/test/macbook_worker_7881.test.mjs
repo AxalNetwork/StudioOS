@@ -1,4 +1,8 @@
 // D7881 (#7881): delegation must preserve failures and bound every unavailable-Mac path.
+//
+// From frontend/test/README.md (moved by #6472): D7881: exact dispatch ownership, bounded
+// busy/offline/API fallback, cancellation, failure identities and real Mac test failure
+// propagation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';

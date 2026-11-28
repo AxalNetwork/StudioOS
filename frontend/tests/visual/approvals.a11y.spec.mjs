@@ -18,6 +18,12 @@
  *
  * The reads are answered from `_approvals.mjs`; the page is the built SPA
  * that `server.ts` serves, signed in as a Super Admin.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D4814 (#4814, part 7): Approvals (Inbox,
+ * an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe
+ * violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px
+ * phone targets, the lane chart inside its box; part 8: the boards' selection bar and ⋯, and a
+ * last row's ⋯ clickable; no screenshots
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

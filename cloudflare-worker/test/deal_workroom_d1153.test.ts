@@ -10,6 +10,11 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deal_workroom_d1153.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `deal_workroom_d1153.test.ts` mounts
+ * D1153's routes over canonical SQLite DDL and migration 595: investor-only access, the room's
+ * door and one open request, the round as a count and a total with no other investor named, and a
+ * withdrawal that needs a reason and records it only when it withdrew.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

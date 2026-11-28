@@ -1,4 +1,8 @@
-/** #4862: approved sparse/active Grow hierarchy, source failure, permissions and context at desktop and phone widths. */
+/** #4862: approved sparse/active Grow hierarchy, source failure, permissions and context at desktop and phone widths.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #4862: sparse/active overview, Share
+ * lightbox, failed-read retry and read-only states at desktop and phone widths.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 import { MODULES } from '../../src/pages/cycles/adapters/grow.js';

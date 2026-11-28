@@ -1,4 +1,8 @@
-/** D7881 (#7881): metadata-only Mac admission rejects stale, forked, incomplete and mismatched delegation evidence. */
+/** D7881 (#7881): metadata-only Mac admission rejects stale, forked, incomplete and mismatched delegation evidence.
+ *
+ * From frontend/test/README.md (moved by #6472): D7881: active parent delegation, exact source and
+ * plan artifact, complete same-repository merge-queue provenance, and final liveness recheck.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { admitMacbookJob, githubReadApi } from '../../scripts/ci/macbook-admission.mjs';

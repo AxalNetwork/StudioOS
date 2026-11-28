@@ -1,4 +1,8 @@
-/** D6397 (#6397): real audited Fund Admin reads, no-model answers, source states and navigation only. */
+/** D6397 (#6397): real audited Fund Admin reads, no-model answers, source states and navigation only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6397: gated audited prompt reads,
+ * recorded states/dates, scoped navigation, no models or financial writes.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

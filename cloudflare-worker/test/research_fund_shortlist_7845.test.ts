@@ -1,4 +1,8 @@
-/** D7845 (#7845): atomic, private and replay-safe shortlist saves over the fully migrated SQLite schema and mounted Worker routes. */
+/** D7845 (#7845): atomic, private and replay-safe shortlist saves over the fully migrated SQLite schema and mounted Worker routes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `research_fund_shortlist_7845.test.ts` —
+ * D7845 atomic shortlist, withholding, ownership and replay checks.
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

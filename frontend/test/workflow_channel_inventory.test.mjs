@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D6370: workflow inventory coverage, unique
+ * hashtags and registered identities.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';

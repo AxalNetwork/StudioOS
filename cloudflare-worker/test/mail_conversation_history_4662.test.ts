@@ -1,4 +1,9 @@
-/** D4662 (#4662): durable sent identity, immutable quotes and stable pages on the migrated schema; no email leaves this test. */
+/** D4662 (#4662): durable sent identity, immutable quotes and stable pages on the migrated schema; no email leaves this test.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4662: validated durable sent identity
+ * and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with
+ * a non-delivering adapter.
+ */
 import test, { after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

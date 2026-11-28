@@ -1,4 +1,7 @@
 // D6214: independent cadence failures, readonly HQ and a GP's attributed save.
+//
+// From frontend/test/README.md (moved by #6472): Reporting settings loading, partial reads,
+// read-only defaults and GP save states.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

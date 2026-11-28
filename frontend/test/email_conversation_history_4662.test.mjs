@@ -1,4 +1,8 @@
-/** D4662 (#4662): mounted manual/AI sends, same-person refresh, older pages, unreadable reads and scope races. All adapters are synthetic. */
+/** D4662 (#4662): mounted manual/AI sends, same-person refresh, older pages, unreadable reads and scope races. All adapters are synthetic.
+ *
+ * From frontend/test/README.md (moved by #6472): D4662: mounted person-bearing manual/AI sends,
+ * completion refresh, paging, retries, uid reconciliation and late person/account replies.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

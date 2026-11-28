@@ -1,4 +1,11 @@
-/** D8011: real signed tokens/SQLite and explicit fake network/authority boundaries; no live capacity proof. */
+/** D8011: real signed tokens/SQLite and explicit fake network/authority boundaries; no live capacity proof.
+ *
+ * From frontend/test/README.md (moved by #6472): `ci_capacity_auth_composition_8011.test.mjs`
+ * exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted
+ * reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains
+ * the real Linux profile/executor composition and its success, failure, revocation and
+ * incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

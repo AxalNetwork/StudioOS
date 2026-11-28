@@ -8,6 +8,9 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/schema_replay_budget_8467.test.mjs
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `schema_replay_budget_8467.test.mjs`
+ * holds it to that on a three-migration chain of its own.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

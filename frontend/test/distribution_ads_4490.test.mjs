@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): `distribution_ads_4490.test.mjs` checks the Ads
+ * banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

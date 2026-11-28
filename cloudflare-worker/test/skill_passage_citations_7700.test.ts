@@ -1,4 +1,9 @@
-/** D7700 (#7700): selected-document passage citations, without accepting arbitrary strings or another file's text. */
+/** D7700 (#7700): selected-document passage citations, without accepting arbitrary strings or another file's text.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7700: selected-document passage
+ * citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped
+ * evidence and preserved dotted paths under evaluator version 5.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCase, judge } from '../src/services/agents/skillLifecycle.ts';

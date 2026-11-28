@@ -1,4 +1,9 @@
-/** D7821 (#7821): five states, native-code precedence, immutable evidence, physical-row recompute and audited admin writes. */
+/** D7821 (#7821): five states, native-code precedence, immutable evidence, physical-row recompute and audited admin writes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code
+ * precedence, resumable maintenance and audited overrides.
+ */
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';

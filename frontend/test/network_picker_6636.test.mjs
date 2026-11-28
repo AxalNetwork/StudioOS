@@ -1,4 +1,8 @@
-/** D6636: mounted names-only consent picker regressions. */
+/** D6636: mounted names-only consent picker regressions.
+ *
+ * From frontend/test/README.md (moved by #6472): D6636: mounted picker selection, eligibility and
+ * submission.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';

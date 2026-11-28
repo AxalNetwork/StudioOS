@@ -1,4 +1,9 @@
-/** D7709 (#7709): stored-row import, retry, provenance and operator gates over every migration; synthetic HTTP replies only. */
+/** D7709 (#7709): stored-row import, retry, provenance and operator gates over every migration; synthetic HTTP replies only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7709: stored editions, linked
+ * revisions, missing values, bounded and resumable imports, body-free failed/partial receipts,
+ * races, actor audits and HQ write/read gates over every migration.
+ */
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

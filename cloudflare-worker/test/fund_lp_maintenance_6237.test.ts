@@ -1,4 +1,8 @@
-/** D6237: mounted GP/act gates and accounting invariants on the complete migrated SQLite schema. */
+/** D6237: mounted GP/act gates and accounting invariants on the complete migrated SQLite schema.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6237: mounted gates, contact identity,
+ * commitment floor, deletion history and rollback.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';

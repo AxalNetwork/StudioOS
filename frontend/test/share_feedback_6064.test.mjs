@@ -6,6 +6,9 @@
 //      Discovery, and draws each state, Try again included.
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/share_feedback_6064.test.mjs
+//
+// From frontend/test/README.md (moved by #6472): D6064: Share & analytics viewer feedback: the
+// model and the mounted block's loading, Unreadable, refused, empty, ready and cap states.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

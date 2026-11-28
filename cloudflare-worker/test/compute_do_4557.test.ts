@@ -1,4 +1,8 @@
-/** D4557: real host wrapper with transactional synthetic storage and native Container control faults. */
+/** D4557: real host wrapper with transactional synthetic storage and native Container control faults.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4557: actual DO wrapper teardown and
+ * erasure against synthetic transactional storage.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PythonComputeContainer } from '../../agent-compute/worker.ts';

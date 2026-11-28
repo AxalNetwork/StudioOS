@@ -4,6 +4,10 @@
  * Test 11's client cases, against a stubbed `request`: the live route answers
  * 404 until each cycle's records task registers its specs, and no form is
  * wired to it yet.
+ *
+ * From frontend/test/README.md (moved by #6472): `form_options_d695.test.mjs` is test 11's client
+ * half: `formOptions`'s path and query for every cycle module against a stubbed `request`, the
+ * refused cycles and slugs, and the drift parser's `GET /cycles/:p/modules/:p/form-options`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

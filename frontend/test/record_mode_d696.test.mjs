@@ -1,4 +1,9 @@
-/** D696 PR 2: mounted reads/actions, boundaries, and linkable module rows. */
+/** D696 PR 2: mounted reads/actions, boundaries, and linkable module rows.
+ *
+ * From frontend/test/README.md (moved by #6472): `record_mode_d696.test.mjs` checks mounted record
+ * reads and writes; its mutation targets the record-mode guard separately from Distribution tab
+ * guards.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

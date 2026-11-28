@@ -1,4 +1,7 @@
 // D5672: aggregate thresholds, missing-data semantics and shared-episode transitions without producer side effects.
+//
+// From frontend/test/README.md (moved by #6472): D5672: sensor states, denominator, persistence
+// prerequisites and episode recovery.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {evaluatePlatform,correlatePlatform} from '../../engineering-notifications/platform-policy-5672.mjs';
 const now=Date.parse('2026-11-12T10:00:00Z'),p={approved:true,maxAgeMs:60000,minimumSamples:100,rate:.05,sustainMs:10000,ageSeconds:900,graceMs:60000,stuckMs:300000};

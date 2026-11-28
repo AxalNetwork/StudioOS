@@ -1,6 +1,9 @@
 /** D1602 mutation proof. Run from any directory with Node 22+; no source file is edited.
  * node cloudflare-worker/test/dataroom_deck_sources_d1602.mutations.mjs
  * Optional: --case=count-integrality (one variant, with restored controls).
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1602: reproducible isolated-loader
+ * mutation proof, with passing original controls before and after; source files are never edited.
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -1,4 +1,8 @@
-/** D7815 (#7815): comparison reconciliation and route-bound fund refreshes on the actual React pages. */
+/** D7815 (#7815): comparison reconciliation and route-bound fund refreshes on the actual React pages.
+ *
+ * From frontend/test/README.md (moved by #6472): D7815: actual project Compare retry/status
+ * recovery, tab results return and stale catalogue/dossier responses after route changes.
+ */
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';

@@ -12,6 +12,9 @@
  * Ask, Cards strip, stage, instruction box and the AIRail beside them) and
  * every dialog or menu it opens; the app shell around it (top bar, sidebar)
  * is outside this issue and is not scanned here.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): Zero serious or critical axe violations
+ * in every state; the keyboard path and the dialog's focus
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

@@ -23,6 +23,14 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/authz_venture_scores_d4570.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `authz_venture_scores_d4570.test.ts`
+ * (#4570, D4570 part 8) asks the six venture-scorecard routes (the full read, sharing, trajectory,
+ * the investor's deal read, corrections and recompute) through the mounted router on the full
+ * schema. Another venture's founder, an advisor with no share or a share switched off, a removed
+ * co-founder, a roster advisor, an investor by venture id or off the deal, a disabled founder and
+ * no credentials are refused, with nothing of the venture named and no score, correction, sharing
+ * or log row changed; each rightful party then gets its read.
  */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';

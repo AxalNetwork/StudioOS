@@ -1,3 +1,8 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): `deal_context_d1150.test.ts` executes
+ * migration 600 and real source tables for derived stages, per-user/firm visit markers and private
+ * notes, including audit rollback, no admin bypass, NDA exclusion and anonymous change metadata.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

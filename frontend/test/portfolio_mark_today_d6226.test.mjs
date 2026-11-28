@@ -15,6 +15,10 @@
  *   - the Positions page not passing `reads.positions` to `markReference` → test 1;
  *   - `keyFactsOf` dropping the FMV chip → test 2;
  *   - `FinancialMetric` not drawing `metric.chip` → test 2.
+ *
+ * From frontend/test/README.md (moved by #6472): D6226: Positions counts stale marks from the
+ * positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip;
+ * the reference-date order.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

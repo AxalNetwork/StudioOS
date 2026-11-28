@@ -12,6 +12,10 @@
  *                                (or a missing column) first when the test
  *                                database lacks it. Values are invented.
  *   enrollCohort / enrollLegacy  write an enrollment directly.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_lab_evidence.ts` is its helper, and
+ * the helper other Lab tests use: it applies the enrollment migration and writes the invented
+ * saved work that proves a milestone.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

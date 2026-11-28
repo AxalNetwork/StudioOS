@@ -18,6 +18,21 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_systems_states_d5065.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5065 (#5065):
+ * `build_systems_states_d5065.test.ts` holds Operating Systems to one connection-state model — the
+ * shared state module in `src/services` — across the module read and the one-record read: active,
+ * error, revoked, disabled, an unrecognised status, a kind that maps nothing, and Workspace. It
+ * pins that a mapped connection is never "Not connected", that no record's pill, State fact and
+ * subtitle can disagree, that the primary action is Manage for a healthy system, Reconnect for a
+ * failing or disconnected one and Choose connector for an unmapped kind, that Workspace names the
+ * sync and sync-log fields that do not apply instead of reading as a missing row, and that another
+ * member's private connector name stays private in every state. Its mutation section breaks each
+ * guarded line on disk and re-runs this file in a child process filtered to the tests that must
+ * then fail, because the record read reaches the Build record specs through the cycle-records
+ * route and only a real import of the mutated tree exercises it; the source is restored in a
+ * `finally`. It also pins the SPA's tile map in `frontend/src/pages/cycles/CycleCharts.jsx` to the
+ * Worker's states, because a state with no tile of its own is drawn as Not connected.
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';

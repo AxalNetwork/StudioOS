@@ -1,4 +1,8 @@
-/** D6397 (#6397): today's shared Ask panel serves recorded fund tasks, with scoped retries and no model fallback. */
+/** D6397 (#6397): today's shared Ask panel serves recorded fund tasks, with scoped retries and no model fallback.
+ *
+ * From frontend/test/README.md (moved by #6472): D6397: five recorded tasks on both tiers, no
+ * model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { useState } from 'react';

@@ -1,4 +1,8 @@
-/** #5876: model the page and aggregate contracts in mounted approval board tests. */
+/** #5876: model the page and aggregate contracts in mounted approval board tests.
+ *
+ * From frontend/test/README.md (moved by #6472): Shared fixtures for the approval board summary
+ * and active-page contracts (#5876).
+ */
 import { expertState, profileWord, testerRows } from '../src/pages/admin/approvals/approvalsModel.js';
 
 /** The toolbar's filters over the tab's rows, in memory. */

@@ -1,4 +1,8 @@
-/** D4487: campaign selector choices on the existing writer-gated form-options route. */
+/** D4487: campaign selector choices on the existing writer-gated form-options route.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): Venture-isolated segment/work selectors
+ * and existing writer gates for Distribution campaign form options (D4487).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

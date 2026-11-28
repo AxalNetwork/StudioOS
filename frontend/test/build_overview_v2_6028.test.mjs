@@ -9,6 +9,10 @@
  * Every name, date and count below is made up.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/build_overview_v2_6028.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D6028 (#6028): Build Overview V2's states
+ * (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not
+ * recorded never 0, and the phone root's parts.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

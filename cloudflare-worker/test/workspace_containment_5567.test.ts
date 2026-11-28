@@ -1,4 +1,10 @@
-/** D5567 part 4: the fail-closed containment gate and job-environment credential scan; synthetic evidence, injected clock, no provider calls. */
+/** D5567 part 4: the fail-closed containment gate and job-environment credential scan; synthetic evidence, injected clock, no provider calls.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5567 part 4: the fail-closed
+ * containment gate (evidence source/freshness from an injected clock, egress per network mode,
+ * metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment
+ * credential scan, and the real compute VM start options and image user; synthetic only.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

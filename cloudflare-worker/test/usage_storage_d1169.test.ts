@@ -3,6 +3,13 @@
  * The read's membership and each area's kind are held to the hand-written
  * storage-area contract (`frontend/test/_storageAreasContract.mjs`, #5507,
  * D5507); this file lists only the areas its fixture seeds.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1169: `usage_storage_d1169.test.ts`
+ * holds the grown storage read: thirteen member stores, company files counted to the company
+ * owner, kinds, companies, the ten largest files, the allowance and its state, and that fund,
+ * legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on
+ * `_storage_schema.ts`, which replays the baseline and every later migration once into a template
+ * database and copies it for each case. Rows are synthetic.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

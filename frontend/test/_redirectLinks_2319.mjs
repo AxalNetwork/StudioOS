@@ -1,4 +1,7 @@
 // D2319 (#2319), #4415: navigation expressions, excluding comments, API requests and old-path comparisons.
+//
+// From frontend/test/README.md (moved by #6472): D2319 (#4415): syntax-aware navigation-target
+// audit across frontend and Worker source, without treating API paths or comparisons as links.
 import { Parser } from 'acorn';
 import jsx from 'acorn-jsx';
 import { stripTypeScriptTypes } from 'node:module';

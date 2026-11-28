@@ -1,4 +1,8 @@
-/** D6562: rendered L09/L10 readiness, honest comparisons, frozen text and send gating. Synthetic documents only. */
+/** D6562: rendered L09/L10 readiness, honest comparisons, frozen text and send gating. Synthetic documents only.
+ *
+ * From frontend/test/README.md (moved by #6472): D6562: rendered replacement readiness, frozen
+ * preview and hash, honest unknown comparison and send gating.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

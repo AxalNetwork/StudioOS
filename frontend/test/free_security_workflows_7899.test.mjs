@@ -1,4 +1,9 @@
-/** D7899: dependency review checks the actual queue candidate with read-only authority; advisory SARIF comes only from a successful trusted scan. */
+/** D7899: dependency review checks the actual queue candidate with read-only authority; advisory SARIF comes only from a successful trusted scan.
+ *
+ * From frontend/test/README.md (moved by #6472): D7899 immutable PR/queue dependency comparisons,
+ * read-only review authority, trusted public-main posture admission and successful-only SARIF
+ * uploads, with mutation/restoration cases.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

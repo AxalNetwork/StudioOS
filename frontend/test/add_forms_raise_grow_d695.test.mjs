@@ -10,6 +10,12 @@
  * expansion's Add and Log feedback's foot. Test 9: the Edits. Test 10: the
  * client writes. Each group runs on `forms.js`, on mutants of it that must
  * fail, and again. Raise's half is PR 2's.
+ *
+ * From frontend/test/README.md (moved by #6472): `add_forms_raise_grow_d695.test.mjs` mounts
+ * Grow's and Raise's seven canvas forms and their Edits (#1657) against a stubbed write table,
+ * Raise's with each module's `form-options` reply, and checks their client writes.
+ * `cloudflare-worker/test/cycle_forms_raise_grow_d695.test.ts` sends Raise's bodies through the
+ * real routes. Registry and routing integration cases follow when their dependencies merge.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,7 @@
 // D1614 (#3968): the real engine mount reads E3 runs, not the old empty seam.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): Real engine board/item latest-run
+// wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968).
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

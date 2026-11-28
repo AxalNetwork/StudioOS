@@ -19,6 +19,10 @@
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/positions_today_d6226.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6226: the positions list, analytics and
+ * per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays
+ * null without a date.
  */
 import test, { before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';

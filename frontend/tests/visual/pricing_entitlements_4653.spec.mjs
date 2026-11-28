@@ -1,4 +1,9 @@
-/** D4653: real Worker catalogue defaults reach Pricing and the selected-plan signup; prices are synthetic, and no payment or external request is made. */
+/** D4653: real Worker catalogue defaults reach Pricing and the selected-plan signup; prices are synthetic, and no payment or external request is made.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D4653: actual public catalogue capacity
+ * defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into
+ * signup; synthetic prices and no payment.
+ */
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 

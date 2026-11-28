@@ -1,4 +1,9 @@
-/** D6562: recorded input snapshots, legacy uncertainty, readiness and frozen body through mounted HQ routes on the full schema. */
+/** D6562: recorded input snapshots, legacy uncertainty, readiness and frozen body through mounted HQ routes on the full schema.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6562: recorded rendered-input
+ * snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and
+ * unready-send refusal over the full migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

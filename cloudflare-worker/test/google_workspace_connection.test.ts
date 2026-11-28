@@ -1,3 +1,10 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D1091:
+ * `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using
+ * `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper;
+ * `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read
+ * fragments. No real Google host is called.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -27,6 +27,19 @@
  * `agentRun` → waiting decision → accept → done), D proposal reads, E failures
  * and retries (a duplicate idempotency key raced, a provider failure, a
  * replayed agent step, and a cross-tenant attempt).
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4567 (D4567): `_d1_bench.ts` is the D1
+ * contention benchmark's harness. It meters every statement the Worker's own services issue over
+ * `_storage_schema.ts`'s migrated template, seeded with #4566's synthetic fixtures and with
+ * inference stubbed. It drives mixes A–E, closed loop or ramp, and checks the invariants
+ * afterwards. `d1_benchmark_4567.test.ts` is its tiny, deterministic CI case; `npm run bench:d1`
+ * runs it at scale.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4568 (D4568):
+ * `usage_indexes_4568.test.ts` holds migration 202611070806's two partial indexes and `agentArea`
+ * to what they must not change: plans before and after, `chargedFor` against a reference model,
+ * identical money across a whole mix with and without the indexes, and the dependency matrix.
+ * `_d1_bench.ts`'s `indexControl` and `withoutCandidates` are its before-and-after measurements.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { migratedDatabase } from './_storage_schema.ts';

@@ -1,4 +1,9 @@
-/** D7325: official-source manifest, duplicate-safe migration and country facets on real SQLite. */
+/** D7325: official-source manifest, duplicate-safe migration and country facets on real SQLite.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7325: evidence validation, canonical
+ * catalogue preservation, source takedowns, country facets, duplicate suppression, replay and
+ * fault-injection checks on real SQLite.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

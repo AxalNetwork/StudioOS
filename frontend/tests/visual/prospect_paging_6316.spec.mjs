@@ -1,4 +1,9 @@
-/** #6316: real Worker and built SPA read 250 prospects after an intervening edit, at desktop and phone widths. */
+/** #6316: real Worker and built SPA read 250 prospects after an intervening edit, at desktop and phone widths.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #6316: real Worker/SPA reads 250
+ * prospects at desktop and phone widths after an edit between pages; no duplicate or skipped
+ * cards.
+ */
 import {test,expect} from '@playwright/test';
 import {prepare} from './_editor.mjs';
 test('all cards remain reachable past 100 and a same-status edit between pages',async({page,request},testInfo)=>{

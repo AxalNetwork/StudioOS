@@ -1,4 +1,8 @@
-/** #7587: a failed Start releases the mic, preserves saved chunks and offers the existing session; no automatic write or paid retry. */
+/** #7587: a failed Start releases the mic, preserves saved chunks and offers the existing session; no automatic write or paid retry.
+ *
+ * From frontend/test/README.md (moved by #6472): D7587: recording Start recovery, microphone
+ * release, preserved queued audio and explicit session navigation.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

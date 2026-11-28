@@ -1,4 +1,8 @@
-/** D7886 (#7886): exact parent/queue plans, profile checks, actual test truth and owned process/filesystem lifecycle. */
+/** D7886 (#7886): exact parent/queue plans, profile checks, actual test truth and owned process/filesystem lifecycle.
+ *
+ * From frontend/test/README.md (moved by #6472): D7886: exact plans, fixed profile targets,
+ * runtime checks, real test failure, scoped lifecycle and workflow mutation checks.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,symlinkSync,rmSync} from 'node:fs';

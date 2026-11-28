@@ -1,3 +1,8 @@
+/**
+ * From frontend/tests/visual/README.md (moved by #6472): D5349: draft autosave, reload, offline
+ * recovery, stale revisions and storage refusal in Chromium at 1440 and 390 px, using a synthetic
+ * Worker-backed deck
+ */
 import { test, expect } from '@playwright/test';
 import { keyOf } from '../../src/pages/raise/pitch/deckAutosave.js';
 import { prepare } from './_editor.mjs';

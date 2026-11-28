@@ -1,4 +1,8 @@
-/** D6017: V9 cards render observations only from the venture read. */
+/** D6017: V9 cards render observations only from the venture read.
+ *
+ * From frontend/test/README.md (moved by #6472): V9 experiment state cards, missing reads and
+ * result actions.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

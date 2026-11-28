@@ -1,4 +1,8 @@
-/** D7905: independent Linux engine evidence, no ambient credentials, and exact container cleanup. */
+/** D7905: independent Linux engine evidence, no ambient credentials, and exact container cleanup.
+ *
+ * From frontend/test/README.md (moved by #6472): D7905: real-engine evidence contracts, isolated
+ * candidate commands, per-run cleanup and fail-closed bootstrap.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync,mkdirSync,writeFileSync,rmSync,readFileSync } from 'node:fs';

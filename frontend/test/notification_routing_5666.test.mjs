@@ -1,4 +1,7 @@
 // D5666: observational lifecycle/ownership adapter uses existing digest authority and runtime ruleset contexts.
+//
+// From frontend/test/README.md (moved by #6472): D5666: lifecycle, shared incidents, claim
+// ambiguity, required-check cutover and SQLite rollback/replay.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

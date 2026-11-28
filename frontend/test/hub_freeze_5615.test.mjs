@@ -13,6 +13,11 @@
  * them, so each one proves the rule catches what it exists for.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/hub_freeze_5615.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D5615: every name in the five hub files is on
+ * `scripts/hub-freeze.json`; a new `api` key, `app.route(…)`, import or advisors registration
+ * fails naming the entry and its `HUBS.md` section; a removal passes with no list edit;
+ * `CycleRoute.jsx` holds no cycle entry.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

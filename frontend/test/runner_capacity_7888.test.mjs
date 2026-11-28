@@ -1,4 +1,8 @@
-/** D7888: real report code against deterministic GitHub metadata, never a live capacity claim. */
+/** D7888: real report code against deterministic GitHub metadata, never a live capacity claim.
+ *
+ * From frontend/test/README.md (moved by #6472): D7888: bounded read-only capacity metadata,
+ * pagination, identity/timing/privacy, failure/cancel/restart and CLI GET-only checks.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';

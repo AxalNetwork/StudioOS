@@ -9,6 +9,13 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/ai_gateway_slice_4556.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `ai_gateway_slice_4556.test.ts` (D4556)
+ * runs one third-party model through AI Gateway on a stubbed binding over the real AI budget
+ * migrations: every switch, config, task, data-class and Advisor refusal makes no call, success
+ * settles once from the exact reported usage, missing usage is never zero, retries honour
+ * `retry-after` within a bound, a timeout is unknown completion and is not retried, payload
+ * logging is off on every call, and no Advisor module can import the provider path.
  */
 import test from 'node:test';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';

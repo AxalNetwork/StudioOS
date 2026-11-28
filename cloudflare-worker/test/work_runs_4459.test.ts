@@ -1,4 +1,7 @@
 // D4459 (#4459): no-call attempts have no charge; mutation responses use the live run reader.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): #4459: no-call attempts preserve paid
+// totals; real engine labels/milestone/review responses retain the live item run and cost.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

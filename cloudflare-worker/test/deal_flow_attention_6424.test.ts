@@ -1,4 +1,9 @@
-/** D6424: mounted firm-rule and diligence waits on the real migrated schema, with no invented default or foreign case data. */
+/** D6424: mounted firm-rule and diligence waits on the real migrated schema, with no invented default or foreign case data.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6424: mounted per-firm stale rules,
+ * visible unanswered diligence requests, firm/reviewer isolation, null/unreadable counts and
+ * support refusal.
+ */
 import test from 'node:test';import assert from 'node:assert/strict';import {Hono} from 'hono';import {SignJWT} from 'jose';
 import routes from '../src/routes/deal_flow';import {migratedDatabase,removeMigratedDatabases} from './_storage_schema.ts';import {d1Over} from './_d1_sqlite.mjs';
 test.after(removeMigratedDatabases);const secret='synthetic-6424-test-only-'.repeat(4);

@@ -29,6 +29,13 @@
  *
  * `calls` lists every call as `{ model, prompt, fault }`; the guard's own
  * calls are kept apart in `guardCalls`, so a test's call list is its runs.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_recorded_ai.mjs` (D1511 part 2)
+ * answers a whole one-click build from recordings (`fixtures/fake_ai_recordings.json`, venture
+ * `fixtures/oneClickVenture.ts`), so the visual-regression server
+ * (`frontend/tests/visual/server.ts`) draws the accepted deck with no model;
+ * `recorded_ai_d1511.test.ts` holds it to the one-click bar and runs the seven injected failures
+ * through it.
  */
 import { readFileSync } from 'node:fs';
 

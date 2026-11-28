@@ -1,4 +1,21 @@
-/** D1231: real migrated SQLite, Hono/auth, private R2 stub; no provider host. */
+/** D1231: real migrated SQLite, Hono/auth, private R2 stub; no provider host.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `kyb_d1231.test.ts` drives migration 616
+ * through Hono/auth and real SQLite: owner-check explanations, fixed-expiry KYB reconciliation and
+ * invalidation, studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
+ * R2 streams, rejection purge/retry, atomic audit/upload rollback, source discovery, imports and
+ * licensed studios. Twenty injected route faults run against the same scenarios before and after
+ * restoration. All external fetches are refused.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1231 follow-up: company member reads
+ * reflect expiry and legal edits; company submitter/membership self-review and unsubmitted
+ * corporate profiles are covered. Twenty-seven injected faults cover routes, the member status
+ * projection and submission-state derivation, each checked before and after restoration.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1231 concurrency tests cover displayed
+ * If-Match tokens, source edits during a request, staff-created cases without false submitters,
+ * dismissed imports and collision-safe migration of legacy reviewer assignments/history.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

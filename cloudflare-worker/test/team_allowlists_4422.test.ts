@@ -1,4 +1,9 @@
-/** D4422 (#4422): real SQLite policy inheritance, permissions, audited saves and use-time revocation. */
+/** D4422 (#4422): real SQLite policy inheritance, permissions, audited saves and use-time revocation.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `team_allowlists_4422.test.ts` checks
+ * D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation,
+ * including agent MCP calls, over real SQLite.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

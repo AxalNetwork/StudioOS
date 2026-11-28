@@ -1,4 +1,9 @@
-/** D6003 (#6003): complete ICP records, archive without changing fit, reject stale and foreign writes. */
+/** D6003 (#6003): complete ICP records, archive without changing fit, reject stale and foreign writes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `icp_complete_archive_6003.test.ts`
+ * (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal,
+ * active options and the real list sorts.
+ */
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

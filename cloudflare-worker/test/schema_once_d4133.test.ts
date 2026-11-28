@@ -10,6 +10,9 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/schema_once_d4133.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `schema_once_d4133.test.ts` holds the
+ * copy to a fresh build.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

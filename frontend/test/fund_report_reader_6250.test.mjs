@@ -1,4 +1,7 @@
 // D6250: issued documents use frozen facts, safe prose and explicit absence.
+//
+// From frontend/test/README.md (moved by #6472): Issued report prose, frozen figures, attribution,
+// correction links, absence and Print.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

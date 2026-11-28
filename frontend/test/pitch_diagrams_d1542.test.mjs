@@ -6,6 +6,11 @@
  * on the canvas, and the check's line, which is never "fits" when unread.
  *
  * Every venture, card and label is synthetic.
+ *
+ * From frontend/test/README.md (moved by #6472): D1542 (#3780): `deckV2Adapter.diagrams` swapped
+ * to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a
+ * diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the
+ * canvas, and the check line.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

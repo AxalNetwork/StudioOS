@@ -1,4 +1,8 @@
-/** D4488 (#4488): Distribution's quote-before-run, unsaved acceptance, safe counts and exclusive Ask panel. */
+/** D4488 (#4488): Distribution's quote-before-run, unsaved acceptance, safe counts and exclusive Ask panel.
+ *
+ * From frontend/test/README.md (moved by #6472): D4488 quotes, unsaved acceptance, listed/safe
+ * counts and exclusive Ask intent.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

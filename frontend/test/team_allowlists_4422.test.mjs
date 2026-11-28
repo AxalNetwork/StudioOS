@@ -1,4 +1,9 @@
-/** D4422 (#4422): actual Team card reads and saves through the adapter, with honest failures and inherited edit gates. */
+/** D4422 (#4422): actual Team card reads and saves through the adapter, with honest failures and inherited edit gates.
+ *
+ * From frontend/test/README.md (moved by #6472): `team_allowlists_4422.test.mjs` checks D4422
+ * actual Team checklist read/save requests, default resets, inherited edit gates, and honest
+ * read/save failures.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

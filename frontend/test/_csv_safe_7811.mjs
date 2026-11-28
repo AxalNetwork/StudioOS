@@ -1,4 +1,8 @@
-/** D7811: one shared table of literal spreadsheet serialization expectations. */
+/** D7811: one shared table of literal spreadsheet serialization expectations.
+ *
+ * From frontend/test/README.md (moved by #6472): D7811: one literal CSV case table shared with
+ * Worker tests.
+ */
 export const CSV_SAFE_CASES = [
   ['formula', '=SUM(A1:A2)', "'=SUM(A1:A2)"],
   ['plus command', '+cmd', "'+cmd"], ['at command', '@IMPORT', "'@IMPORT"],

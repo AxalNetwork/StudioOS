@@ -8,6 +8,10 @@
  *
  * Each account finished onboarding, so the app's wizard gate lets it in. Sessions are minted by the Worker's own
  * `createJWT`, without a `jti`, so no `user_sessions` row is needed. Every person, company and file is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): What `server.ts` seeds for that spec: per
+ * scenario and width, an owner of two companies, a member with a co-founder seat and a data-room
+ * file, and a stranger; made-up names
  */
 import { createJWT } from '../../../cloudflare-worker/src/auth.ts';
 

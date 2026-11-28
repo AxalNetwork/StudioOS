@@ -9,6 +9,10 @@
 // outlast those ticks. With the module already loaded, the lazy step resolves in
 // a microtask and the page draws as it did when the step was a static import.
 // The lazy boundary itself, skeleton first, is cycle_route_lazy_steps_d4574's.
+//
+// From frontend/test/README.md (moved by #6472): D4574 (#4574 H5): loads every module CycleRoute
+// names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a
+// fixed-tick settle sees the step as the browser does once its chunk has arrived.
 import { readFileSync } from 'node:fs';
 
 const ROUTE = new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url);

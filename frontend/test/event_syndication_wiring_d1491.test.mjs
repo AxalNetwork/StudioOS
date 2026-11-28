@@ -1,4 +1,8 @@
-/** D1491 (#3725) — synthetic mounted UI tests for the real core wiring and explicit posting boundary. */
+/** D1491 (#3725) — synthetic mounted UI tests for the real core wiring and explicit posting boundary.
+ *
+ * From frontend/test/README.md (moved by #6472): D1491: explicit choice save, pure preview,
+ * approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

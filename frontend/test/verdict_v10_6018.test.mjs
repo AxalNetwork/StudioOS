@@ -1,4 +1,8 @@
-/** D6018: V10/V11 snapshots never choose a founder decision. */
+/** D6018: V10/V11 snapshots never choose a founder decision.
+ *
+ * From frontend/test/README.md (moved by #6472): Unselected form, evidence gaps, Stop policy and
+ * recorded-decision separation.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

@@ -1,4 +1,10 @@
-/** D5572 (#5572): fail-closed contract tests for the disabled outbound-only runner protocol; synthetic identities, keys generated at runtime, injected clock, no cluster or network. */
+/** D5572 (#5572): fail-closed contract tests for the disabled outbound-only runner protocol; synthetic identities, keys generated at runtime, injected clock, no cluster or network.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5572: disabled outbound-only runner
+ * protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease,
+ * offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and
+ * sixteen mutation journeys; runtime-generated keys.
+ */
 import { containmentFixture } from './_containment_fixture_5567.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';

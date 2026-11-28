@@ -1,4 +1,8 @@
 // D7812 (#7812): rendered attribution walks the canonical publisher reference, never a second publisher list.
+//
+// From frontend/test/README.md (moved by #6472): `company_attribution_7812.test.mjs` walks the
+// canonical publisher reference across company table, responsive cards, profile and analysis
+// subject attribution, including missing/unreviewed provenance and field-read failure.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

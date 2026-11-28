@@ -1,4 +1,8 @@
-/** D6079 (#6079): Overview blocks render their own read states, retry only their source and never invent zero. */
+/** D6079 (#6079): Overview blocks render their own read states, retry only their source and never invent zero.
+ *
+ * From frontend/test/README.md (moved by #6472): `capital_overview_6079.test.mjs` (D6079) checks
+ * independently rendered source states, real evidence and source-specific retry.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

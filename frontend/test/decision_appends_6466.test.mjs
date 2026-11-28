@@ -1,3 +1,9 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D6466: temp git repos where an appended section,
+ * an over-threshold addendum, an existing part file and an old decision fail with the D5615
+ * instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow
+ * PR merge checkout and this branch pass; no base exits 2.
+ */
 import { guardChain } from '../../scripts/lib/guardCatalog.mjs';
 /**
  * D6466 (#6466): `scripts/check-decision-appends.mjs` fails a change that

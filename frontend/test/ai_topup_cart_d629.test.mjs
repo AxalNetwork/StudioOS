@@ -1,3 +1,11 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D755 CR7 (#1985):
+ * `checkout_token_pack_d755.test.mjs` mounts the checkout and confirmation with stubbed API/Stripe
+ * modules, drives billing country, payment, redirects and bounded polling, and checks 14 scenarios
+ * against 31 isolated source mutations. Every mutant must fail its scenario and the restored
+ * source must pass. No real payment or credit write runs. `ai_topup_cart_d629.test.mjs` keeps the
+ * ordinary cart regression; the top-up cart path is retired.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, {act} from 'react';

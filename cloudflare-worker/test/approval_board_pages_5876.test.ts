@@ -1,4 +1,8 @@
-/** D5876: real scoped summaries and server-paged rows over the migrated Approval stores. */
+/** D5876: real scoped summaries and server-paged rows over the migrated Approval stores.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): Mounted summary and active-page queries
+ * across the three approval lanes (#5876).
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

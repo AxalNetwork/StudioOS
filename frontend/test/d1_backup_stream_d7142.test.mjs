@@ -14,6 +14,11 @@
  *     D7142_LARGE=1 (it writes 600+ MiB to the temp directory and deletes it).
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/d1_backup_stream_d7142.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D7142: the backup manifest and the drill split
+ * stream the export: byte-identical to the frozen pre-D7142 code (`fixtures/d7142_old_*.mjs`) at
+ * read sizes down to one byte, a statement or `;` across a read boundary counted once, and an
+ * export bigger than the heap read under a heap cap (the >600 MiB run with `D7142_LARGE=1`).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

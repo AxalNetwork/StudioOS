@@ -1,4 +1,8 @@
-/** D4447 (#4447) — campaign plans on real SQLite and the mounted Grow routes. */
+/** D4447 (#4447) — campaign plans on real SQLite and the mounted Grow routes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4447 (#4447): real-SQLite campaign
+ * plans, gates, validation, scoped links, attribution and missing/unreadable figures.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

@@ -15,6 +15,13 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/runtime_ddl_4568.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4568 R2-04: `runtime_ddl_4568.test.ts`
+ * holds the cohort applications bootstrap, through the real cron tick, to no ALTER against an
+ * up-to-date database across fresh isolates, to one bootstrap on a database missing the columns,
+ * to a thrown `cohort_schema_not_ready` that is retried on a genuine failure, and to a safe
+ * concurrent start; and holds `check-runtime-ddl`'s ratchet to refusing growth, a new blind file
+ * and a stale entry.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

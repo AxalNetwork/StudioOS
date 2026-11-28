@@ -1,4 +1,7 @@
 // D5720: static Workers SQLite fixture; clocks and receipt keys enter as data bindings, never generated JavaScript.
+//
+// From frontend/test/README.md (moved by #6472): D5720: static local Workers fixture with clock
+// and receipt-key data bindings.
 import { CloudflareDeliveryActor } from '../../engineering-notifications/cloudflare-worker-5671.mjs';
 
 export class FixtureActor extends CloudflareDeliveryActor {

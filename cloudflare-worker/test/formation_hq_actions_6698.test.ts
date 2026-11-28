@@ -1,4 +1,9 @@
-/** D6698 (#6698) — exercise HQ writes through the mounted router and the common Approvals assignment path. */
+/** D6698 (#6698) — exercise HQ writes through the mounted router and the common Approvals assignment path.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `formation_hq_actions_6698.test.ts`
+ * exercises HQ authorization, evidence gates, atomic conflict refusal, case ownership, audit
+ * attribution and the Formation Approvals lane against the migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

@@ -1,4 +1,9 @@
-/** D4485 (#4485): Distribution overview client uses the mounted project-scoped read. DS1 rendering and scoped write states. */
+/** D4485 (#4485): Distribution overview client uses the mounted project-scoped read. DS1 rendering and scoped write states.
+ *
+ * From frontend/test/README.md (moved by #6472): `distribution_overview_4485.test.mjs` —
+ * Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent
+ * failures, retries and existing contact-create actions (D4485).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { budgetView, KPI_LABELS, metricView, resultsLine, sourceChips, todayKey, weekColumns } from '../src/pages/cycles/distribution/overviewModel.js';

@@ -5,6 +5,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/capital_overview_6079.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `capital_overview_6079.test.ts` (D6079)
+ * checks the scoped Overview read across permitted/refused identities, canonical meeting data and
+ * isolated failures.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

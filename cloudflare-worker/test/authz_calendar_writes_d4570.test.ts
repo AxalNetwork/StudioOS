@@ -31,6 +31,14 @@
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/authz_calendar_writes_d4570.test.ts
+//
+// From cloudflare-worker/test/README.md (moved by #6472): `authz_calendar_writes_d4570.test.ts`
+// (#4570, D4570 slice 4) asks the calendar's eight record writes (IC meeting RSVP, cancel and
+// reschedule; check-in cancel and reschedule; manual-row edit and delete; push to the caller's
+// calendar) through the real Worker on the migrated schema, as every account that is not a party,
+// an attendee in the wrong role, a disabled party and no credentials: refused, nothing of the
+// record named, and no row, copy mapping or audit row changed and no call made to the calendar
+// provider. A non-party gets the same status and body as for a missing id on every one of them.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';

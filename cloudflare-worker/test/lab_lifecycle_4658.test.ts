@@ -17,6 +17,15 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/lab_lifecycle_4658.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `lab_lifecycle_4658.test.ts` (D4658)
+ * runs the Lab's lifecycle services and routes on the migrated template. It covers: - a stale week
+ * never written over a higher one; - a graduate never reopened by a start, a reinstatement or the
+ * activation; - the cycle activation interrupted at its batch, then resumed until it converges,
+ * completing only when every applicant is done and duplicating nothing on a rerun; - approval
+ * against withdrawal in both orders, including the race where the approval lands between the
+ * withdrawal's read and its write; - notification retry: failed and cut-off sends, the conditional
+ * re-claim, and abandonment.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

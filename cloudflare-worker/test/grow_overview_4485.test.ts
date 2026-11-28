@@ -1,4 +1,9 @@
-/** D4485 (#4485): Distribution overview on migrated SQLite; no connector or production reads. */
+/** D4485 (#4485): Distribution overview on migrated SQLite; no connector or production reads.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `grow_overview_4485.test.ts` —
+ * Distribution's scoped monthly figures, spend provenance, ISO week, writer-only replies, personal
+ * connection isolation and independent failures (D4485).
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

@@ -6,6 +6,10 @@
  * sentence is what the person sees.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/grow_export_6103.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D6103: `canExport` covers only Feedback and KPIs,
+ * `exportCsv`'s path and query against the Worker route, Export drawn only with `onExport` (and
+ * only on `can_export` in CycleRoute), the saved row count and the Worker's refusal sentence.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

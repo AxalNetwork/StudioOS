@@ -1,3 +1,9 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D1456 (#4014): the existing record,
+ * recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed
+ * steps, creator-only safe bot details and migration 760 replay through the ledger. The engine
+ * fixture applies migration 760 from its SQL source.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

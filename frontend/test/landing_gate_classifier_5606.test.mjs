@@ -1,4 +1,9 @@
-/** D5606 (#5606): both coexisting aggregate gates must leave leaf failure diagnosis intact. */
+/** D5606 (#5606): both coexisting aggregate gates must leave leaf failure diagnosis intact.
+ *
+ * From frontend/test/README.md (moved by #6472): D5606: coexisting aggregate gates preserve setup
+ * fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check
+ * failures remain excluded.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { classify, infraFingerprint } from '../../scripts/lib/ciClassify.mjs';

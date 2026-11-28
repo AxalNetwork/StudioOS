@@ -35,6 +35,13 @@
  * `cloudflare-worker/test/schema_once_d4133.test.ts` holds a loaded database
  * to a fresh build (every `sqlite_schema` row and every table's rows), shows a
  * changed migration changes the key, and races two first calls.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_schema_once.mjs` (D4133) builds the
+ * whole schema (the baseline and every migration above `BASELINE_CUTOFF`) once per run into
+ * `node_modules/.cache/studioos-schema/`, keyed by a hash of those files, and `loadSchema(db)`
+ * fills a test's own database from it; `loadSchema(db, { below: N })` is the schema as it stood
+ * before migration N. A test that needs the migrated schema calls it rather than replaying the
+ * files, which took 4–10 s per file.
  */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';

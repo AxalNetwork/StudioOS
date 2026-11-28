@@ -11,6 +11,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_overview_6027.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #6027: Build overview focus order,
+ * material-blocker attention with record links, the private plan preview, part isolation, reader
+ * actions and D4603's statement count.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

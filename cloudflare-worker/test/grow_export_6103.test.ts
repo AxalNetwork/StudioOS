@@ -5,6 +5,11 @@
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/grow_export_6103.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6103: Grow's Feedback and KPI CSV
+ * exports: writers only (and `records.can_export`), the table's search/filter/sort, names for
+ * writers and never an email, monthly KPI history in cents with currency, empty never 0, formula
+ * cells neutralised, the 5,000-row cap refused with a sentence, each export logged.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

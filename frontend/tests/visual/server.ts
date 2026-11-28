@@ -25,6 +25,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     frontend/tests/visual/server.ts            (from the repo root; PORT defaults to 4791)
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): The built `docs/` plus the real Worker
+ * (`cloudflare-worker/src/index.ts`) on the migrated schema in SQLite and the fake AI binding;
+ * seeds the matrix and runs the one-click build
  */
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';

@@ -1,4 +1,8 @@
-/** #5512: computed homepage contrast and real keyboard focus through the public Network disclosure. */
+/** #5512: computed homepage contrast and real keyboard focus through the public Network disclosure.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #5512: computed module-label contrast,
+ * Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 

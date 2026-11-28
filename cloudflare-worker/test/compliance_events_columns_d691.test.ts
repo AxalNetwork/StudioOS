@@ -1,6 +1,12 @@
 /**
  * D691 #1696, tests 1 and 2: real production-shaped obligations and a source
  * guard against the obsolete migration-034 columns. No production access.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D691:
+ * `compliance_events_columns_d691.test.ts` builds the full baseline and every post-cutoff
+ * migration with foreign keys on. It checks Grow obligation writes, API state mappings, seeded
+ * compliance events and calendar reads, and bans SQL references to the absent migration-034
+ * columns throughout Worker source.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

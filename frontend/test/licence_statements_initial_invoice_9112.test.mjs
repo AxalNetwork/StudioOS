@@ -1,4 +1,7 @@
 // D9112 (L46): licensee Statements from the Worker's invoice response.
+//
+// From frontend/test/README.md (moved by #6472): D9112 L46 and L46B invoice
+// rendering, status, PDF and partial failure.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';

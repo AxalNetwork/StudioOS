@@ -1,4 +1,9 @@
-/** #5039: approved cockpit controls and governed flows with synthetic finance records. */
+/** #5039: approved cockpit controls and governed flows with synthetic finance records.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #5039: Stream filtering, native invoice
+ * figures, governed dispute/due-date receipts, lazy history and checkout read-back at desktop,
+ * 834, 390 and dark; unknown replay and stale-period responses.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 

@@ -1,4 +1,8 @@
-/** D6040 (#6040): both module layouts show recorded facts without fabricating missing values. */
+/** D6040 (#6040): both module layouts show recorded facts without fabricating missing values.
+ *
+ * From frontend/test/README.md (moved by #6472): `build_facts_6040.test.mjs` (D6040) renders
+ * present, null, zero and unreadable Build facts through both desktop and phone module pages.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

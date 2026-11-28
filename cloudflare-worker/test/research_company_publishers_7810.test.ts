@@ -1,4 +1,9 @@
-/** D7810 (#7810): real grouped publisher inventory, reference terms and the shared Companies licence gate. */
+/** D7810 (#7810): real grouped publisher inventory, reference terms and the shared Companies licence gate.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs
+ * and the canonical migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

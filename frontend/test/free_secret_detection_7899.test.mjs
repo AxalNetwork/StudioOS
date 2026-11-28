@@ -1,4 +1,8 @@
-/** D7899: detect complete Axal API bearers and ordinary JWTs without exempting a public header shared by real credentials. */
+/** D7899: detect complete Axal API bearers and ordinary JWTs without exempting a public header shared by real credentials.
+ *
+ * From frontend/test/README.md (moved by #6472): D7899 dedicated Axal bearer detection,
+ * public-prefix/placeholder exclusions and refusal of blanket JWT exemptions.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';

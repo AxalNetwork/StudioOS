@@ -22,6 +22,9 @@
  *   node --experimental-strip-types --no-warnings \
  *        --import ./cloudflare-worker/test/_ts-loader.mjs \
  *        --test cloudflare-worker/test/baseline_reader.test.mjs
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `baseline_reader.test.mjs` holds it to
+ * what the regex it replaced returned.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

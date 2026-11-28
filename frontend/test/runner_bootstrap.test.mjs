@@ -1,4 +1,8 @@
 // D7885 (#7885): offline native-profile, integrity, private enrollment and recoverable lifecycle contracts; no real registration/provider calls.
+//
+// From frontend/test/README.md (moved by #6472): `runner_bootstrap.test.mjs` checks native
+// capability profiles, verified archives, private organization enrollment and
+// idempotent/recoverable lifecycle behavior (D7885).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

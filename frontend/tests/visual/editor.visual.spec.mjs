@@ -19,6 +19,9 @@
  * the Worker's by deck_grid_d1499), so a new theme is a new column of
  * baselines and nothing else changes. The first test holds all three to the
  * objects the server imported from the Worker.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): 17 structures × `BASE_THEMES` × both
+ * slide sizes, the one-click deck, and the editor's states
  */
 import { test, expect } from '@playwright/test';
 import { ASPECTS, STRUCTURES } from '../../src/pages/raise/pitch/gridModel.js';

@@ -19,6 +19,13 @@
  *      never 0, and a failed read is Unreadable.
  *
  * Every person, company and uid here is made up.
+ *
+ * From frontend/test/README.md (moved by #6472): `network_relationships_fixes_4740.test.mjs` —
+ * #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open
+ * in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable
+ * mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the
+ * D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet`
+ * shares read is Unreadable for a member.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,8 @@
-/** D7256 (#7256): real HTTP refusals and diagnostic records must not serialize private exception context. */
+/** D7256 (#7256): real HTTP refusals and diagnostic records must not serialize private exception context.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7256: HTTP error privacy, bounded logs,
+ * owner/admin diagnostics and preserved validation/auth refusal contracts.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

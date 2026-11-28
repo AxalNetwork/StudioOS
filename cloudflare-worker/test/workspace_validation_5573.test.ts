@@ -15,6 +15,10 @@
  * Mutation checked: the fake executor's `create` skipping `executorEligibility` → the region probe fails revoked_and_disallowed_never_execute.
  * Mutation checked: runnerProtocol `requestCancel` allowed on a finished run → both race calls succeed, the harness's guard throws and cancel_races_completion fails.
  * Mutation checked: the checkpoint hash comparison removed → partial_upload's rejected-upload assertion fails.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5573: each of the eleven chaos faults
+ * keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the
+ * CLI and the `local_mocked` label.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

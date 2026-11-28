@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1191: capital summary/support transport
+ * preserves project, page, reason, investor target and POST verb.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

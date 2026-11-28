@@ -4,6 +4,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/workspace_placement_5570.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5570: placement order and reasons,
+ * Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a
+ * restarted instance, reconcile-before-free, bill once; injected clock, synthetic only.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,8 @@
 // D5611: benchmark event/suite parity and a source audit of secret-bearing CI jobs.
+//
+// From frontend/test/README.md (moved by #6472): `runner_lanes_5611.test.mjs` checks branch-only
+// benchmark triggers, exact merged suite-step parity and free-runner placement of non-token secret
+// jobs (D5611).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

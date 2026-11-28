@@ -1,4 +1,10 @@
-/** D1159 (#3066): names, act-table writes and independent booklet counts on real SQLite. */
+/** D1159 (#3066): names, act-table writes and independent booklet counts on real SQLite.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1159: `fund_admin_d1159.test.ts` covers
+ * named distribution lines without arithmetic changes, both new Admin acts and their audit,
+ * frozen/support/member refusals, preserved institutional GP scope, and independent booklet queue
+ * reads. Every external fetch is forbidden; no Mercury call reaches a provider.
+ */
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

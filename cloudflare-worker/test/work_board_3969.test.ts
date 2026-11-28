@@ -1,5 +1,10 @@
 // D1614 W1: real SQLite and authenticated Hono, prepared schema until S1
 // assigns the production migration. No external providers or production rows.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D1614 W1 (#3969): authenticated
+// project-only boards, task fields, moves, close reasons, dependency races, actor events,
+// unavailable reads, migration 762 over legacy rows, the engine's own mount and the readiness
+// hook, over real SQLite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

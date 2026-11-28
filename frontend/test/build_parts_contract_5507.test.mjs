@@ -36,6 +36,10 @@
  *     which owns membership and order, rightly did not.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/build_parts_contract_5507.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D5507: THE contract for Build's connector parts:
+ * every module's complete, ordered list, written by hand; provider suites assert only their own
+ * key. Update it, once, when a part is added, removed or moved.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

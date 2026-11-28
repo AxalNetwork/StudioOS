@@ -1,4 +1,8 @@
-/** D4829: canonical records drive the Practice cockpit; failed or partial reads never become reassuring zeroes. */
+/** D4829: canonical records drive the Practice cockpit; failed or partial reads never become reassuring zeroes.
+ *
+ * From frontend/test/README.md (moved by #6472): D4829: source isolation, canonical counts,
+ * timezone boundaries, pagination, record destinations, retry and Client Sheet.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

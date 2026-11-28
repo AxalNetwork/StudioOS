@@ -1,4 +1,7 @@
 // D7810 (#7810): record provenance, reviewed references and explicit unreviewed terms.
+//
+// From frontend/test/README.md (moved by #6472): `company_source_7810.test.mjs` checks stored
+// publisher provenance and explicit unreviewed licence terms (D7810).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { companySource } from '../src/pages/research/companySource.js';

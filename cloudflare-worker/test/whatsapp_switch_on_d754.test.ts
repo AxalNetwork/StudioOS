@@ -1,4 +1,11 @@
-/** D754 #1892: both chat rollout switches, WhatsApp safeguards and media expiry. Every provider is stubbed. */
+/** D754 #1892: both chat rollout switches, WhatsApp safeguards and media expiry. Every provider is stubbed.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D754: `whatsapp_switch_on_d754.test.ts`
+ * holds the two independent chat rollout switches, authenticated off acknowledgements, hydrated
+ * canary membership, Axal’s own-number guards, WhatsApp media deadlines/expiry and split calling
+ * reasons to real SQLite fixtures with every provider stubbed. Its in-process mutation checks run
+ * the same positive scenarios before restoring ordinary modules.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

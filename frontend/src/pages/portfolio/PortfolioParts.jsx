@@ -12,6 +12,11 @@
  * `Skeleton` (the Overview and Positions each had a copy) and
  * `PerformanceSummary`, the Overview's NAV, multiples and basis strip, which
  * Performance draws above its quarter-end series (canvas `perf()` on both).
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `PortfolioParts.jsx` — the
+ * patterns built once (canvas PF-11): the financial metric (`FinancialMetric`, `MetricValue`), the
+ * basis strip, health status, the reporting obligation, a source that could not be read, a summary
+ * tile, and the attention item.
  */
 import React from 'react';
 import { Link } from 'react-router-dom';

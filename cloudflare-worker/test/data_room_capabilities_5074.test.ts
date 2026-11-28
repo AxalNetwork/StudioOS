@@ -14,6 +14,12 @@
  *     (`frontend/test/_data_room_capabilities.mjs`), so the two cannot drift.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/data_room_capabilities_5074.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5074 (#5074):
+ * `data_room_capabilities_5074.test.ts` holds the Data room read's `capabilities` to the writes'
+ * enforcement for the founder, an accepted co-founder, an advisor member, an investor, an ordinary
+ * admin, a Super Admin and the support read, capability by capability, and pins
+ * `frontend/test/_data_room_capabilities.mjs` to the Worker's map.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -7,6 +7,9 @@
  * on disk that answers `s3api put-object`, `head-object` and `get-object`
  * from `dir/store/<bucket>/<key>` and refuses as S3 does (If-None-Match, a
  * bad checksum). Every call is appended to `dir/calls.log`.
+ *
+ * From frontend/test/README.md (moved by #6472): D5337: the `age` key pair and the fake `aws`
+ * store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`).
  */
 import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';

@@ -13,6 +13,11 @@
  *   M7 executePlan skips its generation/head fence     -> "stale GC plan"
  *   M8 Worktree shares the base map instead of copying -> "10 parallel tasks"
  *   M9 commit accepts a reused token with a different tree -> "idempotency"
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5568: 10 parallel worktrees,
+ * interrupted-workspace restore on the original and an alternate fake executor, wrong
+ * tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention,
+ * metrics; nine mutations listed in its header.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

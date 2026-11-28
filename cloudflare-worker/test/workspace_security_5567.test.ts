@@ -1,3 +1,8 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D5567: actual WebCrypto,
+ * scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation
+ * journeys; synthetic only.
+ */
 import { containmentFixture } from './_containment_fixture_5567.ts';
 /** D5567: synthetic broker identities, actual WebCrypto grants/encryption and atomic refusal paths; no provider calls. */
 import test from 'node:test';

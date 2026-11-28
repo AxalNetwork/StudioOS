@@ -5,6 +5,9 @@
  * Bricolage Grotesque from the repo's legal-paper fonts), aborts every other
  * request that leaves 127.0.0.1, and opens the editor once its fonts and
  * reads have settled.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): Sign-in, the pinned clock, local fonts
+ * for Google Fonts, every other outside request aborted
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

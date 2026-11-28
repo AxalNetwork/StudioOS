@@ -1,4 +1,8 @@
-/** D4494: mounted Inbox routes on real SQLite; mail is read-only and private to the caller. */
+/** D4494: mounted Inbox routes on real SQLite; mail is read-only and private to the caller.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4494: real SQLite mounted Inbox reads,
+ * per-member scope/read receipts, null on failures, no sends, and Outlook lookup/paging safety.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

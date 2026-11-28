@@ -15,6 +15,11 @@
  *
  * Where a read answered and holds no value, the field says "Not recorded",
  * with the reason. Where it failed, "Unreadable". A measured zero stays 0.
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `portfolioModel.js` — the pure
+ * model: a read's three states (`readOf`, `SHAPES`), the formatters, performance with its basis
+ * (`performanceOf`), health and reporting per company, the evidence rules and the Needs attention
+ * queue, the company table and its filters.
  */
 
 import { NOT_RECORDED, titleCase } from '../../lib/absence';

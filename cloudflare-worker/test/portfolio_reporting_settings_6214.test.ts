@@ -1,4 +1,7 @@
 // D6214: attributed, immutable rule revisions and optimistic GP writes over real SQLite.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): Rule history, inherited defaults, GP
+// ownership, attributed writes, stale revisions and period/stage rules.
 import { before, after, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

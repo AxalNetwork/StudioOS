@@ -1,4 +1,8 @@
-/** #6178: sourced ARR/retention in the founder's existing sheet and investor Traction tiles. */
+/** #6178: sourced ARR/retention in the founder's existing sheet and investor Traction tiles.
+ *
+ * From frontend/test/README.md (moved by #6472): #6178: canonical ARR/retention tiles, typed
+ * provenance, as-of, zero/absence and the existing founder Metrics step.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

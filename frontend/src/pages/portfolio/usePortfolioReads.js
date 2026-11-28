@@ -13,6 +13,9 @@
  * `{ state: 'ok', value }` or `{ state: 'unreadable' }` (see `readOf`). The
  * Worker's own error `detail` is never kept: a member is shown a sentence,
  * not a database string (#5365 F-26).
+ *
+ * From frontend/src/pages/portfolio/README.md (moved by #6472): `usePortfolioReads.js` — each
+ * source read, committed and retried on its own.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { reportError } from '../../lib/log';

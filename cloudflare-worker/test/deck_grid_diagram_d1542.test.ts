@@ -11,6 +11,12 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_grid_diagram_d1542.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1542 (#3780): the `grid_diagram` job:
+ * every number stripped ("$3M ARR" → "ARR"), the family of types (Flow, Cycle and Matrix generate;
+ * the rest are later), overflow refused by `fitProblems` and each node's box, the plan on the
+ * Diagrams group's model, a proposal nothing saves before Accept, and `POST
+ * /api/decks/:id/diagrams/check` against its contract.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

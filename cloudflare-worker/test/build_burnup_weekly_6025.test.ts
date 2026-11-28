@@ -17,6 +17,12 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_burnup_weekly_6025.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6025: Prototype / MVP's burn-up by
+ * month, ISO week or day of completion over the real schema: three weeks of one month draw week
+ * labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three
+ * dated completions still read the too-little sentence, three months still draw by month, the same
+ * statements at every grain, and `burnupPoints` across a 53-week year.
  */
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';

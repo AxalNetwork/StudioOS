@@ -1,4 +1,9 @@
-/** D5583 part 2 — synthetic preflight against the landed registry and blob integrity service; no live storage. */
+/** D5583 part 2 — synthetic preflight against the landed registry and blob integrity service; no live storage.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5583 part 2: bounded admission, scoped
+ * classes, immutable snapshots, existing blob readback, class-specific reconciliation,
+ * cross-project refusal and cost/audit.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareMediaUpload, MEDIA_BUFFER_MAX_BYTES, MEDIA_PIN_LIMIT, type PrepareMediaInput } from '../src/services/workGraphMediaStorage.ts';

@@ -1,5 +1,13 @@
 // D755 CR7 (#1985): the order receipt reads webhook state, never grants tokens.
 // Run with the Worker _ts-loader and node --experimental-strip-types.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D755 CR7:
+// `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies
+// the current account balance and VAT exclusion, rejects other members and failed reads, and
+// leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their
+// price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding
+// genuine failures, and covers authentication. It embeds thirteen mutations, with the restored
+// scenario checked before and after each mutant. Providers are forbidden.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';

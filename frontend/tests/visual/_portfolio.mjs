@@ -16,6 +16,9 @@
  * Lumen, to the investor's workspace and the admin's book, so a check can
  * change company while the first company's answer is still on its way; a
  * delay is an `over` that awaits before it answers. Every name is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): The reads those boards make, answered for
+ * that spec as the Worker answers them, signed in as an investor; made-up names
  */
 import { prepare } from './_editor.mjs';
 

@@ -1,4 +1,8 @@
-/** D7701 (#7701): real migrated scheduled fund sessions, GP/company gates and pre-charge readiness; synthetic records only. */
+/** D7701 (#7701): real migrated scheduled fund sessions, GP/company gates and pre-charge readiness; synthetic records only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7701: selected fund scheduling, native
+ * reader readiness, access changes and zero-charge refusals.
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { removeMigratedDatabases } from './_storage_schema.ts';

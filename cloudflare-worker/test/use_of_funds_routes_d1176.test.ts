@@ -1,4 +1,13 @@
-/** D1176: mounted HTTP handlers, canonical SQLite DDL and synthetic users only. */
+/** D1176: mounted HTTP handlers, canonical SQLite DDL and synthetic users only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1176:
+ * `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over
+ * canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization,
+ * cross-venture ids, Base projection, partial legacy splits and financial reconciliation,
+ * legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone
+ * deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded
+ * runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
+ */
 import test,{beforeEach,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
