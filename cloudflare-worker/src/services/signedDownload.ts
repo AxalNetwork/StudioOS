@@ -30,6 +30,10 @@
  * If strict atomicity is ever required (e.g. one-time decryption keys),
  * back this with a Durable Object instead of KV. Tracked in
  * documentation/audits/SECURITY_REVIEW.md §2 / O-list.
+ *
+ * D5583 part 4 adds `signPurposeToken` / `verifyPurposeToken`: the same secret and token shape under a key derived
+ * for one purpose, so a service whose links must be rechecked on every open (WorkGraph media delivery) signs with this
+ * module rather than its own HMAC, and its tokens can never be redeemed at `/api/files/dl`.
  */
 import type { Env } from '../types';
 
@@ -169,4 +173,58 @@ export async function verifyAndConsumeToken(
   }
 
   return { key: payload.key, audience: payload.aud, userId: payload.uid, jti: payload.jti };
+}
+
+// ── purpose-bound tokens (D5583 part 4) ─────────────────────────────────────
+
+/** A purpose names the one verifier its tokens are for: lowercase letters, digits and dashes. */
+const PURPOSE_RE = /^[a-z][a-z0-9-]{2,39}$/;
+const MAX_PURPOSE_TOKEN_CHARS = 2048;
+
+/**
+ * The same secret and token shape as the download tokens above (`b64url(payload).b64url(HMAC-SHA-256)`), under a key
+ * derived for one purpose (`<purpose>:<secret>`, as `learningStream.ts`'s source tokens do). A purpose token never
+ * verifies as a download token, so `/api/files/dl` cannot redeem it, and a download token never verifies here. Null
+ * without a secret of at least 16 characters. No KV: what the token may open is the verifier's to recheck on read.
+ */
+async function purposeKey(env: Pick<Env, 'KEK_R2' | 'JWT_SECRET'>, purpose: string): Promise<CryptoKey | null> {
+  const secret = env.KEK_R2 || env.JWT_SECRET || '';
+  if (!PURPOSE_RE.test(purpose) || secret.length < 16) return null;
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(`${purpose}:${secret}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+}
+
+/** Sign `claims` for one purpose. The payload carries the purpose too (`p`); null without a usable secret. */
+export async function signPurposeToken(
+  env: Pick<Env, 'KEK_R2' | 'JWT_SECRET'>, purpose: string, claims: Record<string, unknown>,
+): Promise<string | null> {
+  const key = await purposeKey(env, purpose);
+  if (!key) return null;
+  const payloadB64 = b64url(JSON.stringify({ ...claims, p: purpose }));
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64)));
+  const token = `${payloadB64}.${b64url(sig)}`;
+  return token.length <= MAX_PURPOSE_TOKEN_CHARS ? token : null;
+}
+
+/**
+ * The claims of a token signed for this purpose, or null: no secret, a malformed or oversized token, a signature
+ * that does not match (compared in constant time), or a payload of another purpose. Expiry and everything the claims
+ * name are the caller's to check.
+ */
+export async function verifyPurposeToken(
+  env: Pick<Env, 'KEK_R2' | 'JWT_SECRET'>, purpose: string, token: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (typeof token !== 'string' || token.length > MAX_PURPOSE_TOKEN_CHARS) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  const key = await purposeKey(env, purpose);
+  if (!key) return null;
+  try {
+    const expected = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(parts[0])));
+    if (!timingSafeEqual(expected, unb64url(parts[1]))) return null;
+    const claims = JSON.parse(new TextDecoder().decode(unb64url(parts[0])));
+    if (!claims || typeof claims !== 'object' || Array.isArray(claims) || claims.p !== purpose) return null;
+    return claims as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }

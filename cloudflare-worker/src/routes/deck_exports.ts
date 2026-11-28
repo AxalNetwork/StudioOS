@@ -9,8 +9,17 @@
  *          `raise.pitch-deck` audit row in one batch; when they cannot be
  *          written the file is not handed out.
  *   GET  /api/decks/:id/exports
- *        → {exports: [{id, deck_id, version, format, content_hash, by, created_at}]}
- *          for every version of the deck's venture, newest first (50).
+ *        → {exports: [{id, deck_id, version, format, content_hash, by, created_at,
+ *          notes, sources, copy}]} for every version of the deck's venture,
+ *          newest first (50). D8771 (#8771): `notes` and `sources` are what
+ *          the file carried and `copy` the dialog's preset they make
+ *          (`copyOf`); each is null for a row written before they were
+ *          recorded, which the dialog says as "Not recorded", never "no".
+ *
+ * D8771 (#8771): the PowerPoint and .odp files answer with
+ * `X-Deck-Export-Report`, the writer's own counts as JSON (`reportOf`), and
+ * Google Slides with the same counts in its JSON, so the dialog says what
+ * went in natively, as a picture, as words, or not at all.
  *   POST /api/decks/:id/export  (PDF in decks.ts; PowerPoint here, D1574)
  *        the middleware below hashes the file the route answers and writes
  *        its `deck_exports` row; its audit row is part 1's (#2674, fix 11).
@@ -69,6 +78,47 @@ const IMAGE_DEADLINE_MS = 10_000;
 /** #3655: every chart picture of one Google Slides export, together. */
 export const CHART_SHOTS_BUDGET_MS = 120_000;
 
+/**
+ * D8771 (#8771): the export dialog's two presets, by what the file carries.
+ * An investor copy has no speaker notes and keeps the Sources appendix, as an
+ * investor link does (`shareModel.DEFAULT_INCLUDE`; owner question Q1, drawn
+ * as A); a working copy carries both; anything else is custom. The client's
+ * `exportDisclosureModel.PRESETS` is the same table (a drift test reads both).
+ */
+export const EXPORT_COPIES = Object.freeze({
+  investor: Object.freeze({ notes: false, sources: true }),
+  working: Object.freeze({ notes: true, sources: true }),
+});
+export type ExportCopy = keyof typeof EXPORT_COPIES | 'custom';
+export function copyOf(notes: boolean, sources: boolean): ExportCopy {
+  for (const [k, v] of Object.entries(EXPORT_COPIES)) if (v.notes === notes && v.sources === sources) return k as ExportCopy;
+  return 'custom';
+}
+export type ExportOptions = { notes: boolean; sources: boolean };
+/** The two options as every export route reads them: only a literal `true` is on. */
+export const optionsOf = (body: any): ExportOptions => ({ notes: body?.notes === true, sources: body?.sources === true });
+
+/**
+ * D8771 (#8771): the writer's counts, as the `X-Deck-Export-Report` header and
+ * Google Slides' JSON carry them. Numbers only: no title, figure or URL.
+ */
+export function reportOf(r: {
+  charts: { native?: number; pictured: number; as_text: number };
+  images: { placed: number; not_placed: number };
+  text?: { boxes: number; shrunk: number; smallest: number };
+  diagrams?: number;
+  slides?: { total: number; from_blocks: number; text_frames: number };
+}) {
+  return {
+    charts: { native: r.charts.native ?? 0, pictured: r.charts.pictured, as_text: r.charts.as_text },
+    images: { placed: r.images.placed, not_placed: r.images.not_placed },
+    text: r.text ? { boxes: r.text.boxes, shrunk: r.text.shrunk, smallest: r.text.smallest } : null,
+    diagrams: r.diagrams ?? null,
+    slides: r.slides ? { total: r.slides.total, from_blocks: r.slides.from_blocks, text_frames: r.slides.text_frames } : null,
+  };
+}
+export const REPORT_HEADER = 'X-Deck-Export-Report';
+
 export const NOT_RECORDED_MESSAGE = 'The export could not be recorded, so no file was made. Try again in a moment. Nothing was shared.';
 
 const AUDIT_SUMMARY: Record<ExportFormat, string> = {
@@ -94,10 +144,13 @@ async function deckRow(env: Env, id: number): Promise<DeckRow | null> {
 /** The ledger row, and (when asked) its audit row, as one batch. */
 export function exportStatements(env: Env, a: {
   deck: DeckRow; format: ExportFormat; contentHash: string | null; externalRef?: string | null; userId: number; audit: boolean;
+  /** D8771 (#8771): what the file carried; the row keeps it, and the preset it makes. */
+  options: ExportOptions;
 }) {
   const out = [env.DB.prepare(
-    'INSERT INTO deck_exports (deck_id, version, format, content_hash, external_ref, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-  ).bind(a.deck.id, a.deck.version ?? null, a.format, a.contentHash, a.externalRef ?? null, a.userId)];
+    'INSERT INTO deck_exports (deck_id, version, format, content_hash, external_ref, created_by, notes, sources, copy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).bind(a.deck.id, a.deck.version ?? null, a.format, a.contentHash, a.externalRef ?? null, a.userId,
+    a.options.notes ? 1 : 0, a.options.sources ? 1 : 0, copyOf(a.options.notes, a.options.sources))];
   if (a.audit) {
     out.push(logCycleWriteStatement(env, {
       projectId: Number(a.deck.project_id), userId: a.userId, cycle: 'raise', module: 'pitch-deck',
@@ -192,6 +245,7 @@ deckExports.post('/:id/export/html', async (c) => {
   if ('refused' in copied) return copied.refused;
   const row: DeckRow = copied.row;
   const body = await c.req.json().catch(() => ({} as any));
+  const opts = optionsOf(body);
 
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
@@ -211,8 +265,8 @@ deckExports.post('/:id/export/html', async (c) => {
     images,
     footer: brand.show_footer ? brand.footer_text : null,
     watermark: brand.watermark_url ? images.get(brand.watermark_url) ?? null : null,
-    notes: body?.notes === true,
-    sources: body?.sources === true,
+    notes: opts.notes,
+    sources: opts.sources,
     compliance: deckCompliance(slides, themeOfRow(row)),
     // D1571 (#3818): the deck's language and direction on every card of the file.
     lang: typeof themeOfRow(row)?.lang === 'string' ? themeOfRow(row).lang : null,
@@ -221,7 +275,7 @@ deckExports.post('/:id/export/html', async (c) => {
   const bytes = new TextEncoder().encode(html);
   const hash = await sha256Hex(bytes);
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'html', contentHash: hash, userId: Number(user.id), audit: true }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'html', contentHash: hash, userId: Number(user.id), audit: true, options: opts }));
   } catch (e) {
     return refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
   }
@@ -278,7 +332,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   if ('refused' in copied) return copied.refused;
   const row: DeckRow = copied.row;
   const body = await c.req.json().catch(() => ({} as any));
-  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const opts = optionsOf(body);
   const { slides: all, renderable } = exportDeckOf(row, opts);
   const slides = all.slice(0, 60);
   const cards = renderable.slides.slice(0, slides.length);
@@ -293,7 +347,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   });
   const hash = await sha256Hex(odp.bytes);
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'odp', contentHash: hash, userId: Number(user.id), audit: true }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'odp', contentHash: hash, userId: Number(user.id), audit: true, options: opts }));
   } catch (e) {
     return refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
   }
@@ -304,6 +358,7 @@ deckExports.post('/:id/export/odp', async (c) => {
       'Content-Disposition': `attachment; filename="${fileName(row, 'odp')}"`,
       'Cache-Control': 'no-store',
       'X-Content-SHA256': hash,
+      [REPORT_HEADER]: JSON.stringify(reportOf(odp)),
     },
   });
 });
@@ -344,7 +399,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
     return c.json({ error: w.code }, w.status as any);
   }
   const body = await c.req.json().catch(() => ({} as any));
-  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const opts = optionsOf(body);
   const { slides, renderable } = exportDeckOf(row, opts);
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const images = await markedImages(c.env, Number(row.project_id), slides);
@@ -367,7 +422,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
     return c.json({ error: w.code }, w.status as any);
   }
   try {
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'google_slides', contentHash: hash, externalRef: created.file_id, userId: Number(user.id), audit: true }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'google_slides', contentHash: hash, externalRef: created.file_id, userId: Number(user.id), audit: true, options: opts }));
   } catch (e) {
     console.warn('[decks/export/google-slides] created but not recorded', (e as Error)?.name);
     return c.json({ error: 'export_not_recorded_created', url: created.url, converted: created.converted }, 503);
@@ -375,6 +430,8 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   return c.json({
     created: true, file_id: created.file_id, url: created.url, converted: created.converted,
     charts: deck.charts, images: deck.images, content_hash: hash,
+    // D8771: the writer's whole count, and what the file carried.
+    report: reportOf(deck), notes: opts.notes, sources: opts.sources, copy: copyOf(opts.notes, opts.sources),
   });
 });
 
@@ -385,7 +442,7 @@ deckExports.get('/:id/exports', async (c) => {
   try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const { results } = await c.env.DB.prepare(
-    `SELECT e.id, e.deck_id, e.version, e.format, e.content_hash, e.created_at, u.name AS by_name
+    `SELECT e.id, e.deck_id, e.version, e.format, e.content_hash, e.created_at, e.notes, e.sources, e.copy, u.name AS by_name
        FROM deck_exports e JOIN pitch_decks d ON d.id = e.deck_id
        LEFT JOIN users u ON u.id = e.created_by
       WHERE d.project_id = ? ORDER BY e.id DESC LIMIT 50`,
@@ -394,6 +451,9 @@ deckExports.get('/:id/exports', async (c) => {
     exports: (results || []).map((r: any) => ({
       id: r.id, deck_id: r.deck_id, version: r.version ?? null, format: r.format,
       content_hash: r.content_hash ?? null, by: r.by_name ?? null, created_at: r.created_at,
+      // D8771: null (Not recorded) for a row written before migration 202611270209.
+      notes: r.notes == null ? null : r.notes === 1, sources: r.sources == null ? null : r.sources === 1,
+      copy: typeof r.copy === 'string' ? r.copy : null,
     })),
   });
 });
@@ -415,9 +475,11 @@ deckExports.use('/:id/export', async (c, next) => {
   const row = await deckRow(c.env, Number(c.req.param('id')));
   const user = await requireAuth(c);
   const hash = await sha256Hex(bytes);
+  // D8771: the same body the route read (Hono keeps it), so the row says what the file carried.
+  const options = optionsOf(await c.req.json().catch(() => ({})));
   try {
     if (!row) throw new Error('deck row gone');
-    await c.env.DB.batch(exportStatements(c.env, { deck: row, format, contentHash: hash, userId: Number(user.id), audit: false }));
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format, contentHash: hash, userId: Number(user.id), audit: false, options }));
   } catch (e) {
     c.res = undefined as any;
     c.res = refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
@@ -455,7 +517,7 @@ deckExports.post('/:id/export', async (c, next) => {
   if ('refused' in copied) return copied.refused;
   const row: DeckRow = copied.row;
   // D1112 (#2992): PD17's two options apply to every format.
-  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const opts = optionsOf(body);
   const { slides, renderable } = exportDeckOf(row, opts);
   const projectId = Number(row.project_id);
   const theme = themeOfRow(row);
@@ -476,6 +538,8 @@ deckExports.post('/:id/export', async (c, next) => {
       'Content-Disposition': `attachment; filename="${fname}.pptx"`,
       'Cache-Control': 'no-store',
       'X-Deck-Export-Mode': 'editable',
+      // D8771 (#8771): what the writer made, for the dialog's completed panel.
+      [REPORT_HEADER]: JSON.stringify(reportOf(deck)),
     },
   });
 });

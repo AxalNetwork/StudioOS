@@ -43,7 +43,7 @@ const ZETA = row({ uid: 'zeta', name: 'Zeta Deep Tech', hq: 'Berlin', fund_size_
 const FILLER = Array.from({ length: 22 }, (_, k) => row({ uid: `f${k}`, name: `Filler ${k}`, size_reason: 'Not recorded' }));
 
 const DATA = {
-  items: [ALPHA, BETA, ZETA, ...FILLER], total: 2616, limit: 25, offset: 0, sort: 'name',
+  items: [ALPHA, BETA, ZETA, ...FILLER], total: 2616, limit: 25, offset: 0, sort: 'name', size_currencies: ['EUR', 'USD'],
   size_basis: 'Sizes are compared and sorted in euros, on the EuroTech list only; other lists record no size in a known currency.',
   source: 'Public fund spreadsheets', source_boundary: 'Reported fund-size snapshots and discovery metadata only.',
   coverage: { total: 2616, as_of: '2026-10-04', fields: { size_eur: 1001, size_unknown_currency: 3, hq: 2500, website: 1200,
@@ -125,7 +125,7 @@ test('populated: coverage from the API, and stage "Not recorded" with its reason
   assert.match(text, /What the fund lists record/);
   assert.match(text, /Funds with each field filled, of 2,616/);
   assert.match(text, /Size in a known currency1,001 \/ 2,616/);
-  assert.match(text, /3 more funds hold a size from a list whose currency is not recorded/);
+  assert.match(text, /3 more funds hold sizes whose currency is not recorded/); // D7744: counted per row, not per list
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
 });
 

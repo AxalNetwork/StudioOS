@@ -121,10 +121,12 @@ test('recorded: a tie appears under its counterpart’s company; a tie with none
       ['row-organization-acme', 'row-organization-northwind-capital'],
       'the roll-up is not the set of linked companies');
     const northwind = page.byTestId('row-organization-northwind-capital');
-    assert.match(textOf(northwind), /2 known/, 'two ties at one company are not grouped together');
+    // D6257: the count is the People column of the directory's table.
+    const count = (row) => textOf(row.childNodes.find((n) => propsOf(n)['data-testid'] === 'organization-count'));
+    assert.equal(count(northwind), '2', 'two ties at one company are not grouped together');
     // The tie with no linked company shares Northwind's email domain and is
     // still not counted there: a firm is never inferred from an address.
-    assert.doesNotMatch(textOf(northwind), /3 known/);
+    assert.doesNotMatch(textOf(northwind), /Di Ekk/);
     assert.ok(page.byTestId('empty-organizations') === null, 'the empty state shows over real companies');
     assert.ok(page.byTestId('status-organizations-unreadable') === null, 'a readable book says it was unreadable');
     // The Person row carries the company, or Not recorded.
@@ -202,19 +204,23 @@ test('linked companies open separately, and known people count accounts once eve
   textOnly.other.company_profile_id = null;
   const page = await mount([[one, { ...one, id: 14 }, two, otherCompany, textOnly]], { zone: 'organizations' });
   try {
-    const disclosures = page.byPrefix('organization-disclosure');
-    assert.equal(disclosures.length, 3);
-    assert.equal(new Set(disclosures.map((node) => node.parentNode)).size, 3, 'each row has its own disclosure');
-    assert.match(textOf(disclosures[0]), /2 known.*Linked by Sam Ortiz.*Has a co-investor contact/);
-    assert.match(textOf(disclosures[1]), /1 known.*Linked by Bo Chen/);
-    assert.match(textOf(disclosures[2]), /1 known.*profile not confirmed/);
-    assert.deepEqual(disclosures[0].parentNode.childNodes[1].childNodes.map(textOf),
-      ['Sam Ortiz · InvestorNo recorded touch', 'Sam Ortiz · AdvisorNo recorded touch']);
+    // D6257 (NW4): one table row per linked profile, each opening its own detail.
+    const rows = page.byPrefix('row-organization-');
+    assert.equal(page.byPrefix('organization-open').length, 3);
+    const cell = (row, id) => textOf(row.childNodes.find((n) => propsOf(n)['data-testid'] === id));
+    const all = page.byPrefix('organization-count').map(textOf);
+    assert.deepEqual(all, ['2', '1', '1']);
+    const people = page.byPrefix('organization-people');
+    assert.deepEqual(people[0].childNodes.map(textOf), ['Sam Ortiz · Investor their account', 'Sam Ortiz · Advisor their account']);
+    assert.match(textOf(people[1]), /Bo Chen.*their account/);
+    assert.match(textOf(people[2]), /Cy Dahl.*profile not confirmed/);
+    assert.match(page.text(), /Has a co-investor contact/);
+    assert.equal(cell(rows[0], 'organization-latest'), '— Not recorded', 'no touch is drawn as a date');
     assert.doesNotMatch(page.text(), /profile-[ab]|sam[12]@example/);
 
     await act(async () => page.filterCalls.at(-1).onChange('co_investors'));
-    assert.equal(page.byPrefix('organization-disclosure').length, 1);
-    assert.match(textOf(page.byPrefix('organization-disclosure')[0]), /2 known/);
+    assert.equal(page.byPrefix('organization-open').length, 1);
+    assert.deepEqual(page.byPrefix('organization-count').map(textOf), ['2']);
   } finally { await page.done(); }
 });
 
@@ -234,10 +240,11 @@ test('the directory and its relationship and company retries are independent of 
     await act(async () => propsOf(page.byTestId('button-organizations-retry')).onClick());
     assert.match(textOf(page.byTestId('status-organizations-unreadable')), /companies could not be read/);
     await act(async () => propsOf(page.byTestId('button-organizations-retry')).onClick());
-    assert.equal(page.byPrefix('organization-disclosure').length, 2);
+    assert.equal(page.byPrefix('organization-open').length, 2);
     await act(async () => finishHistory());
-    assert.equal(page.byPrefix('organization-disclosure').length, 2, 'failed ask history did not hide readable companies');
-    assert.deepEqual(page.calls.filter((name) => name !== 'partnerRelationships').sort(), ['introductionsQuota', 'listIntroductions']);
+    assert.equal(page.byPrefix('organization-open').length, 2, 'failed ask history did not hide readable companies');
+    // D6257: the directory also reads the reminders it counts (read-only); still no propositions read.
+    assert.deepEqual(page.calls.filter((name) => name !== 'partnerRelationships').sort(), ['introductionsQuota', 'listIntroductions', 'partnerReminders']);
     assert.equal(page.reads(), 3);
   } finally {
     await act(async () => finishHistory());
@@ -255,7 +262,9 @@ test('a named target needs readable quota and history, confirmation, and an expl
   });
   try {
     const ask = () => page.button('Request an intro to Ada Founder');
-    assert.match(textOf(page.byPrefix('organization-disclosure')[0]), /Harbor Seed/);
+    assert.match(textOf(page.byPrefix('organization-open')[0]), /Harbor Seed/);
+    // D6257 (NW4.1): the ask is in the organization's detail.
+    await act(async () => propsOf(page.byPrefix('organization-open')[0]).onClick());
     assert.equal(propsOf(ask()).disabled, true);
     await act(async () => resolveQuota({ used: 0, cap: 3, remaining: 3 }));
     assert.equal(propsOf(ask()).disabled, false);

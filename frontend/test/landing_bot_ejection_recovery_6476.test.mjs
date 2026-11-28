@@ -8,6 +8,7 @@ import test from 'node:test';
 import { decide, evidenceState, keeperMergedSince, RECOVERY_WINDOW_HOURS, RETRYABLE_ELIGIBILITY } from '../../scripts/landing-bot/ejection-rules.mjs';
 import { candidates, normalise, stickyLine, sweep } from '../../scripts/landing-bot/ejection.mjs';
 import { eligible, STICKY_MARKER } from '../../scripts/landing-bot/rules.mjs';
+import { landingDecision } from './_landingDecision_6476.mjs';
 
 const BOT = 'axal-landing-bot[bot]';
 const REPO = 'AxalNetwork/StudioOS';
@@ -15,7 +16,7 @@ const T = (min) => new Date(Date.parse('2026-11-21T10:00:00Z') + min * 60_000).t
 const SHA1 = '1'.repeat(40);
 const SHA2 = '2'.repeat(40);
 const ENV = { GITHUB_REPOSITORY: REPO, LANDING_BOT_LOGIN: BOT, LANDING_BOT_ENABLED: 'true', GITHUB_EVENT_NAME: 'schedule',
-  LANDING_BOT_DAILY_REQUEUES: '10', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.5' };
+  LANDING_BOT_DAILY_REQUEUES: '10', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.5', LANDING_AUTO: 'true' };
 const person = { login: 'guillaumelauzier', __typename: 'User' };
 const github = { login: 'github', __typename: 'Bot' };
 const work = (sha, at) => ({ sha, parents: [{}], author: { login: 'dev' }, committer: { login: 'dev' }, commit: { message: 'work', committer: { date: at } } });
@@ -74,7 +75,9 @@ function world({ removalReason = 'MERGE_CONFLICT' } = {}) {
   const run = async (min) => {
     s.now = T(min);
     const evidence = async (_n, sha) => { if (s.evidenceThrows) throw new Error('HTTP 502'); return { ...s.evidence, headSha: s.evidence.headSha ?? sha }; };
-    return sweep(ENV, { gh, app, now: Date.parse(T(min)), evidence });
+    // D6476-p7: the landing policy allows this head (landing_bot_ejection_policy_6476 covers each refusal).
+    const landing = async (n) => landingDecision(n, s.head);
+    return sweep(ENV, { gh, app, now: Date.parse(T(min)), evidence, landing });
   };
   return { s, run };
 }

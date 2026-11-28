@@ -163,12 +163,12 @@ test('2. the batch: the single rule for every id, all or nothing; no rows is not
     // With rows, it is recorded; with every requirement met, 100.
     db.exec(`INSERT INTO legal_obligations(user_id,obligation_key,required,status) VALUES(${FOUNDER_A},'tos_v1',1,'satisfied'),(${FOUNDER_A},'privacy_v1',1,'pending')`);
     assert.deepEqual((await batch(INVITED, [FOUNDER_A])).body.scores, [{ user_id: FOUNDER_A, score: 50, status: 'recorded', reason: null }]);
-    // The access check is one bounded query for the whole batch.
+    // The access check is one bounded query for the whole batch, after the D5454 guard's one hidden-set read (#5454).
     let queries = 0;
     const prepare = env.DB.prepare.bind(env.DB);
     env.DB.prepare = (sql: string) => { queries++; return prepare(sql); };
     assert.equal(await mayReadTrustScores(env, { id: FOUNDER_A, role: 'founder' } as any, [INVITED, COMMITTED, LEAD_PARTNER]), true);
-    assert.equal(queries, 1);
+    assert.equal(queries, 2);
   } finally { db.close(); }
 });
 

@@ -39,6 +39,13 @@ export const PASS_NOTE_BOX = 'This is your pass. The round stays open for other 
 export const PASS_INVITED_LINE = 'The studio that invited you is told you passed.';
 export const MOVE_BACK_LINE = 'It keeps its history.';
 export const COMMIT_LINE = 'This does not open a vote. Open one on the deal page when you are ready.';
+/**
+ * D5914 (DE14): Move to diligence, in what the Worker does. `PATCH /api/deals/flow/:dealId`
+ * (or the add, for a deal not yet in the flow) moves the firm's own row and records the move;
+ * it opens no diligence case and tells nobody, so the canvas's "opens a diligence checklist"
+ * is not said here.
+ */
+export const MOVE_DILIGENCE_LINE = 'It leaves Screening and moves to Diligence in your deal flow, with its history kept. It does not open a diligence case: open one on the deal’s Diligence tab. The founder is not notified.';
 
 const tomorrow = (now = new Date()) => new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
 

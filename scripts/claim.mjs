@@ -2,12 +2,14 @@
 /**
  * D5617: atomic claim refs, renewal, release, inspection and comment-only
  * expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held,
- * 4 label fallback required.
+ * 4 label fallback required. D7259: a Code Scanning remediation batch claim also
+ * holds each open member tracker, and a claimed batch refuses its members' claims.
  */
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { capBlockers, formatWip, localWipLabels, normalizeWipSlot, parseWipCap, readWip } from './lib/claimWip.mjs';
 import { claimRef, claimMessage, parseClaim, isExpired } from './lib/claims.mjs';
+import { BATCH_LABEL, parseBatch } from './lib/scanBatchIssue.mjs';
 
 export function githubApi(repo) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('invalid repository');
@@ -35,7 +37,7 @@ async function pages(api, path) {
   }
   throw new Error('pagination cap reached');
 }
-async function runClaimInternal({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log, wipReport, wipCap }) {
+async function runClaimInternal({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log, wipReport, wipCap, repo = 'AxalNetwork/StudioOS' }) {
   const read = async number => {
     try {
       const ref = await api('GET', `git/ref/heads/claim/${number}`);
@@ -65,11 +67,35 @@ async function runClaimInternal({ command, issue, slot, agent, session, ttlHours
   const current = await read(issue);
   if (command === 'show') { log(current); return 0; }
   if (command === 'claim' && current) { log({ held: current }); return 3; }
+  const mine = claim => Boolean(claim) && claim.session === session && claim.agent === agent && claim.slot === slot;
+  // D7259: only a batch the scan-remediation bot filed counts; its open members are the trackers it holds.
+  const [owner, name] = repo.split('/');
+  const asBatch = found => found?.user?.type === 'Bot' && !found.pull_request ? parseBatch(found, { owner, repo: name }) : null;
+  const batch = asBatch(await api('GET', `issues/${issue}`));
+  if (command === 'claim' && !batch) {
+    for (const found of await pages(api, `issues?state=open&labels=${encodeURIComponent(BATCH_LABEL)}`)) {
+      if (!asBatch(found)?.members.some(member => member.tracker === Number(issue))) continue;
+      const holder = await read(found.number);
+      // An expired batch ref still holds its members until its holder releases it (AGENTS.md).
+      if (holder && !mine(holder.claim)) { log({ held: holder, batch: found.number, error: 'a claimed remediation batch holds this tracker' }); return 3; }
+    }
+  }
   if (command !== 'claim') {
-    if (!current || !current.claim || current.claim.issue !== Number(issue) || current.claim.session !== session || current.claim.agent !== agent || current.claim.slot !== slot) {
+    if (!current || !current.claim || current.claim.issue !== Number(issue) || !mine(current.claim)) {
       log({ held: current, error: 'holder identity does not match' }); return 3;
     }
-    if (command === 'release') { await api('DELETE', `git/refs/heads/claim/${issue}`); return 0; }
+    if (command === 'release') {
+      // Members first: a failed release leaves the batch held, and a retry finishes it.
+      if (batch) {
+        for (const { tracker } of [...batch.members, ...batch.resolved]) {
+          const member = await read(tracker);
+          if (member?.claim?.batch === Number(issue) && member.claim.issue === tracker && mine(member.claim)) {
+            await api('DELETE', `git/refs/heads/claim/${tracker}`);
+          }
+        }
+      }
+      await api('DELETE', `git/refs/heads/claim/${issue}`); return 0;
+    }
     if (isExpired(current.claim, now)) { log({ error: 'expired; release and acquire again' }); return 3; }
   }
   if (command === 'claim' && wipReport) {
@@ -98,11 +124,36 @@ async function runClaimInternal({ command, issue, slot, agent, session, ttlHours
     if (command === 'claim') await api('POST', 'git/refs', { ref, sha: commit.sha });
     else await api('PATCH', `git/refs/heads/claim/${issue}`, { sha: commit.sha, force: false });
     log({ acquired: parseClaim(message), sha: commit.sha });
-    return 0;
   } catch (e) {
     if (e.status === 422) { log({ held: await read(issue) }); return 3; }
     if (e.status === 403) { log('Ref permission denied: use the label claim and explicitly record the 403 fallback in STATUS.'); return 4; }
     throw e;
+  }
+  if (batch) await holdMembers(batch);
+  return 0;
+
+  // Each member is its own atomic ref: a member another session holds, or wins in a race, stays with that session.
+  async function holdMembers(found) {
+    const held = [], elsewhere = [];
+    for (const { tracker } of found.members) {
+      let member = await read(tracker);
+      if (member && !(mine(member.claim) && member.claim.issue === tracker)) { elsewhere.push(tracker); continue; }
+      if (member && command === 'claim') { held.push(tracker); continue; }
+      const text = claimMessage({ issue: tracker, slot, agent, session, at: now, ttlHours, batch: Number(issue) });
+      try {
+        const parent = member?.sha ?? (await api('GET', 'git/ref/heads/main')).object.sha;
+        const base = await api('GET', `git/commits/${parent}`);
+        const commit = await api('POST', 'git/commits', { message: text, tree: base.tree.sha, parents: [parent] });
+        if (member) await api('PATCH', `git/refs/heads/claim/${tracker}`, { sha: commit.sha, force: false });
+        else await api('POST', 'git/refs', { ref: claimRef(tracker), sha: commit.sha });
+        held.push(tracker);
+      } catch (e) {
+        if (e.status !== 422) throw e;
+        member = await read(tracker);
+        (mine(member?.claim) && member.claim.issue === tracker ? held : elsewhere).push(tracker);
+      }
+    }
+    log({ batch: Number(issue), members: held, heldElsewhere: elsewhere });
   }
 }
 export async function runClaim(options) {
@@ -134,6 +185,6 @@ export async function main(argv = process.argv.slice(2)) {
   }
   return runClaim({ command, issue, slot: options.slot ?? process.env.AGENT_SLOT, agent: options.agent ?? process.env.AGENT_NAME,
     session: options.session ?? process.env.AGENT_SESSION, ttlHours: Number(options['ttl-hours'] ?? 24),
-    api, wipReport, wipCap: process.env.LANDING_WIP_CAP });
+    api, wipReport, wipCap: process.env.LANDING_WIP_CAP, repo });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().then(code => { process.exitCode = code; }).catch(e => { console.error(e.message); process.exitCode = 1; });
