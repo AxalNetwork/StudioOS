@@ -178,16 +178,24 @@ function draftLines(fee, surcharge, currency, classLabel) {
   return lines;
 }
 
-function issuedCard(inv, classLabel, today, base) {
+/** The issued initial invoice state shared by HQ Billing and the licensee Statements tab. */
+export function initialInvoiceState(inv, today) {
   const status = invoiceStatus(inv, today);
+  if (inv.status === 'void') return { state: 'void', chip: { word: 'Void', tone: 'neutral' } };
+  if (inv.status === 'paid') return { state: 'paid', chip: { word: 'Paid', tone: 'ok' } };
+  if (status.overdue) {
+    const days = `${status.days} ${status.days === 1 ? 'day' : 'days'}`;
+    return { state: 'overdue', chip: { word: `Overdue · ${days}`, tone: 'danger' } };
+  }
+  if (Number(inv.paid_cents) > 0) return { state: 'part', chip: { word: 'Part paid', tone: 'warn' } };
+  return { state: 'issued', chip: { word: 'Issued', tone: 'warn' } };
+}
+
+function issuedCard(inv, classLabel, today, base) {
+  const { state, chip } = initialInvoiceState(inv, today);
   const paid = Number(inv.paid_cents) || 0;
   const amount = Number(inv.amount_cents);
-  const voided = inv.status === 'void';
-  const state = voided ? 'void' : inv.status === 'paid' ? 'paid' : status.overdue ? 'overdue' : paid > 0 ? 'part' : 'issued';
-  const chip = voided ? { word: 'Void', tone: 'neutral' }
-    : state === 'paid' ? { word: 'Paid', tone: 'ok' }
-      : state === 'overdue' ? { word: `Overdue · ${status.days} ${status.days === 1 ? 'day' : 'days'}`, tone: 'danger' }
-        : state === 'part' ? { word: 'Part paid', tone: 'warn' } : { word: 'Issued', tone: 'warn' };
+  const voided = state === 'void';
   const fee = posInt(inv.initial_fee_cents) ? inv.initial_fee_cents : null;
   const surcharge = posInt(inv.regulatory_surcharge_cents) ? inv.regulatory_surcharge_cents : null;
   const lines = draftLines(fee, surcharge, inv.currency, classLabel);
