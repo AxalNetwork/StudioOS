@@ -79,8 +79,9 @@ const rowsOf = (raw: DatabaseSync, table: string) => raw.prepare(`SELECT * FROM 
 test('the migration builds every table with its keys, CHECKs and trigger; the run row has no cascade from users', () => {
   const { raw } = freshDb();
   const tables = (raw.prepare(`SELECT name FROM sqlite_schema WHERE type='table' AND name LIKE 'research_source_%' ORDER BY name`).all() as Array<{ name: string }>).map((r) => r.name);
-  assert.deepEqual(tables, ['research_source_column_rules', 'research_source_flags', 'research_source_private_fields', 'research_source_records',
-    'research_source_removals', 'research_source_run_records', 'research_source_runs']);
+  // #7746 adds the two mapping tables (D7746), also named research_source_* so the privacy check below covers them.
+  assert.deepEqual(tables, ['research_source_column_rules', 'research_source_flags', 'research_source_link_history', 'research_source_private_fields',
+    'research_source_record_links', 'research_source_records', 'research_source_removals', 'research_source_run_records', 'research_source_runs']);
   for (const banned of ['research_source_imports', 'research_source_mappings', 'research_source_rules', 'research_source_promotions']) assert.ok(!tables.includes(banned));
   assert.deepEqual(raw.prepare(`PRAGMA foreign_key_list(research_source_runs)`).all(), [], 'no foreign key on the run, so no cascade from users');
   const uniq = raw.prepare(`SELECT sql FROM sqlite_schema WHERE name = 'research_source_records'`).get() as { sql: string };
@@ -367,7 +368,7 @@ function walk(dir: string): string[] {
 
 test('privacy: no file under cloudflare-worker/src names a store table unless its name starts with researchSource or research_source_', () => {
   const tables = storeTables();
-  assert.equal(tables.length, 7, String(readFileSync(join(ROOT, MIGRATION), 'utf8').length));
+  assert.equal(tables.length, 9, String(readFileSync(join(ROOT, MIGRATION), 'utf8').length));
   const files = walk(join(ROOT, 'cloudflare-worker/src')).filter((p) => /\.(ts|js|mjs)$/.test(p)).map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
   assert.ok(files.some((f) => f.path.endsWith('routes/_registry.ts')), 'the generated registry is in the sweep');
   assert.deepEqual(tableLeaks(files, tables), []);
