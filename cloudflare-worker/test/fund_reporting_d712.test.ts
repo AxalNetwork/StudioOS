@@ -27,7 +27,7 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_f
   'capital_calls', 'fund_distributions', 'portfolio_positions', 'projects', 'user_company_links', 'admin_audit_log', 'notifications_inbox'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
-  + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql', '202611151259_6255_fund_report_notice_delivery.sql'].map(mig).join('\n');
+  + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql', '202611151259_6255_fund_report_notice_delivery.sql', '202611270442_6240_fund_report_lp_delivery.sql'].map(mig).join('\n');
 const SECRET = ['d712', 'fixture', 'signing', 'secret', 'only'].join('-');
 
 const ADMIN = 1, SUPER = 2, SUPER2 = 3, OUTSIDE_GP = 4, LP = 5, FOUNDER = 6, PARTNER = 7, PLAIN_TOTP = 8;
@@ -229,6 +229,12 @@ test('issuing a pack issues the report, every statement and the period together,
     { user_id: LP, channel: 'in_app', link: `/funds/10/reporting/${rep.report_period_id}` },
   ]);
   assert.equal(f.one('SELECT delivered_count FROM fund_report_notice_delivery').delivered_count, 1);
+  // D6240: the queue's issue records each LP of the period too.
+  assert.deepEqual(f.all("SELECT period_id, user_id, state FROM fund_report_lp_delivery WHERE state <> 'not_sent'"), [
+    { period_id: rep.report_period_id, user_id: LP, state: 'made_available' },
+  ]);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM fund_report_lp_delivery WHERE state = 'not_sent'").n,
+    f.one('SELECT unlinked_count FROM fund_report_notice_delivery').unlinked_count, 'each LP row without an account is one not-sent row');
   const audit = f.all("SELECT admin_user_id, filters_json FROM admin_audit_log WHERE action = 'fund_admin.fund_report.issue'");
   assert.equal(audit.length, 1, 'the D714 act row is written once, after the issue');
   assert.deepEqual([audit[0].admin_user_id, JSON.parse(audit[0].filters_json).fund_id], [SUPER2, 10]);

@@ -29,7 +29,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import research from '../src/routes/research.ts';
-import { EUR_SOURCE, LIST_CURRENCY, USD_SOURCE } from '../src/services/researchFundDirectory.ts';
+import { EUR_SOURCE, USD_SOURCE } from '../src/services/researchFundDirectory.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,8 @@ function fixture() {
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT);`);
   db.exec(ddl('365_research_eurotech_fund_directory.sql'));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   db.exec(read(byPrefix('406_')));
   db.exec(read('376_research_taxonomy.sql'));
   db.exec(ddl('229_research_market_directory.sql'));
@@ -163,8 +165,12 @@ async function get(db: InstanceType<typeof DatabaseSync>, path: string) {
 const uids = (b: any) => b.items.map((i: any) => i.uid);
 
 test('each list is marked in its own currency; the US dollar list reads in US dollars', async () => {
-  assert.deepEqual(LIST_CURRENCY, { [EUR_SOURCE]: 'EUR', [USD_SOURCE]: 'USD' });
-  const { status, body } = await get(fixture(), '/fund-directory?limit=100');
+  // D7744: each list's currency is stamped on its rows from research_fund_list_defaults, not read from a map by name.
+  const db = fixture();
+  const listed = Object.fromEntries((db.prepare(`SELECT source_name, size_currency FROM research_fund_list_defaults WHERE source_name IN (?, ?)`)
+    .all(EUR_SOURCE, USD_SOURCE) as any[]).map((r) => [r.source_name, r.size_currency]));
+  assert.deepEqual(listed, { [EUR_SOURCE]: 'EUR', [USD_SOURCE]: 'USD' });
+  const { status, body } = await get(db, '/fund-directory?limit=100');
   assert.equal(status, 200);
   const by = Object.fromEntries(body.items.map((i: any) => [i.uid, i]));
   assert.deepEqual([by.aforeiv.fund_size_cents, by.aforeiv.size_currency], [185 * 100_000_000, 'USD']);
@@ -187,7 +193,10 @@ test('size_currency scopes the size filter, the bands and the sort to one list',
   assert.equal(usd.facets.size_band.find((b: any) => b.value === '100-250').count, 1);
   assert.equal(usd.facets.size_not_comparable, 4, 'the euro rows, the unsized row and the unknown currency sit in no US dollar band');
   assert.match(usd.size_basis, /US dollars/);
-  const bad = await get(db, '/fund-directory?size_currency=GBP');
+  // D7744: any three-letter code is read; one no row holds matches no size, and is not an error.
+  const gbp = await get(db, '/fund-directory?size_currency=GBP&size_min=1');
+  assert.deepEqual([gbp.status, gbp.body.total], [200, 0]);
+  const bad = await get(db, '/fund-directory?size_currency=EURO');
   assert.equal(bad.status, 400);
   assert.equal(bad.body.field, 'size_currency');
 });

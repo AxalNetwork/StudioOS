@@ -119,7 +119,9 @@ export async function startLocalWorker({ handle = null } = {}) {
     endSessions(email) {
       for (const [sid, e] of sessions) if (e === String(email).toLowerCase()) sessions.delete(sid);
     },
-    close: () => new Promise((r) => server.close(r)),
+    // `server.close` waits for every open connection; a browser keep-alive or a request still in flight when the
+    // test ends held it past the 90 s afterEach budget (#9073). Drop them so the hook ends at once.
+    close: () => new Promise((r) => { server.close(r); server.closeAllConnections(); }),
   };
 
   const server = createServer(async (req, res) => {

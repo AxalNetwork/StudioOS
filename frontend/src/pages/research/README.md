@@ -62,6 +62,8 @@ zones: one record each, reached from a zone's list.
 | `CompanySelection.jsx` | D7177 (RS-15 A, D): the company directory's selection bar (both limits, Compare disabled with a visible reason, fixed to the bottom on a phone) and Review selection (each pick with its page and Remove). |
 | `comparisonSave.js` | D7177: the selection rules, the generated title, the save outcomes and their words, Check save status, "Saved part-way" and the comparison pager and stepper, pure so the pages and tests share them. |
 
+`imports/` holds the private Super Admin source import console at `/research/source-imports` (D7753, canvas D7738); its README carries the folder's rules.
+
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score
 is not a field on this page.
