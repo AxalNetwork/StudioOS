@@ -60,6 +60,15 @@ export function ReleaseBadge({ tag = builtRelease(), className = '' }) {
   );
 }
 
+/**
+ * #9037: the accessible name of a link wrapping the logo home. It must contain what the logo shows (WCAG 2.5.3, axe
+ * `label-content-name-mismatch`): "Axal VC" and, where the release badge is drawn, its label ("Axal VC alpha home").
+ */
+export function logoHomeName({ showRelease = false, tag = builtRelease() } = {}) {
+  const label = showRelease ? releaseBadge(tag)?.label : null;
+  return label ? `Axal VC ${label} home` : 'Axal VC home';
+}
+
 const SIZE = {
   sm: { icon: 'h-7 w-7', text: 'text-sm' },
   md: { icon: 'h-8 w-8', text: 'text-base' },
@@ -110,6 +119,9 @@ export default function AxalLogo({
       >
         Axal VC
       </span>
+      {/* #9037: a space between the wordmark and the badge, so the text a link reads out is "Axal VC alpha", not
+          "Axal VCalpha"; a flex container drops it visually. */}
+      {showRelease && ' '}
       {showRelease && <ReleaseBadge />}
     </span>
   );

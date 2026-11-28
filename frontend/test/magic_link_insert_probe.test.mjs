@@ -898,9 +898,9 @@ test('the new probe is documented where the other live probes are', () => {
     'name it with the other live probes in scripts/README.md');
   const wfReadme = read('.github/workflows/README.md');
   assert.match(wfReadme, /`magic-link-insert-probe\.yml`/, 'add the row to .github/workflows/README.md');
-  // Select this workflow's configuration bullet, not the summary inventory row. See
+  // Select this workflow's row in the purpose table (#9054), not the generated inventory row. See
   // magic_link_probe.test.mjs; a mention in someone else's row is not this row.
-  const row = wfReadme.split('\n').find((l) => l.startsWith('- `magic-link-insert-probe.yml` ·')) || '';
+  const row = wfReadme.slice(wfReadme.indexOf('<!-- workflow-inventory:end -->')).split('\n').find((l) => l.startsWith('| `magic-link-insert-probe.yml` |')) || '';
   assert.match(row, /MAGIC_PROBE_EMAIL/, 'the row does not name the one secret to add');
   assert.match(row, /CLOUDFLARE_API_TOKEN/, 'the row does not say the Cloudflare secrets are reused');
   assert.match(row, /mail_send_recorded/, 'the row does not mention the send verdict');

@@ -174,11 +174,11 @@ does not automatically transfer pools; the durable coordinator owns fallback.
 | Criterion | Evidence required | Current state |
 | --- | --- | --- |
 | Standard hosted baseline remains active | Workflow diff and exact six-shard plan coverage | Preserved; no caller/workflow changes here |
-| Reviewed group/profile | Administrator read of exact repository/workflow restrictions and approved numeric ID | Unverified; integration reads return 403 |
+| Reviewed group/profile | Administrator read of exact repository/workflow restrictions and approved numeric ID | Group 6 (`github-8`): canary run 46060097362 was picked up from `main` in 1 s (D7907-p2); integration reads still return 403. Self-hosted group: unverified (D7906) |
 | Bootstrap/tool integrity | Offline lifecycle cases plus actual pinned Linux artifact probe | #7885 implementation; local proof is distinct from live node |
 | Trusted executor on main | Immutable SHA, direct-job workflow and refusal canaries | #7892 merged at dd87916744bf31259ae1cc21310aedb68ef30bd4; live refusal/group checks pending |
 | Native Mac baseline | D7881 benchmark/tracing links and workload limits | Merged #7882; enabled but orphaned queued child blocks handoffs at review (#7902) |
-| Included-compute 8-core pool | Main-defined workflow, full pinned Worker shard, timing and bounded fallback | Branch readiness pass only; #7907, no routing |
+| Included-compute 8-core pool | Main-defined workflow, full pinned Worker shard, timing and bounded fallback | Canary run 46060097362 on `main`: `worker-3-of-6` test 495 s on `github-8` vs 928 s hosted, both passed (D7907-p2). Overage not recorded yet; no routing until #7909 |
 | Independent durable authority | Deployment/version/status, restart/recovery and controlled permissions | Not verified; no authority URL activated |
 | Linux pilot and budget | Private node/runbook, time/spend limits and scheduled provider teardown | Approved temporary pilot stop was 20 November at 18:00 Europe/Zurich; run 44746099004 reached its 40-minute limit; it was cancelled, with artifact upload and owned-file cleanup successful |
 | Result/gate authority | Exact candidate aggregate + producer/App and all consumer review | Pending staged #7887 cutover |

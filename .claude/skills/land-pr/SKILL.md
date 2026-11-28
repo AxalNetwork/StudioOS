@@ -100,8 +100,8 @@ Eligible means all three: `Head SHA` equals the PR's current head, `LANDING_AUTO
 is `true`, and `tier` is `T0` or `T1`. The highest tier across all files wins:
 
 - **T0**: `documentation/**`, a newly added test file, `frontend/src/{components,icons,styles}/**`.
-- **T1**: `cloudflare-worker/src/{routes,services}/**`, `backend/app/{api/routes,services}/**`, `frontend/src/{routes,services,pages}/**`.
-- **T2**: everything else, including `.github/`, `scripts/`, `.claude/`, `cloudflare-worker/sql/`, `cloudflare-worker/src/middleware/`, `package*.json`, lockfiles, `wrangler*.toml`, `AGENTS.md`, `CLAUDE.md`, any path whose name mentions auth, session, billing, payments, pricing, OAuth and the rest of `SENSITIVE_NAME` in `scripts/merge-policy.mjs`, edits to existing tests, removed tests or assertions, added `skip`/`todo`/`only`, and timeout, baseline, ledger or shard changes.
+- **T1** (D6679): a file in a named folder of `frontend/src/` (`brand`, `contexts`, `data`, `decks`, `hooks`, `lib`, `pages`, `routes`, `services`, `templates`, `ui`, `workspaces`) or of `cloudflare-worker/src/` (`agents`, `contracts`, `data`, `durable-objects`, `integrations`, `mcp`, `models`, `probes`, `routes`, `rpc`, `services`, `templates`, `util`), `backend/app/{api/routes,services}/**`, and an edited test file whose readable diff keeps its test and assertion counts and adds no `skip`/`todo`/`only`.
+- **T2**: everything else, including the privileged paths (`.github/`, `scripts/`, `merge-control/`, `cloudflare-worker/sql/`, `cloudflare-worker/src/middleware/`, `package*.json`, lockfiles, `wrangler*.toml`, `AGENTS.md`, `CLAUDE.md`), `.claude/`, files at the top of `frontend/src/` or `cloudflare-worker/src/`, any path whose name mentions auth, session, billing, payments, pricing, OAuth and the rest of `SENSITIVE_NAME` in `merge-control/src/lib/classify.mjs`, test helpers and fixtures, a test edit with no readable diff, deleted or renamed tests, a test edit that loses a test or an assertion, added `skip`/`todo`/`only`, and timeout, baseline, ledger or shard changes.
 
 The step summary is not returned by the REST API or by `gh`. Read it on the
 run page (the script prints its link), or let the script reconstruct it: the
@@ -115,6 +115,27 @@ pass it with `--summary <file>` and the script uses it instead. `--no-classify` 
 
 `scripts/lib/prTier.mjs` is a different "tier": it picks a thin or full CI
 test run (D5621). It has nothing to do with landing.
+
+## The landing bot (D6480)
+
+AGENTS.md § "What the landing bot does to your PR" is the full text. What it
+changes here:
+
+- **The feeder may queue the PR for you.** `landing-feeder.yml` makes the
+  first queue entry on the same gates `land-pr.mjs` checks (it calls the same
+  `decide()`), when the owner has `LANDING_AUTO` and `LANDING_BOT_ENABLED` on.
+  It never queues a draft, a PR labelled `bot:off`, `bot:resolved` or
+  `main-repair`, a PR with a model or unattributed bot commit, or a PR that
+  was ever queued before. If the PR page shows it queued, it is queued: do
+  not queue it again, and do not push to it (step 4).
+- **A PR the queue ejected is never re-queued by a session.** It stays open.
+  The ejection handler restores the entry when it may, or labels `ejected`
+  and the owner re-queues it.
+- **A PR a model changed is the owner's.** After the conflict resolver's
+  commit (`bot:resolved`) or on a `main-repair` PR, do not queue, even when
+  every gate says `ok`.
+- **The bot may have added a merge of main.** Fetch and merge your own branch
+  before any push; after it, the head is new and step 1 starts again.
 
 ## In a Claude Code session
 
@@ -167,8 +188,9 @@ without `gh` is the step 4 `DELETE .../ccr/auto_merge`.
 - One head, one decision: a push invalidates the report. Disable auto-merge
   and leave the queue before pushing, then wait for a new eligible report.
   Never push to a PR whose auto-merge you could not turn off.
-- While `[alert] merge queue stalled` is open, add no new queue entries and
-  do not re-queue a PR the queue ejected (D5604, D7125). The alert names the
+- Never re-queue a PR the queue ejected: the ejection handler or the owner
+  does (D6480). While `[alert] merge queue stalled` is open, add no new queue
+  entries either (D5604, D7125). The alert names the
   PR a shared failure starts at, or says it fails on the base; the only
   exception is the one repair linked on the alert, which the owner moves to
   the front. While `[alert] main is red` or `[alert] the Actions queue is

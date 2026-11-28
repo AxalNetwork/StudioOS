@@ -8,8 +8,12 @@ name: Isolated Worker release rehearsal
 # retry) on pull requests that change a migration, the Worker or the deploy
 # workflow. `changes` decides which of the two jobs a pull request needs, so a
 # Worker-only change does not also build the frontend for the preflight.
+#
+# #9056: not a required check, so a draft skips it (`changes` checks `draft`,
+# and the two rehearsals need `changes`); marking the PR ready runs it.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - '.github/workflows/release-rehearsal.yml'
@@ -45,6 +49,8 @@ concurrency:
 jobs:
   changes:
     name: Which rehearsals this change needs
+    # #9056: drafts skip the rehearsal; `rehearse` and `release-window` need this job, so they skip too.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -79,6 +85,11 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+          # #9056: cache the npm store for both installs below.
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
       - run: npm ci --prefix frontend && npm ci --prefix cloudflare-worker
       - name: Build the generated modules (D5612)
         run: node scripts/build-generated.mjs
@@ -121,6 +132,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+          # #9056: cache the npm store for the install below.
+          cache: npm
+          cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci --prefix cloudflare-worker
       - name: Build the generated modules (D5612)
         run: node scripts/build-generated.mjs

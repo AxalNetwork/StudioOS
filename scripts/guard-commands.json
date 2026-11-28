@@ -512,6 +512,13 @@
     ]
   },
   {
+    "id": "check-test-collection",
+    "command": [
+      "node",
+      "scripts/check-test-collection.mjs"
+    ]
+  },
+  {
     "id": "undefined-symbols",
     "command": [
       "node",

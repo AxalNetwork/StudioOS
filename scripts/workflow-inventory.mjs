@@ -1,4 +1,9 @@
-/** #5976: Generate or check the workflow trigger and required-check inventory from the committed Actions YAML. */
+/**
+ * #5976: Generate or check the workflow trigger and required-check inventory from the committed Actions YAML.
+ * #9054: the generated table also carries each workflow's GITHUB_TOKEN permissions (workflow level and every job
+ * that grants a write scope), and `--check` also fails when the hand-written purpose table below the generated block
+ * has no row for a workflow file, a row for a file that does not exist, or two rows for one file.
+ */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -69,9 +74,9 @@ export function loadInventory(directory = workflows) {
     const events = eventRules(data?.on);
     if (!Object.keys(events).length || !data?.jobs) throw new Error(`Missing triggers or jobs in ${file}`);
     return {
-      file, name: data.name ?? file, events,
+      file, name: data.name ?? file, events, permissions: data.permissions,
       jobs: Object.entries(data.jobs).map(([id, job]) => ({
-        id, name: job.name ?? id, condition: job.if,
+        id, name: job.name ?? id, condition: job.if, permissions: job.permissions,
         reusable: Boolean(job.uses),
         eventSteps: JSON.stringify(job.steps ?? job.with ?? {}).includes('github.event')
           || JSON.stringify(job.steps ?? {}).includes('GITHUB_EVENT_NAME'),
@@ -89,6 +94,31 @@ function runsOn(workflow, job, event) {
   return rule === 'conditional' || condition === 'conditional' ? 'conditional' : 'runs';
 }
 
+/**
+ * #9054: a `permissions:` value as the scopes it grants write on. `undefined` is not set (the repository default
+ * applies), `{}` grants nothing, and the `read-all` / `write-all` shorthands are kept as written.
+ */
+export function writeScopes(permissions) {
+  if (permissions === undefined || permissions === null) return 'unset';
+  if (permissions === 'read-all' || permissions === 'write-all') return permissions;
+  if (typeof permissions !== 'object' || Array.isArray(permissions)) throw new Error(`Unexpected permissions: ${JSON.stringify(permissions)}`);
+  return Object.entries(permissions).filter(([, level]) => level === 'write').map(([scope]) => scope).sort();
+}
+
+/** #9054: the Token permissions cell: the workflow-level grant, then each job whose own grant writes anything. */
+export function permissionsCell(workflow) {
+  const describe = (scopes) => typeof scopes === 'string' ? `\`${scopes}\`` : scopes.length ? `write: ${scopes.join(', ')}` : 'read only';
+  const top = writeScopes(workflow.permissions);
+  const head = top === 'unset' ? 'not set (repository default)'
+    : typeof top !== 'string' && !Object.keys(workflow.permissions).length ? 'none (`{}`)' : describe(top);
+  const lines = [`workflow: ${head}`];
+  for (const job of workflow.jobs) {
+    const scopes = writeScopes(job.permissions);
+    if (scopes === 'write-all' || (Array.isArray(scopes) && scopes.length)) lines.push(`\`${cell(job.id)}\` ${describe(scopes)}`);
+  }
+  return lines.join('<br>');
+}
+
 export function renderInventory(inventory, required = REQUIRED, shadow = checkMap('SHADOW')) {
   function jobsIn(workflow, event) {
     if (!Object.hasOwn(workflow.events, event)) return '—';
@@ -104,7 +134,7 @@ export function renderInventory(inventory, required = REQUIRED, shadow = checkMa
   const rows = inventory.map(workflow => {
     const others = Object.keys(workflow.events).filter(event => !columns.includes(event));
     const extra = others.map(event => `\`${event}\` · ${jobsIn(workflow, event)}`).join('<br>') || '—';
-    return `| \`${workflow.file}\` | ${cell(workflow.name)} | ${columns.map(event => jobsIn(workflow, event)).join(' | ')} | ${extra} |`;
+    return `| \`${workflow.file}\` | ${cell(workflow.name)} | ${columns.map(event => jobsIn(workflow, event)).join(' | ')} | ${extra} | ${permissionsCell(workflow)} |`;
   });
   const queue = inventory.filter(workflow => Object.hasOwn(workflow.events, 'merge_group')).map(workflow => `\`${workflow.file}\``);
   const candidates = inventory.flatMap(workflow => workflow.jobs.flatMap(job => {
@@ -119,8 +149,8 @@ export function renderInventory(inventory, required = REQUIRED, shadow = checkMa
     return [`- \`${workflow.file}\` / ${cell(job.name)} · ${events.join(', ')}${notes.length ? ` (${notes.join('; ')})` : ''}`];
   }));
   return [
-    '| Workflow file | Workflow | pull_request | pull_request_target | merge_group | push to main | schedule | Other events |',
-    '|---|---|---|---|---|---|---|---|',
+    '| Workflow file | Workflow | pull_request | pull_request_target | merge_group | push to main | schedule | Other events | Token permissions |',
+    '|---|---|---|---|---|---|---|---|---|',
     ...rows,
     '',
     `Workflows that listen for \`merge_group\` (${queue.length}): ${queue.join(', ') || 'none'}.`,
@@ -142,17 +172,66 @@ export function withInventory(markdown, generated) {
   return markdown.slice(0, begin + start.length) + '\n\n' + generated + '\n\n' + markdown.slice(finish);
 }
 
+/**
+ * #9054: the workflow files the hand-written purpose table names, one entry per row, in order. That table is the one
+ * canonical place for a workflow's purpose, triggers and secrets: it starts on the line after the generated block's
+ * end marker and runs to the first line that is not a table row. Each body row's first cell is the file in backticks.
+ */
+export function handTableFiles(markdown) {
+  const at = markdown.indexOf(end);
+  if (at < 0) throw new Error('Expected one generated workflow inventory block in the README');
+  const lines = markdown.slice(at + end.length).replace(/^\n/, '').split('\n');
+  const rows = [];
+  for (const line of lines) {
+    if (!line.startsWith('|')) break;
+    rows.push(line);
+  }
+  if (rows.length < 2 || !/^\|(?:\s*-+\s*\|)+\s*$/.test(rows[1])) throw new Error('Expected the purpose table right after the generated block');
+  return rows.slice(2).map((row, index) => {
+    const file = /^\|\s*`([^`]+)`\s*\|/.exec(row)?.[1];
+    if (!file) throw new Error(`Purpose table row ${index + 1} does not start with a workflow file in backticks`);
+    return file;
+  });
+}
+
+/** #9054: every workflow has exactly one purpose row, and every row names a workflow that exists. */
+export function handTableProblems(markdown, files) {
+  const named = handTableFiles(markdown);
+  const problems = [];
+  for (const file of files) {
+    const count = named.filter(name => name === file).length;
+    if (count === 0) problems.push(`${file} has no row in the purpose table`);
+    else if (count > 1) problems.push(`${file} has ${count} rows in the purpose table`);
+  }
+  for (const name of new Set(named)) if (!files.includes(name)) problems.push(`the purpose table has a row for ${name}, which is not a workflow file`);
+  return problems;
+}
+
+/**
+ * The command line: no option prints the generated block, `--write` rewrites it in the README, `--check` fails on a
+ * drifted block or a purpose-table problem. `directory` and `readmeUrl` let a test run it on fixture workflows.
+ * Returns the exit code.
+ */
+export function run(mode, { directory = workflows, readmeUrl = readme, log = console.log, error = console.error } = {}) {
+  const inventory = loadInventory(directory);
+  const generated = renderInventory(inventory);
+  if (mode === undefined) { log(generated); return 0; }
+  if (mode !== '--check' && mode !== '--write') throw new Error(`Unknown option: ${mode}`);
+  let code = 0;
+  const current = readFileSync(readmeUrl, 'utf8');
+  const updated = withInventory(current, generated);
+  if (mode === '--write') writeFileSync(readmeUrl, updated);
+  if (mode === '--check' && current !== updated) {
+    error(`Workflow inventory has drifted in ${fileURLToPath(readmeUrl)}. Run node scripts/workflow-inventory.mjs --write.`);
+    code = 1;
+  }
+  // #9054: `--write` cannot write a purpose row, so it names what is missing; `--check` fails on it.
+  const problems = handTableProblems(updated, inventory.map(workflow => workflow.file));
+  for (const problem of problems) error(`Purpose table: ${problem}. Add or fix its row by hand in ${fileURLToPath(readmeUrl)}.`);
+  if (problems.length && mode === '--check') code = 1;
+  return code;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const generated = renderInventory(loadInventory());
-  const mode = process.argv[2];
-  if (mode === '--check' || mode === '--write') {
-    const current = readFileSync(readme, 'utf8');
-    const updated = withInventory(current, generated);
-    if (mode === '--write') writeFileSync(readme, updated);
-    if (mode === '--check' && current !== updated) {
-      console.error(`Workflow inventory has drifted in ${fileURLToPath(readme)}. Run node scripts/workflow-inventory.mjs --write.`);
-      process.exitCode = 1;
-    }
-  } else if (mode === undefined) console.log(generated);
-  else throw new Error(`Unknown option: ${mode}`);
+  process.exitCode = run(process.argv[2]);
 }

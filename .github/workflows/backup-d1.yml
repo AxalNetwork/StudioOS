@@ -51,6 +51,8 @@ jobs:
     environment: production-backup
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # #9055: covers the 500 MB export and upload (a normal run takes under 2 minutes).
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
