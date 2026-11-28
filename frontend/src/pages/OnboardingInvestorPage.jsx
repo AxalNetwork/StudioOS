@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SelectField } from '../components/OnboardingWizard';
-import { api, spinoutLab, investorOnboardingApi } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { investorOnboardingApi } from '../lib/api/investorOnboarding.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { COUNTRIES } from '../lib/countries';
 import { NFX_SECTORS } from '../lib/nfxSectors';
