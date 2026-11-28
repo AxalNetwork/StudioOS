@@ -867,7 +867,8 @@ function CompanyDirectoryZoneBody({ role = 'founder', zoneActions = null }) {
     <div data-testid="company-directory" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Companies</h1>
+          {/* #9038: the shell (WorkspaceShell) draws the page h1; this is the section heading under it. */}
+          <h2 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Companies</h2>
           <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">
             Find companies in a market, open a profile and come back to the same results. A public discovery baseline: <PublisherBoundary />.
           </p>

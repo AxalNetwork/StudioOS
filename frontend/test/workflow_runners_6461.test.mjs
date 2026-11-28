@@ -83,7 +83,6 @@ export const RUNS_ON_DRAFTS = {
   'landing-policy.yml': 'it reports the landing tier a pull request is heading for; #6461 gives it concurrency only',
   'agent-compute-image.yml': 'path-filtered to the agent-compute image\'s own files, so a draft that touches them is checking them',
   'meeting-bot-image.yml': 'path-filtered to the meeting bot\'s own files, so a draft that touches them is checking them',
-  'release-rehearsal.yml': 'path-filtered to the release scripts, so a draft that touches them is checking them',
   'dependency-review.yml': 'D7899 checks newly introduced vulnerable dependencies on every PR and merge group, including drafts, without checking out candidate code',
   'ownership.yml': 'D8075 reports coordination overlaps before work leaves draft; bounded read-only issue/file scan and parser tests only',
 };
@@ -155,6 +154,10 @@ test('#6461: the guard refuses each way back', () => {
   refused(mutate('landing-policy.yml', "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", 'cancel-in-progress: false'), /landing-policy\.yml: cancel-in-progress is false/);
   // A contracts job back on drafts; a gate that never re-runs when the PR is marked ready.
   refused(mutate('record-page-contracts.yml', '    if: ${{ !github.event.pull_request.draft }}\n', ''), /record-page-contracts\.yml: job contracts runs on a draft/);
+  // #9056: the release rehearsal back on drafts (D8532's cloudflare-worker/src/** path matches most PRs),
+  // or skipping drafts but never running when the PR is marked ready.
+  refused(mutate('release-rehearsal.yml', '    if: ${{ !github.event.pull_request.draft }}\n', ''), /release-rehearsal\.yml: job changes runs on a draft/);
+  refused(mutate('release-rehearsal.yml', ', ready_for_review]', ']'), /release-rehearsal\.yml: skips drafts but does not run on ready_for_review/);
   refused(mutate('changelog-gate.yml', ', ready_for_review]', ']'), /changelog-gate\.yml: skips drafts but does not run on ready_for_review/);
   refused(mutate('claude-review.yml', '    if: ${{ !github.event.pull_request.draft }}\n', ''), /claude-review\.yml: job selftest runs on a draft/);
   // pull_request_target back in a trigger (a comment naming it is fine).

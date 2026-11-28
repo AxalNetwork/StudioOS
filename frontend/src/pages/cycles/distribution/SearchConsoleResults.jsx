@@ -7,9 +7,10 @@ import { searchConsoleApi } from '../../../lib/api/searchConsole';
 import Lightbox from '../../../ui/Lightbox';
 import { Card, StatusNote, Table } from './DistributionParts';
 import { searchCtr, searchFreshness, searchNumber, searchReadFailure, searchConsoleHref } from './searchConsoleModel';
+import { organicHref, pinnableWeeks } from '../evidence/organicEvidenceModel';
 
 const BUTTON = 'inline-flex min-h-[44px] cursor-pointer items-center rounded-lg border border-axal-hairline px-3 py-2 text-sm hover:border-axal-violet focus-visible:outline focus-visible:outline-2 disabled:cursor-default dark:border-gray-700';
-export function SearchConsoleReport({ data }) {
+export function SearchConsoleReport({ data, projectId = null }) {
   const weeks = Array.isArray(data?.weeks) ? data.weeks : [];
   const [week, setWeek] = useState('');
   const [limit, setLimit] = useState(20);
@@ -35,8 +36,22 @@ export function SearchConsoleReport({ data }) {
       </Table>
       {!chosen?.top_pages?.rows?.length && <p>{chosen?.top_pages?.reason || 'Not recorded: Google returned no top-page rows for this week.'}</p>}
       {chosen?.top_pages?.rows?.length > limit && <button type="button" className={BUTTON} onClick={() => setLimit(n => n + 20)}>Show more landing pages</button>}
-      <p>Opening this report does not create or share Raise evidence. Selected-aggregate review and explicit sharing belong to Raise.</p>
+      <RaiseHandoff data={data} projectId={projectId} />
     </>}
+  </div>;
+}
+
+/**
+ * D5841 part 2: the way to Raise is a link, never a write. A founder opens Raise › Evidence › Organic search with the
+ * newest whole week pre-chosen, previews it, picks a claim and confirms; the figure starts Private.
+ */
+function RaiseHandoff({ data, projectId }) {
+  const newest = pinnableWeeks(data)[0];
+  return <div className="space-y-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid="organic-raise-handoff">
+    <p className="font-semibold">Use a week in Raise</p>
+    <p>Viewing this report creates and shares nothing. A founder can pin one whole week’s clicks, impressions or weighted CTR to an organic-search claim in Raise › Evidence; it starts Private and is shared only from there. Landing pages and queries are never part of it.</p>
+    {projectId && newest ? <Link className={BUTTON} to={organicHref(projectId, newest.week_start)}>Choose a week for Raise evidence</Link>
+      : <p>{projectId ? 'No whole week is stored in full yet, so there is nothing to choose.' : 'Choose a venture first.'}</p>}
   </div>;
 }
 
@@ -97,7 +112,7 @@ function VentureSearchConsole({ projectId, api = searchConsoleApi }) {
     {notice && <p role="status">{notice}</p>}
     {error && <p role="alert">{error}{data && ' Dated last-good results below may be stale.'}</p>}
     {read?.served_by && <p>Read only: a teammate’s connection serves this venture. Only that member can sync or change the property.</p>}
-    {data && <SearchConsoleReport data={data} />}
+    {data && <SearchConsoleReport data={data} projectId={projectId} />}
     {dialog && <Lightbox label={dialog === 'choose' ? 'Choose a Search Console property' : 'Unlink Search Console property'} title={dialog === 'choose' ? 'Choose property' : 'Unlink property'} width={560} onClose={() => !busy && setDialog(null)} footer={<div className="flex justify-end gap-2"><button type="button" className={BUTTON} disabled={busy} onClick={() => setDialog(null)}>Cancel</button><button type="button" className={BUTTON} disabled={busy || (dialog === 'choose' && !pick)} onClick={() => run(dialog === 'unlink' ? 'unlink' : 'select')}>{dialog === 'unlink' ? 'Unlink property' : 'Use this property'}</button></div>}>
       {dialog === 'unlink' ? <p>Stop reading this property for this venture. This does not disconnect Google or create, publish or withdraw a Raise claim.</p> : <fieldset><legend>Properties allowed by your connection</legend>{read?.choices_error ? <p role="alert">{read.choices_error.detail || 'Unreadable: property choices could not be read.'}</p> : !Array.isArray(read?.choices) ? <p>Property choices are unavailable.</p> : !read.choices.length ? <p>Your Google connection lists no usable Search Console properties.</p> : read.choices.map(p => <label key={p.site_url} className="flex min-h-[44px] items-center gap-2 break-all"><input type="radio" name="search-property" value={p.site_url} disabled={!p.usable} checked={pick === p.site_url} onChange={() => setPick(p.site_url)} />{p.site_url} · {p.property_kind} · {p.permission_level}</label>)}</fieldset>}
       {error && <p role="alert">{error}</p>}

@@ -33,8 +33,11 @@
  * a real browser. A green run here means "the app stops reloading", not "Safari
  * is fixed".
  *
- * Not in `test:guards`: it needs a Chromium the CI runner is not known to carry,
- * and a check that cannot run must not report success.
+ * Not in `test:guards`: it needs a Chromium, and a check that cannot run must
+ * not report success. `ci.yml` job `visual` runs it on every PR's own build with
+ * the pinned browser (`PW_CHROMIUM_PATH`, #9038, D9038); there, with `CI` set, a
+ * missing Playwright, a browser that does not launch or a service worker that
+ * never takes control exits 1 instead of SKIPPED (`scripts/lib/browserCheck.mjs`).
  *
  *     npm run build && node scripts/check-reload-loop.mjs
  */
@@ -42,18 +45,22 @@ import http from 'node:http';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, extname, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { browserPlan, inCI, launchFailure } from './lib/browserCheck.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = join(ROOT, 'docs');
 
-let chromium;
+let chromium = null;
 try {
   ({ chromium } = await import(join(ROOT, 'frontend/node_modules/@playwright/test/index.mjs')));
-} catch {
-  console.log('check-reload-loop: SKIPPED — @playwright/test is not installed.');
-  process.exit(0);
+} catch { /* reported by browserPlan below */ }
+// #9038: PW_CHROMIUM_PATH first (ci.yml job `visual`), then the sandbox's pin; in CI nothing here may skip.
+const plan = browserPlan({ env: process.env, exists: existsSync, playwright: !!chromium, name: 'check-reload-loop' });
+if (plan.action !== 'run') {
+  (plan.action === 'fail' ? console.error : console.log)(plan.message);
+  process.exit(plan.action === 'fail' ? 1 : 0);
 }
-const EXECUTABLE = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find((p) => existsSync(p));
+const EXECUTABLE = plan.executablePath;
 
 if (!existsSync(join(DOCS, 'index.html'))) {
   console.error('check-reload-loop: docs/ has no index.html — run `npm run build` first.');
@@ -104,7 +111,12 @@ const base = `http://127.0.0.1:${server.address().port}`;
 // worker behaving as it does in production. A loopback address is still a secure
 // context, so registration works.
 
-const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {});
+const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {}).catch((error) => {
+  const { message, code } = launchFailure('check-reload-loop', error);
+  console.error(message);
+  server.close();
+  process.exit(code);
+});
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await ctx.route('**/*', (route) =>
   (route.request().url().startsWith(base) ? route.fallback() : route.abort()));
@@ -130,8 +142,10 @@ try {
   ).then(() => true).catch(() => false);
 
   if (!controlled) {
-    console.log('check-reload-loop: SKIPPED — the service worker never took control here.');
-    await browser.close(); server.close(); process.exit(0);
+    // #9038: in CI the check either measures the bound or fails; a skip there would report success unmeasured.
+    const ci = inCI(process.env);
+    (ci ? console.error : console.log)(`check-reload-loop: ${ci ? 'FAILED' : 'SKIPPED'} — the service worker never took control here.`);
+    await browser.close(); server.close(); process.exit(ci ? 1 : 0);
   }
 
   // 2. Reload so the page boots WITH a controller and arms the listener.

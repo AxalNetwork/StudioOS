@@ -317,7 +317,7 @@ const BASE_JOB_DIGESTS={
   "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
-  "visual":'5b5e4e49f1e0e4e3', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step.
+  "visual":'48b8bd0262691241', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step. #9037: the public routes axe gate. #9038: workspace frames, failed-read frames, reload loop and the 45-minute limit. #9039: Help introductions, Help workflow guides and pipeline keyboard.
   "drift":'d870bd539b8eced2',
   "og-tags":'e7c2cfaf81226e04',
   "dev-backend":'82b39cdcaa1e275a',
@@ -328,7 +328,8 @@ const jobDigest=job=>createHash('sha256').update(JSON.stringify(job)).digest('he
 test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
  const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
  // D8335 (#8335): a main commit. The first pin (19927c89) lived only on the merged branch and stopped resolving when it was deleted.
- assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88');
+ // #9022: moved from #8658's 3d41671dfe to #8719's 12fd3e4e36, the commit that landed D8693's equal-weight check.
+ assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@12fd3e4e36953c7d93cb8e069d8618547f413d8b');
  assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
  for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
  for(const [name,digest] of Object.entries(BASE_JOB_DIGESTS)){
@@ -343,6 +344,12 @@ test('D7909 literal pinned caller leaves the ordinary hosted graph and queue mat
  // revision (the merge-queue gate and the `accepted` output) landed in #8658 as 3d41671d, which holds blob 40b0b0fa,
  // the same bytes as the planner below; both callers pin it. The earlier pin, cb63d399, held 4f7dfaca.
  assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'40b0b0fa262c0ee6a9161176e609effe57ed9950','the prepared planner is the reviewed D8626 revision');
+ // #9022: the pinned commit, 12fd3e4e, holds capacity-planner.mjs blob 5d46f27b (D8693: a push refuses an artifact that
+ // is not the equal-weight plan). The pin runs that script, so this checkout's copy must be those bytes; a planner
+ // change updates this blob and moves both pins to the commit that lands it, in a follow-up PR (D8335).
+ const planner=readFileSync('scripts/ci/capacity-planner.mjs','utf8');
+ assert.match(planner,/planner_plan_not_equal_weight/);
+ assert.equal(execFileSync('git',['hash-object','scripts/ci/capacity-planner.mjs'],{encoding:'utf8'}).trim(),'5d46f27b2757ea002aec4544c68b2299eb296994','the planner script is the one the pin carries (D8693)');
  assert.equal(current.jobs['capacity-route'].uses,caller.uses,'the queue caller pins the same reviewed planner as the push caller');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
  assert.match(config,/CAPACITY_ENABLED = "false"/);assert.match(config,/CAPACITY_PUBLICATION = "pilot"/);assert.match(config,/CAPACITY_CONFIG = ""/);
