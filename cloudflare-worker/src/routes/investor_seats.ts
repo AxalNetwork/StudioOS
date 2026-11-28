@@ -172,38 +172,63 @@ seats.post('/invite', async (c) => {
   const email = String(body.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return c.json({ error: 'invalid_email', message: 'Enter a valid email address.' }, 400);
 
-  const cnt = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM investor_seats
-     WHERE primary_user_id = ? AND revoked_at IS NULL`
-  ).bind(user.id).first<{ n: number }>();
-  const active = Number(cnt?.n ?? 0);
-  if (active >= INVESTOR_QUOTAS.institutional.seats) {
-    return c.json({
-      error: 'seat_cap_exceeded',
-      message: `Institutional plan supports up to ${INVESTOR_QUOTAS.institutional.seats} colleague seats.`,
-      cap: INVESTOR_QUOTAS.institutional.seats,
-      used: active,
-    }, 409);
-  }
-
+  const cap = INVESTOR_QUOTAS.institutional.seats;
   // Generate a single-use invite token.
   const buf = new Uint8Array(24);
   crypto.getRandomValues(buf);
   const token = Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('');
 
-  try {
-    await c.env.DB.prepare(
+  // D9188 — the cap is a condition of the write, not a read before it.
+  // Counting first and inserting after let parallel invites each see room
+  // and each write a seat, so parallel invites could exceed the plan's seat
+  // cap. Each statement below writes only while the active count, read inside
+  // that statement, is below the cap, and the batch runs as one transaction.
+  //   1. A revoked row for this address comes back as a fresh invite: no
+  //      longer revoked, a new token, not yet accepted. `UNIQUE(primary_user_id,
+  //      seat_email)` keeps the revoked row, so inserting a second one fails.
+  //   2. Otherwise a new row, if this address has none.
+  //   3. The stored count is set from the rows, so it never drifts from them.
+  const [reactivated, inserted] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE investor_seats
+          SET revoked_at = NULL, accepted_at = NULL, seat_user_id = NULL,
+              invite_token = ?, invited_at = CURRENT_TIMESTAMP
+        WHERE primary_user_id = ? AND seat_email = ? AND revoked_at IS NOT NULL
+          AND (SELECT COUNT(*) FROM investor_seats
+                WHERE primary_user_id = ? AND revoked_at IS NULL) < ?`
+    ).bind(token, user.id, email, user.id, cap),
+    c.env.DB.prepare(
       `INSERT INTO investor_seats (primary_user_id, seat_email, invite_token)
-       VALUES (?, ?, ?)`
-    ).bind(user.id, email, token).run();
-  } catch (e) {
-    const msg = (e as Error).message || '';
-    if (/UNIQUE/i.test(msg)) return c.json({ error: 'already_invited', message: 'This address already has a seat on your plan.' }, 409);
-    throw e;
+       SELECT ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM investor_seats WHERE primary_user_id = ? AND seat_email = ?)
+          AND (SELECT COUNT(*) FROM investor_seats
+                WHERE primary_user_id = ? AND revoked_at IS NULL) < ?`
+    ).bind(user.id, email, token, user.id, email, user.id, cap),
+    c.env.DB.prepare(
+      `UPDATE users SET investor_seat_count =
+         (SELECT COUNT(*) FROM investor_seats WHERE primary_user_id = ? AND revoked_at IS NULL)
+       WHERE id = ?`
+    ).bind(user.id, user.id),
+  ]);
+  const wrote = Number(reactivated?.meta?.changes ?? 0) + Number(inserted?.meta?.changes ?? 0);
+  if (wrote !== 1) {
+    const held = await c.env.DB.prepare(
+      `SELECT revoked_at FROM investor_seats WHERE primary_user_id = ? AND seat_email = ?`
+    ).bind(user.id, email).first<{ revoked_at: string | null }>();
+    if (held && held.revoked_at == null) {
+      return c.json({ error: 'already_invited', message: 'This address already has an open invite or a seat on your plan.' }, 409);
+    }
+    const cnt = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM investor_seats
+       WHERE primary_user_id = ? AND revoked_at IS NULL`
+    ).bind(user.id).first<{ n: number }>();
+    return c.json({
+      error: 'seat_cap_exceeded',
+      message: `Institutional plan supports up to ${cap} colleague seats.`,
+      cap,
+      used: Number(cnt?.n ?? 0),
+    }, 409);
   }
-  await c.env.DB.prepare(
-    `UPDATE users SET investor_seat_count = investor_seat_count + 1 WHERE id = ?`
-  ).bind(user.id).run();
   const created = await c.env.DB.prepare(
     `SELECT id FROM investor_seats WHERE primary_user_id = ? AND seat_email = ?`
   ).bind(user.id, email).first<{ id: number }>();
@@ -346,23 +371,35 @@ seats.delete('/:id', async (c) => {
   if (seat.primary_user_id !== user.id && user.role !== 'admin') {
     return c.json({ error: 'forbidden', message: 'Only the account that bought the plan can revoke its seats.' }, 403);
   }
-  if (seat.revoked_at) return c.json({ ok: true, already_revoked: true });
-  await c.env.DB.prepare(
-    `UPDATE investor_seats SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?`
-  ).bind(id).run();
-  if (seat.seat_user_id) {
+  // D9188 — the revoke, the seat user's downgrade and the stored count are one
+  // transaction, and each is a condition of the row, not of the read above:
+  // `seat.revoked_at` may already be stale, so the batch decides whether this
+  // request is the one that revokes.
+  // Three separate writes let parallel revokes of one seat each decrement, so
+  // parallel revokes could drive the stored count below the true number. Only
+  // the revoke that finds the seat still active changes a row; the downgrade
+  // runs first and only for a seat still active inside the batch; the count
+  // is set from the rows, so a repeat cannot move it.
+  const [, revoked] = await c.env.DB.batch([
     // Drop the link AND reset the seat user back to free so they don't keep
     // Institutional access after revocation.
-    await c.env.DB.prepare(
+    c.env.DB.prepare(
       `UPDATE users SET investor_seat_primary_user_id = NULL,
                          investor_tier = 'free',
                          investor_subscription_status = 'free'
-       WHERE id = ? AND investor_seat_primary_user_id = ?`
-    ).bind(seat.seat_user_id, seat.primary_user_id).run();
-  }
-  await c.env.DB.prepare(
-    `UPDATE users SET investor_seat_count = MAX(0, investor_seat_count - 1) WHERE id = ?`
-  ).bind(seat.primary_user_id).run();
+       WHERE id = (SELECT seat_user_id FROM investor_seats WHERE id = ? AND revoked_at IS NULL)
+         AND investor_seat_primary_user_id = ?`
+    ).bind(id, seat.primary_user_id),
+    c.env.DB.prepare(
+      `UPDATE investor_seats SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL`
+    ).bind(id),
+    c.env.DB.prepare(
+      `UPDATE users SET investor_seat_count =
+         (SELECT COUNT(*) FROM investor_seats WHERE primary_user_id = ? AND revoked_at IS NULL)
+       WHERE id = ?`
+    ).bind(seat.primary_user_id, seat.primary_user_id),
+  ]);
+  if (Number(revoked?.meta?.changes ?? 0) !== 1) return c.json({ ok: true, already_revoked: true });
   await logSeatAct(c.env, user, 'investor_seat_revoked', { seat_id: id, had_accepted: seat.seat_user_id != null });
   return c.json({ ok: true });
 });
