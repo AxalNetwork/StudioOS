@@ -83,15 +83,12 @@ function baseDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(BASELINE);
   for (const sql of EXTRA) db.exec(sql);
-  // The CRM providers scope their outbound batch (and Salesforce its push by id) by `founders.user_id`, a column no
-  // migration creates: on the real schema those reads fail before the guard matters (a separate defect, out of this
-  // slice). The fixture adds the column the providers expect so the guard itself is what these tests exercise.
-  db.exec('ALTER TABLE founders ADD COLUMN user_id INTEGER');
+  // D8964 scopes the providers through users.founder_id on the real schema.
   // Migration 042's typed runway, which the financial collector reads beside raise progress.
   db.exec('ALTER TABLE projects ADD COLUMN runway_months INTEGER');
   db.exec(`
     INSERT INTO company_profiles (id, uid, company_name) VALUES (70, 'co-70', 'Harbor Ledger Inc'), (71, 'co-71', 'Fixture Capital');
-    INSERT INTO founders (id, name, email, user_id) VALUES (106, 'Fixture Founder', 'member-6@example.test', 6);
+    INSERT INTO founders (id, name, email) VALUES (106, 'Fixture Founder', 'member-6@example.test');
     INSERT INTO users (id, uid, email, name, role, is_active) VALUES
       (1, 'u1', 'member-1@example.test', 'Fixture Admin', 'admin', 1),
       (3, 'u3', 'member-3@example.test', 'Fixture Investor', 'investor', 1),
