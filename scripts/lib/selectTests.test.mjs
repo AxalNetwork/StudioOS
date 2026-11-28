@@ -1,7 +1,8 @@
 // D5610: read dependencies, directory membership, conservative fallbacks and honest scoring.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { select, score, report, FAN_IN_MAX, STALE_COMMITS, ALWAYS, newestMainArtifact } from './selectTests.mjs';
+import { readFileSync } from 'node:fs';
+import { select, score, report, FAN_IN_MAX, STALE_COMMITS, ALWAYS, traceAtOrBefore, replayInputs } from './selectTests.mjs';
 const now = Date.parse('2026-11-11T12:00:00Z');
 const tests = Array.from({ length: 100 }, (_, i) => `test/${i}.test.mjs`);
 const fixture = () => ({ changed: [], deps: { generatedAt: '2026-11-11T11:00:00Z', tests: Object.fromEntries(tests.map((t) => [t, { files: [], directories: [] }])) }, tests, meta: { now, ageCommits: 0 } });
@@ -78,8 +79,50 @@ test('D5608 producer fields include reads, resolved modules, sqlite and both pro
 });
 
 
-test('merged queue artifacts remain eligible when main verification skips its own trace run', () => {
-  const artifacts = [{id:1,name:'test-deps-old',created_at:'2026-11-11T10:00:00Z',workflow_run:{head_sha:'old',head_branch:'main'}}, {id:2,name:'test-deps-new',created_at:'2026-11-11T11:00:00Z',workflow_run:{head_sha:'merged',head_branch:'gh-readonly-queue/main/pr-1'}}, {id:3,name:'test-deps-pr',created_at:'2026-11-11T12:00:00Z',workflow_run:{head_sha:'unmerged'}}];
-  assert.equal(newestMainArtifact(artifacts,[{sha:'old'},{sha:'merged'}]).id, 2);
-  assert.equal(newestMainArtifact(artifacts,[]), null);
+const sha = (n) => n.toString(16).padStart(40, '0');
+const artifact = (id, commit, created_at, extra = {}) => ({ id, name: `test-deps-${commit}`, created_at, expired: false, workflow_run: { head_sha: commit }, ...extra });
+
+test('D5610-p3: the trace is the newest at or before the base, never a newer main commit', () => {
+  const line = [sha(10), sha(9), sha(8)];
+  const newer = artifact(1, sha(11), '2026-11-27T12:00:00Z');
+  assert.deepEqual(traceAtOrBefore(line, [newer, artifact(2, sha(8), '2026-11-27T09:00:00Z'), artifact(3, sha(9), '2026-11-27T10:00:00Z')]), { id: 3, created_at: '2026-11-27T10:00:00Z', sha: sha(9), ageCommits: 1 });
+  assert.equal(traceAtOrBefore(line, [newer]), null);
+  // A rerun's newer artifact of the same commit wins; expired, misnamed or other-run artifacts never do.
+  assert.equal(traceAtOrBefore(line, [artifact(4, sha(10), '2026-11-27T08:00:00Z'), artifact(5, sha(10), '2026-11-27T08:30:00Z')]).id, 5);
+  for (const bad of [{ expired: true }, { name: 'test-deps-other' }, { workflow_run: { head_sha: sha(9) } }, { id: 0 }]) assert.equal(traceAtOrBefore([sha(10)], [artifact(6, sha(10), '2026-11-27T08:00:00Z', bad)]), null, JSON.stringify(bad));
+});
+
+test('D5610-p3: the lookup stops at STALE_COMMITS', () => {
+  const line = Array.from({ length: STALE_COMMITS + 2 }, (_, i) => sha(100 - i));
+  assert.equal(traceAtOrBefore(line, [artifact(7, line[STALE_COMMITS], '2026-11-27T08:00:00Z')]).ageCommits, STALE_COMMITS);
+  assert.equal(traceAtOrBefore(line, [artifact(8, line[STALE_COMMITS + 1], '2026-11-27T08:00:00Z')]), null);
+});
+
+test('D5610-p3: guard failures never miss and never unscore a run with test failures', () => {
+  const guard = { kind: 'guard', file: 'scripts/check-x.mjs' };
+  assert.deepEqual(score({ files: [tests[0]] }, { verdict: 'pr_failure', failures: [guard, { kind: 'test', file: tests[0] }] }), { scoring: 'scored', failing: [tests[0]], misses: [] });
+  assert.deepEqual(score({ files: [] }, { verdict: 'pr_failure', failures: [guard] }), { scoring: 'unscored', misses: null, failing: null });
+});
+
+test('D5610-p3: replay inputs judge the first red change against the recorded trace', () => {
+  const deps = { sha: sha(1), tests: Object.fromEntries(tests.map((t, i) => [t, { files: i ? [] : ['x.sql'], directories: [] }])) };
+  const inputs = replayInputs({ changed: [{ status: 'M', path: 'x.sql' }, { status: 'A', path: 'new/a.test.mjs' }, { status: 'D', path: 'old/b.test.mjs' }], deps, traceCreatedAt: '2026-11-20T22:10:06Z', ageCommits: 2 });
+  assert.deepEqual(inputs.tests, ['new/a.test.mjs', ...tests].sort());
+  assert.deepEqual(inputs.graph, { 'new/a.test.mjs': [] });
+  assert.equal(inputs.deps.generatedAt, '2026-11-20T22:10:06Z');
+  const selection = select(inputs);
+  assert.equal(selection.mode, 'selected');
+  assert.deepEqual(selection.files, ['new/a.test.mjs', tests[0]].sort());
+  assert.deepEqual(score(selection, { verdict: 'pr_failure', failures: [{ file: tests[1] }] }).misses, [tests[1]]);
+});
+
+test('D5610-p3: every backtest episode is after the first trace and names a trace that existed when it ran', () => {
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/red_main_episodes.json', import.meta.url), 'utf8'));
+  assert.ok(fixture.episodes.length > 0);
+  for (const e of fixture.episodes) {
+    assert.ok(e.createdAt >= '2026-11-16T22:21:00Z', e.firstRedCommit);
+    assert.ok(e.trace.createdAt <= e.createdAt, e.firstRedCommit);
+    assert.match(e.parentCommit, /^[a-f0-9]{40}$/);
+    assert.ok(Number.isSafeInteger(e.trace.artifactId) && e.failingFiles.every((f) => /\.test\.(?:mjs|ts)$/.test(f)), e.firstRedCommit);
+  }
 });

@@ -61,10 +61,13 @@ export function select({ changed, deps, tests, graph = {}, meta = {} }) {
 }
 
 export function score(selection, failure) {
-  if (!failure || failure.verdict !== 'pr_failure' || !Array.isArray(failure.failures) || !failure.failures.length || failure.failures.some((f) => !validPath(f.file) || !/\.test\.(?:mjs|ts)$/.test(f.file))) {
+  // D5610-p3: a guard failure is never a miss, because `test:guards` is in ALWAYS. It neither scores nor
+  // unscores the run; the run's test failures decide.
+  const failures = Array.isArray(failure?.failures) ? failure.failures.filter((f) => f?.kind !== 'guard') : null;
+  if (!failure || failure.verdict !== 'pr_failure' || !failures?.length || failures.some((f) => !validPath(f.file) || !/\.test\.(?:mjs|ts)$/.test(f.file))) {
     return { scoring: 'unscored', misses: null, failing: null };
   }
-  const failing = [...new Set(failure.failures.map((f) => f.file))].sort();
+  const failing = [...new Set(failures.map((f) => f.file))].sort();
   return { scoring: 'scored', failing, misses: failing.filter((f) => !selection.files.includes(f)) };
 }
 
@@ -78,9 +81,28 @@ export function report(records) {
   };
 }
 
-// A verified queue SHA can already be main even though its artifact still names a queue branch.
-export function newestMainArtifact(artifacts, commits) {
-  const main = new Set(commits.map((c) => c.sha));
-  return artifacts.filter((a) => !a.expired && a.name?.startsWith('test-deps-') && Number.isSafeInteger(a.id) && a.id > 0 && main.has(a.workflow_run?.head_sha))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)[0] || null;
+// D5610-p3: the trace for a PR is the newest `test-deps-<sha>` artifact on its base's first-parent line, at or
+// before the base: `commits` is that line, base first; `artifacts` are rows from exact-name lookups. A trace from a
+// newer main commit is never chosen (the CLI's ancestry check refused those), and a merge-queue artifact counts,
+// because its run tested the very SHA that landed. Beyond STALE_COMMITS the trace would be stale anyway.
+export function traceAtOrBefore(commits, artifacts) {
+  const rows = Array.isArray(artifacts) ? artifacts : [];
+  for (const [ageCommits, sha] of (Array.isArray(commits) ? commits : []).slice(0, STALE_COMMITS + 1).entries()) {
+    if (!/^[a-f0-9]{40}$/.test(sha)) return null;
+    const hit = rows.filter((a) => a && !a.expired && a.name === `test-deps-${sha}` && a.workflow_run?.head_sha === sha && Number.isSafeInteger(a.id) && a.id > 0 && typeof a.created_at === 'string')
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)[0];
+    if (hit) return { id: hit.id, created_at: hit.created_at, sha, ageCommits };
+  }
+  return null;
+}
+
+// D5610-p3: the replay inputs for one red-main episode: the first red commit's own change, judged against the
+// trace at or before its parent. Tests are the trace's keys plus changed test files (new tests are selected as
+// changed); a failing file outside both is never selected, so it counts as a miss, never as a pass.
+export function replayInputs({ changed, deps, traceCreatedAt, ageCommits }) {
+  const added = changed.filter((c) => !/^D/.test(c.status) && /\.test\.(?:mjs|ts)$/.test(c.path)).map((c) => c.path);
+  const tests = [...new Set([...Object.keys(deps?.tests || {}), ...added])].sort();
+  const graph = Object.fromEntries(tests.filter((t) => !deps?.tests?.[t]).map((t) => [t, []]));
+  const trace = deps && { ...deps, generatedAt: deps.generatedAt || traceCreatedAt };
+  return { changed, deps: trace, tests, graph, meta: { now: Date.parse(traceCreatedAt), ageCommits } };
 }
