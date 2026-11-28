@@ -64,10 +64,10 @@ test('twenty chase targets use fixed prepares and one write batch; repeats never
   const many = await call(db,'/api/portfolio/chase',{project_ids:ids});
   assert.deepEqual(many.data.chased.map((r:any)=>[r.project_id,r.already]),ids.map(id=>[id,false]));
   assert.deepEqual(many.data.skips,[]);
-  assert.equal(many.batches,1);
   db.exec('DELETE FROM portfolio_update_chases');
   const one = await call(db,'/api/portfolio/chase',{project_ids:[1]});
   assert.equal(many.prepares,one.prepares,'twenty targets must not prepare per-project queries');
+  assert.equal(many.batches,1);
   const repeat = await call(db,'/api/portfolio/chase',{project_ids:[1]});
   assert.equal(repeat.data.chased[0].uid,one.data.chased[0].uid);
   assert.equal(repeat.data.chased[0].already,true);
