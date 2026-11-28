@@ -577,7 +577,8 @@ test.describe('part 4: late answers across a company or account switch', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(300);
     await expect(page.locator('.pf-frame h1')).toHaveText('Lumen Robotics');
-    await expect(page).toHaveTitle('Lumen Robotics · Portfolio · Axal VC');
+    // D8681: the tab title names the screen, never the company, so it cannot carry Northwind either.
+    await expect(page).toHaveTitle('Company · Portfolio · Axal VC');
     await expect(page.getByRole('navigation', { name: 'Lumen Robotics sections' })).toBeVisible();
     expect(await frameText(page), 'a Northwind answer painted into Lumen').not.toContain('Northwind');
     await go(page, '/portfolio/companies/lumen/reports');
