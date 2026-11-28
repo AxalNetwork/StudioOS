@@ -102,7 +102,7 @@ const READS = {
 const NAMES = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow' };
 // Validate's one "Also in" page, Advisory, was removed (#2341); Raise's Legal &
 // Capital left with #2354.
-const ALSO = { validate: [], build: [], raise: ['Incorporate', 'Co-Founder Agreement'], grow: ['Perks'] }; // D4439: co-marketing is inside Partner network; Network Effects left with #2324 and Compliance moved into Calendar (D1384)
+const ALSO = { validate: [], build: [], raise: ['Incorporate', 'Co-Founder Agreement'], grow: [] }; // D4866 (#4866): Grow's Perks moved to the overview's "For this job" (`growRelatedModel.js`). D4439: co-marketing is inside Partner network; Network Effects left with #2324 and Compliance moved into Calendar (D1384)
 
 // ── The stub DOM, with a founder rail when asked ──────────────────────────
 
@@ -429,6 +429,7 @@ for (const cycle of Object.keys(READS)) {
         assert.equal(phone.all('grow-overview-v2').length, 1);
         assert.ok(ids.includes('grow-attention'));
         assert.ok(!ids.includes('phone-root') && !ids.includes('phone-index'));
+        assert.ok(ids.includes('grow-related'), 'D4866: For this job, below 1024px too');
       } else {
         assert.equal(phone.all('phone-root').length, 1, 'the root, once');
         assert.ok(ids.includes('phone-focus-cta') && ids.includes('phone-index'), 'drawn from the overview read');
@@ -444,6 +445,7 @@ for (const cycle of Object.keys(READS)) {
       if (cycle === 'grow') {
         assert.equal(desk.all('grow-overview-v2').length, 1);
         assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
+        assert.ok(ids.includes('grow-related'), 'D4866: For this job at 1024px');
       } else {
         // D6028 (#6028): Build's desktop overview is its own (BD1), mounted through `def.Overview`.
         assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : cycle === 'validate' ? 'validate-overview-v2' : 'cycle-overview'), 'the desktop overview');

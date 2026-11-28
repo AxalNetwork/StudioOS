@@ -3,6 +3,7 @@
  * D4864 (#4864, GR-12, GR-15): the snapshot's figures and the domain tiles in the platform's states
  * (D5129), each with its source, freshness and one recovery action; a failed refresh keeps the last
  * good read only for the same venture and the same viewer, marked Stale, never as current.
+ * D4866 (#4866, GR-02): "For this job" closes the page, links picked by the current task (`GrowRelated.jsx`).
  */
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,6 +13,7 @@ import { metricLabel, readTarget } from '../../lib/metricTargets';
 import { GROW_AREAS, focusValue, growPrimary, signalCount, growPeriod } from './growOverviewModel';
 import { growDomain, lastGoodFor, rememberRead, viewerKey } from './growKpiModel';
 import GrowSnapshot from './GrowSnapshot';
+import GrowRelated from './GrowRelated';
 import { projectSearch } from './founderToolNavigation';
 import HeaderAsk from '../../ui/HeaderAsk';
 import { DataState, StateChip, Unreadable, staleAge } from '../../ui';
@@ -180,6 +182,8 @@ export function GrowOverviewView({ raw, data, status, search, action, onRetry, r
             {sparse && !locked && !kept ? <div className="order-2"><Setup attention={attention} search={search} /></div> : null}
             <div className={sparse ? 'order-3' : 'order-3 lg:order-1'}>{snapshot}</div>
             <Domains cards={cards} attention={attention} search={search} readOnly={locked || Boolean(kept)} />
+            {/* D4866 (GR-02): related links for the current task, in place of the static "Also in Grow"; a kept read names no task. */}
+            <GrowRelated attention={kept ? null : attention} search={search} />
           </div>}
     </div>
   );

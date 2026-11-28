@@ -218,7 +218,8 @@ test('the wiring: Grow’s module headers and overview carry Publish to… on pa
   assert.match(route, /\{cycle === 'grow' && <PublishedFromHere part=\{rawOverview\?\.publish\} \/>\}/);
   assert.match(read('frontend/src/pages/cycles/CycleModulePage.jsx'), /search=\{search\} more=\{more\} \/>/);
   assert.match(read('frontend/src/pages/cycles/CycleOverview.jsx'), /chip=\{chip\} more=\{more\} \/>/);
-  assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /\{more && <div className="flex justify-end">\{more\}<\/div>\}/);
+  // D4866 (#4866): the phone row now also carries Grow's Reporting utility before `more`.
+  assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /\{\(more \|\| utility\) && <div className="flex flex-wrap justify-end gap-2">\{utility\}\{more\}<\/div>\}/);
   const desk = read('frontend/src/pages/cycles/ReportingDesk.jsx');
   assert.match(desk, /const mayPublish = gate\?\.state === 'ok' && \(gate\.can_publish \|\| gate\.empty\?\.kind === 'connect'\);/);
   assert.match(desk, /rowAction=\{rowAction\}/);
