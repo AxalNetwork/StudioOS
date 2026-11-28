@@ -214,8 +214,8 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['discovery_interviews', 'p', 'cleanup'],
   ['documents', 'pc', 'cleanup'],
   ['durability_checklist', 'p', 'cascade'],
-  ['eadwyn_conversations', 'c', 'company'],
-  ['eadwyn_pending_actions', 'c', 'company'],
+  ['eadwyn_conversations', 'pc', 'cascade'], // D9277: a project space's project_id is ON DELETE CASCADE
+  ['eadwyn_pending_actions', 'pc', 'cascade'], // D9277: as its conversation
   ['engagements', 'pc', 'left'],
   ['events', 'p', 'refuses'],
   ['facebook_page_facts', 'p', 'cascade'],
@@ -494,6 +494,10 @@ const ERASURE: Record<string, Answer> = {
  *  the room again from the new company. */
 const MOVE: Record<string, Answer> = {
   data_room_grants: { is: 'changed', by: "projectMoveStatements (an active grant becomes 'revoked', D8535)" },
+  // D9277: a row names one project or one company, never both, so a project-space conversation and its actions
+  // follow the venture and keep no company it left.
+  eadwyn_conversations: FOLLOWS,
+  eadwyn_pending_actions: FOLLOWS,
 };
 
 function d1Store([name, keyed, hard]: readonly [string, Keyed, HardDelete]): Store {

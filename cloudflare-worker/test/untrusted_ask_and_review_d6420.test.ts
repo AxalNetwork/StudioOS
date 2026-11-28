@@ -47,6 +47,8 @@ const inputs = (over: Record<string, unknown> = {}) => ({
   reads: [{ key: 'hubspot', source: { key: 'hubspot', name: 'HubSpot', as_of: null }, facts: ['Deal: Acme', `Deal: ${INJECT}`] }],
   sendable: [],
   turns: [{ role: 'user', content: 'Hello' }, { role: 'assistant', content: 'Hello.' }],
+  // D9277: the run is given its space.
+  space: { scope: 'company', id: 41, name: 'Synthetic', companyId: 41, projectId: null },
   ...over,
 } as any);
 

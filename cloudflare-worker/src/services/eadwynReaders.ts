@@ -14,6 +14,10 @@
  * conversation started, reads nothing. Past the gate, every row is narrowed
  * to projects of that company (`p.company_id = ?`, not deleted).
  *
+ * D9277 (#9277): PROJECT SCOPE. A project space's run passes its project as `projectId` (the company is the
+ * project's own, for the gate). Every query then also binds `(? IS NULL OR p.id = ?)`, so a project's run reads that
+ * project's rows and no sibling's, even when the member is in both.
+ *
  * Only the connectors that write project data (`writesProjectData`) have a
  * reader: their rows belong to a company. Calendly, Carta, DocuSign and the
  * rest land personal or unscoped rows; they join this map when their rows
@@ -56,14 +60,14 @@ const CRM_DEALS_SQL = {
   hubspot:
     `SELECT p.name AS project_name, d.status, d.amount, d.updated_at
        FROM deals d JOIN projects p ON p.id = d.project_id
-      WHERE p.company_id = ? AND p.deleted_at IS NULL
+      WHERE p.company_id = ? AND p.deleted_at IS NULL AND (? IS NULL OR p.id = ?)
         AND d.hubspot_deal_id IS NOT NULL AND d.hubspot_deal_id NOT LIKE 'affinity:%'
         AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
       ORDER BY d.updated_at DESC, d.id DESC LIMIT ?`,
   salesforce:
     `SELECT p.name AS project_name, d.status, d.amount, d.updated_at
        FROM deals d JOIN projects p ON p.id = d.project_id
-      WHERE p.company_id = ? AND p.deleted_at IS NULL
+      WHERE p.company_id = ? AND p.deleted_at IS NULL AND (? IS NULL OR p.id = ?)
         AND d.sf_opportunity_id IS NOT NULL
         AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
       ORDER BY d.updated_at DESC, d.id DESC LIMIT ?`,
@@ -75,11 +79,12 @@ async function crmDeals(
   companyId: number | null,
   crm: keyof typeof CRM_DEALS_SQL,
   noun: string,
+  projectId: number | null,
 ): Promise<ConnectorRead> {
   if (!(await inScope(env, row, companyId))) return NOTHING(row);
   const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
   const rows = await env.DB.prepare(CRM_DEALS_SQL[crm])
-    .bind(companyId, hidden, READ_LIMIT).all<{ project_name: string | null; status: string; amount: number | null; updated_at: string }>();
+    .bind(companyId, projectId, projectId, hidden, READ_LIMIT).all<{ project_name: string | null; status: string; amount: number | null; updated_at: string }>();
   const deals = rows.results ?? [];
   return {
     facts: deals.length
@@ -89,23 +94,23 @@ async function crmDeals(
   };
 }
 
-const hubspot: ConnectorReader = (env, _user, row, companyId) =>
-  crmDeals(env, row, companyId, 'hubspot', 'HubSpot deal');
+const hubspot: ConnectorReader = (env, _user, row, companyId, projectId = null) =>
+  crmDeals(env, row, companyId, 'hubspot', 'HubSpot deal', projectId);
 
-const salesforce: ConnectorReader = (env, _user, row, companyId) =>
-  crmDeals(env, row, companyId, 'salesforce', 'Salesforce opportunity');
+const salesforce: ConnectorReader = (env, _user, row, companyId, projectId = null) =>
+  crmDeals(env, row, companyId, 'salesforce', 'Salesforce opportunity', projectId);
 
 /** Stripe's latest snapshot per project, as its sync wrote it (`source = 'stripe'`). */
-const stripe: ConnectorReader = async (env, _user, row, companyId) => {
+const stripe: ConnectorReader = async (env, _user, row, companyId, projectId = null) => {
   if (!(await inScope(env, row, companyId))) return NOTHING(row);
   const rows = await env.DB.prepare(
     `SELECT p.name AS project_name, m.snapshot_date, m.mrr, m.arr, m.monthly_churn_pct, m.active_users
        FROM project_metrics m JOIN projects p ON p.id = m.project_id
-      WHERE m.source = 'stripe' AND p.company_id = ? AND p.deleted_at IS NULL
+      WHERE m.source = 'stripe' AND p.company_id = ? AND p.deleted_at IS NULL AND (? IS NULL OR p.id = ?)
         AND m.snapshot_date = (SELECT MAX(m2.snapshot_date) FROM project_metrics m2
                                 WHERE m2.project_id = m.project_id AND m2.source = 'stripe')
       ORDER BY m.snapshot_date DESC, p.id LIMIT ?`,
-  ).bind(companyId, READ_LIMIT).all<{
+  ).bind(companyId, projectId, projectId, READ_LIMIT).all<{
     project_name: string | null; snapshot_date: string; mrr: number | null; arr: number | null;
     monthly_churn_pct: number | null; active_users: number | null;
   }>();
@@ -119,15 +124,15 @@ const stripe: ConnectorReader = async (env, _user, row, companyId) => {
 };
 
 /** What GitHub delivered, counted per project and module from its ledger (D655). */
-const github: ConnectorReader = async (env, _user, row, companyId) => {
+const github: ConnectorReader = async (env, _user, row, companyId, projectId = null) => {
   if (!(await inScope(env, row, companyId))) return NOTHING(row);
   const rows = await env.DB.prepare(
     `SELECT p.name AS project_name, f.module, f.kind, COUNT(*) AS n, MAX(f.last_seen_at) AS last_seen
        FROM connector_fed_items f JOIN projects p ON p.id = f.project_id
-      WHERE f.integration_id = ? AND p.company_id = ? AND p.deleted_at IS NULL
+      WHERE f.integration_id = ? AND p.company_id = ? AND p.deleted_at IS NULL AND (? IS NULL OR p.id = ?)
       GROUP BY p.id, f.module, f.kind
       ORDER BY last_seen DESC LIMIT ?`,
-  ).bind(row.id, companyId, READ_LIMIT).all<{ project_name: string | null; module: string; kind: string; n: number; last_seen: string }>();
+  ).bind(row.id, companyId, projectId, projectId, READ_LIMIT).all<{ project_name: string | null; module: string; kind: string; n: number; last_seen: string }>();
   const groups = rows.results ?? [];
   return {
     facts: groups.length

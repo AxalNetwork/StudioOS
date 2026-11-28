@@ -20,3 +20,4 @@ than once. A fix never deletes rows.
 | `202611261004_5585_release_line_names.fix.sql` | D5585-p16: re-creates the line names table's index and its four triggers. |
 | `202611270444_7928_bls_ce_source.fix.sql` | D7928: keeps the `bls-ce` source disabled, so a rolled-back Worker that has no importer for it imports nothing. |
 | `202611271256_7928_bls_ce_verified_terms.fix.sql` | D7928-p2: keeps the `bls-ce` source disabled, so a rolled-back Worker that still expects the guessed table layout imports nothing. |
+| `202611281314_9277_eadwyn_space.fix.sql` | D9277: re-runs the company-scope backfill and re-creates the space index and the four company-XOR-project triggers; a rolled-back Worker needs nothing else. |

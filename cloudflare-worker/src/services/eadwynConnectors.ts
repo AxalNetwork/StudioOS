@@ -98,6 +98,8 @@ export type ConnectorReader = (
   user: User,
   row: IntegrationRow,
   companyId: number | null,
+  /** D9277: a project space's project. Set, the reader narrows every row to it; null reads the whole company. */
+  projectId?: number | null,
 ) => Promise<ConnectorRead>;
 
 // The readers themselves are `CONNECTOR_READERS` in `services/eadwynReaders.ts`.
@@ -107,6 +109,8 @@ export interface ConnectorSource {
   key: string;
   name: string;
   as_of: string | null;
+  /** D9277: the one company or project the read was narrowed to. */
+  space?: { scope: 'company' | 'project'; id: number };
 }
 
 export function sourceFor(key: string, asOf: string | null): ConnectorSource {

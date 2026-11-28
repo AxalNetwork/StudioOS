@@ -1,21 +1,32 @@
 // D652 (#1464) — the Worker AI rail's conversations and the connectors in
 // them. Worker: routes/eadwyn.ts, mounted at /api/eadwyn. Every call is the
-// caller's own; a conversation keeps the company that was active when it
-// started.
+// caller's own; a conversation belongs to the one company or one project it
+// started in (D9277), and never moves.
 import { request } from '../api.js';
 import { railBody } from '../railPages.js';
 
 const enc = encodeURIComponent;
 const body = (b) => JSON.stringify(b ?? {});
+const isSpace = (v) => !!v && typeof v === 'object' && (v.scope === 'company' || v.scope === 'project');
 
 export const eadwynApi = {
   // The "Connectors ›" list: each connection with the reason it cannot be used.
   connectors: () => request('/eadwyn/connectors'),
-  conversations: (workspace) => request(`/eadwyn/conversations?workspace=${enc(workspace)}`),
+  // D9277 (#9277): a conversation belongs to one company or one project. Pass the space,
+  // `{ scope: 'company' | 'project', id }`; a bare workspace string is the older call, which
+  // lists by workspace and starts in the active company. Each conversation carries
+  // `space: { scope, id, name }` for the chat header.
+  conversations: (where) => request(isSpace(where)
+    ? `/eadwyn/conversations?scope=${enc(where.scope)}&id=${enc(where.id)}`
+    : `/eadwyn/conversations?workspace=${enc(where)}`),
   // D701 (#1663): every conversation the caller has, both stores, for the
   // Conversations list on Studio's phone page. Takes no id and no parameter.
   conversationsMine: () => request('/eadwyn/conversations/mine'),
-  start: (workspace) => request('/eadwyn/conversations', { method: 'POST', body: body({ workspace }) }),
+  // `{ scope, id, workspace? }`, or a workspace string (the older call).
+  start: (where) => request('/eadwyn/conversations', {
+    method: 'POST',
+    body: body(isSpace(where) ? { scope: where.scope, id: where.id, workspace: where.workspace } : { workspace: where }),
+  }),
   conversation: (uid) => request(`/eadwyn/conversations/${enc(uid)}`),
   remove: (uid) => request(`/eadwyn/conversations/${enc(uid)}`, { method: 'DELETE' }),
   // The whole set of switches, every time: the Worker keeps exactly this list.
