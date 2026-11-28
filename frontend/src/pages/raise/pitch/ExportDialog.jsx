@@ -13,8 +13,10 @@ import {
   chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
   lastExportLine, needsConnect, optionsApply, presentHref, whatExportDoes,
 } from './presentExportModel';
-import { DEFAULT_PRESET, PRESETS, ackNeeded, ledgerSettings, parseReport, planOf, presetOf, reportLines } from './exportDisclosureModel';
-import { CopyPicker, ExportCompleted, ExportPreview, NotesAck } from './ExportDisclosure';
+import {
+  DEFAULT_PRESET, PRESETS, ackNeeded, copyAnnouncement, exportingLine, ledgerSettings, parseReport, planOf, presetOf, recordedLine, reportLines,
+} from './exportDisclosureModel';
+import { CopyPicker, ExportCompleted, ExportHistory, ExportPreview, NotesAck } from './ExportDisclosure';
 import { SHOW_IN_DRAFT, confirmWords, confirmedIds, confirmedLine, draftDiffers, findingKey, inDraft, scopeLine, showInDraftLabel } from './exportGateModel';
 import { cardUid } from './editorModel';
 
@@ -68,6 +70,12 @@ import { cardUid } from './editorModel';
  * draft differs (`draftDiffers`, from the editor's `draft`). The export sends the
  * confirmed warnings' ids (`confirmed`) and the ledger line adds "Exported with
  * 3 warnings confirmed" (`deck_exports.warnings_confirmed`).
+ * D8771 part 3: while an export runs, the copy, format, version and both
+ * settings are locked and the start is announced; the finished export takes
+ * focus and says who recorded it and when; a failure moves focus to Try
+ * again. The venture's export history (`ExportHistory`) lists what each
+ * export carried, Not recorded for an older row, and offers Try again when
+ * it cannot be read. No file is kept (Q3, answered no by the owner).
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -161,6 +169,17 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
     setSources(PRESETS[k].sources);
   };
   const mustAck = optionsApply(format) && ackNeeded(notes, cards);
+  // D8771 part 3 (PTX11): a change of copy or setting says, politely, what goes into the file; nothing is said on open.
+  const [said, setSaid] = useState(null);
+  const opened = useRef(true);
+  useEffect(() => {
+    if (opened.current) { opened.current = false; return; }
+    const plan = cards ? planOf(format, cards, { notes, sources, theme: content?.theme, methodId: content?.methodId }) : null;
+    setSaid(copyAnnouncement(presetOf(notes, sources), plan, { notes, sources }));
+  }, [notes, sources]); // eslint-disable-line react-hooks/exhaustive-deps
+  // PTX06/PTX11: a failure is an alert, and focus goes to Try again; the settings are kept.
+  const retryRef = useRef(null);
+  useEffect(() => { if (failed) retryRef.current?.focus?.(); }, [failed]);
 
   const run = async () => {
     if (!version?.id || busy) return;
@@ -247,7 +266,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <PreflightMeasure key={send.pf.running.done} card={send.pf.running.snapshot.slides[send.pf.running.done]} index={send.pf.running.done}
             theme={send.pf.running.snapshot.theme} kit={kit} onMeasured={send.pf.onMeasured} />
         ) : null}
-        <CopyPicker copy={copy} onPick={pick} />
+        <CopyPicker copy={copy} onPick={pick} disabled={busy} said={said} />
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Format">
           {FORMATS.map((f) => {
             const on = f.id === format;
@@ -257,9 +276,9 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
                 type="button"
                 role="radio"
                 aria-checked={on}
-                aria-disabled={!f.available}
-                disabled={!f.available}
-                onClick={() => { if (!f.available) return; setFormat(f.id); setCreated(null); setFailed(null); }}
+                aria-disabled={!f.available || busy}
+                disabled={!f.available || busy}
+                onClick={() => { if (!f.available || busy) return; setFormat(f.id); setCreated(null); setFailed(null); }}
                 className={`flex flex-col gap-0.5 rounded-[10px] border px-3 py-2.5 text-left ${on ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'} ${f.available ? '' : 'cursor-not-allowed opacity-60'}`}
                 data-testid={`pitch-export-format-${f.id}`}
               >
@@ -274,6 +293,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           <select
             className="min-h-[34px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[12px] dark:border-gray-700 dark:bg-gray-900"
             value={versionId ?? ''}
+            disabled={busy}
             onChange={(e) => setVersionId(e.target.value)}
             data-testid="pitch-export-version"
           >
@@ -320,15 +340,16 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         ) : null}
         <div className="flex flex-col gap-2 text-[12.5px]">
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
-            <input ref={notesRef} type="checkbox" checked={notes} disabled={!apply} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
+            <input ref={notesRef} type="checkbox" checked={notes} disabled={!apply || busy} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
           </label>
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
-            <input type="checkbox" checked={sources} disabled={!apply} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
+            <input type="checkbox" checked={sources} disabled={!apply || busy} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
           </label>
           {apply && (notes || sources) ? <span className={MUTED} data-testid="pitch-export-where">{OPTIONS_WHERE[format]}</span> : null}
         </div>
         <ExportPreview format={format} slides={content?.slides ?? null} cards={cards} notes={notes} sources={sources} theme={content?.theme ?? null} methodId={content?.methodId ?? null} />
-        {mustAck ? <NotesAck cards={cards} checked={ack} onChange={setAck} /> : null}
+        {mustAck ? <NotesAck cards={cards} checked={ack} onChange={setAck} disabled={busy} /> : null}
+        {busy ? <span role="status" className={MUTED} data-testid="pitch-export-exporting">{exportingLine(format, version)}</span> : null}
         {isGoogle && connectFirst ? (
           <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="pitch-export-google-connect">
             <span className={`text-[12.5px] ${INK}`}>{GOOGLE_CONNECT}</span>
@@ -338,11 +359,12 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
         {isGoogle && google.state === 'unreadable' ? <span className={MUTED} data-testid="pitch-export-google-unreadable">{GOOGLE_STATE_UNREADABLE}</span> : null}
         <p className={`m-0 ${MUTED}`} data-testid="pitch-export-what">{whatExportDoes(version, format)}</p>
         <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last">
-          {ledger.status === 'error' ? 'The export history could not be read.' : ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
+          {ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
         </span>
         {ledger.status === 'ok' && ledger.rows[0] ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last-settings">{ledgerSettings(ledger.rows[0])}</span> : null}
         {/* D8772 part 3: the ledger's own record of the warnings that export confirmed. */}
         {ledger.status === 'ok' && confirmedLine(ledger.rows[0]) ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last-confirmed">{confirmedLine(ledger.rows[0])}</span> : null}
+        <ExportHistory ledger={ledger} fileHash={done?.hash ?? null} onRetry={readLedger} onDownloadAgain={file ? () => download(file.blob, file.name) : null} />
         {failed ? (
           <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-export-failed">
             {failed}
@@ -350,7 +372,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           </div>
         ) : null}
         {/* D8771: the same version, format and settings, once more. */}
-        {failed ? <button type="button" className={`${GHOST} self-start`} onClick={run} disabled={busy || (mustAck && !ack)} data-testid="pitch-export-retry">Try again</button> : null}
+        {failed ? <button ref={retryRef} type="button" className={`${GHOST} self-start`} onClick={run} disabled={busy || (mustAck && !ack)} data-testid="pitch-export-retry">Try again</button> : null}
         {created ? (
           <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-positive dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-export-google-created">
             <span>
@@ -363,7 +385,7 @@ export default function ExportDialog({ versions, current, kit = null, refresh = 
           </div>
         ) : null}
         {done ? (
-          <ExportCompleted done={done} onDownloadAgain={file ? () => download(file.blob, file.name) : null} presentTo={done.version?.id != null ? presentHref(done.version.project_id ?? null, done.version.id) : null} />
+          <ExportCompleted done={done} recorded={ledger.status === 'ok' ? recordedLine(ledger.rows, done.hash) : null} onDownloadAgain={file ? () => download(file.blob, file.name) : null} presentTo={done.version?.id != null ? presentHref(done.version.project_id ?? null, done.version.id) : null} />
         ) : null}
       </div>
     </Lightbox>
