@@ -1059,6 +1059,12 @@ jobs:
       - name: eSign signer journey (real router on SQLite, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/esign_signer_journey.spec.js --retries=0 --trace off
+      # #9037 (D9037): the axe gate on the ten top public routes, signed out, at 1440 and 390 in light and dark: no serious
+      # or critical WCAG 2.0/2.1 A or AA violation, no exceptions. The local Worker serves the docs/ built above; a route
+      # that renders Not Found fails. No preview, no account.
+      - name: Public routes axe gate (local Worker, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/axe-top-routes.spec.js --retries=0 --trace off
       # #9038 (D9038): every workspace route of four licences rendered from the docs/ built above with /api/* stubbed:
       # no crash, one h1, one rail, the zone asked for, the shell padding, no sideways scroll. PW_CHROMIUM_PATH is the
       # pinned browser; with CI set a browser that cannot launch fails the step, it never reports SKIPPED.

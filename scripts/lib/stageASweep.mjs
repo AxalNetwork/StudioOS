@@ -25,7 +25,6 @@
  */
 
 import { RUN_RE, stageANames } from './stageARun.mjs';
-import { REHEARSAL_DB_PREFIX } from './migrationTargets.mjs';
 
 export const RECEIPT_KINDS = Object.freeze(['worker', 'd1', 'kv', 'queue', 'bucket', 'workflow']);
 
@@ -51,27 +50,18 @@ export function parseReceipt(text, run) {
   return { entries, torn, refused };
 }
 
-function escape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-/** The exact names one run may own, by kind. */
-export function runPatterns(run) {
-  const n = stageANames(run);
-  const sfx = escape(`-s4594-${run}`);
-  return {
-    worker: new RegExp(`^${escape(n.worker)}$`),
-    d1: new RegExp(`^${escape(`${REHEARSAL_DB_PREFIX}${run}-src`)}$`),
-    kv: new RegExp(`^${escape(n.worker)}-(tokens|rate_limits|oauth_kv)$`),
-    queue: new RegExp(`^studioos-[a-z-]+?${sfx}(-dlq)?$`),
-    bucket: new RegExp(`^studioos-[a-z-]+?${sfx}$`),
-    workflow: new RegExp(`^studioos-[a-z-]+?${sfx}$`),
-  };
-}
-
 /** True only for a name the run itself would have created for that kind. */
 export function isRunName(run, kind, name) {
-  if (!RUN_RE.test(String(run ?? ''))) return false;
-  const p = runPatterns(run)[kind];
-  return Boolean(p) && typeof name === 'string' && p.test(name);
+  const runId = String(run ?? '');
+  if (!RUN_RE.test(runId) || typeof name !== 'string') return false;
+  const n = stageANames(runId);
+  if (kind === 'worker') return name === n.worker;
+  if (kind === 'd1') return name === n.d1.name;
+  if (kind === 'kv') return n.kv.some((kv) => name === kv.title);
+  if (!['queue', 'bucket', 'workflow'].includes(kind)) return false;
+  const match = /^studioos-[a-z-]+?-s4594-([a-z0-9]{6,20})(-dlq)?$/.exec(name);
+  return Boolean(match) && match[1] === runId &&
+    (kind === 'queue' || !match[2]);
 }
 
 /**

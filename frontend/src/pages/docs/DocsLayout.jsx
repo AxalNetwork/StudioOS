@@ -163,7 +163,8 @@ function HelpSearchBox({ query, setQuery, searchInputRef, label, placeholder, su
           !compact && <span className={KBD} title="Press / to search">/</span>
         )}
       </div>
-      {sub && <small className="text-[12px] text-gray-500 dark:text-gray-400">{sub}</small>}
+      {/* #9037: gray-600 — gray-500 on the violet-50 search hero measured 4.4:1, under AA. */}
+      {sub && <small className="text-[12px] text-gray-600 dark:text-gray-400">{sub}</small>}
     </div>
   );
 }

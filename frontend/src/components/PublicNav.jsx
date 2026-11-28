@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Menu, X, ChevronDown, FileText, Network, CalendarDays, Users, Briefcase,
 } from 'lucide-react';
-import AxalLogo from './AxalLogo';
+import AxalLogo, { logoHomeName } from './AxalLogo';
 import { DOOR_LINKS, NETWORK_LINKS, SITE_ACTIONS } from '../lib/siteLinks';
 import './site/site.css';
 
@@ -57,7 +57,7 @@ export default function PublicNav() {
   return (
     <nav className="ax-site-chrome ax-navbar" aria-label="Main">
       <div className="ax-wrap ax-navbar-row">
-        <Link to="/" aria-label="Axal VC home" className="flex items-center flex-none">
+        <Link to="/" aria-label={logoHomeName({ showRelease: true })} className="flex items-center flex-none">
           <AxalLogo size="sm" onLight showRelease />
         </Link>
 
