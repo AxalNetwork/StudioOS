@@ -87,7 +87,8 @@ test('11. /raise/data-room answers investor first, then the retired modes forwar
   const block = routeBlock(APP, '/raise/data-room');
   assert.match(block, /guard\(\['admin', 'founder', 'investor'\],/);
   const at = (re) => { const m = block.match(re); assert.ok(m, String(re)); return m.index; };
-  const investor = at(/effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/);
+  // D6162: the investor arm keeps the query and the hash.
+  const investor = at(/effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to=\{\{ pathname: '\/research\/diligence', search: location\.search, hash: location\.hash \}\} replace \/>/);
   // D1109 (#2989): ?mode=workspace and ?mode=access forward to the tool's Files and Access, counted.
   const moved = at(/movedKind\(location\.search\)\s*\?\s*<DataRoomMovedRedirect kind=\{movedKind\(location\.search\)\} \/>/);
   const module = at(/:\s*<CycleRoute cycle="raise" slug="data-room" \/>\)\}/);

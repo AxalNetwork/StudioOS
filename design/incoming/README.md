@@ -19,8 +19,8 @@ exists for each — not by how far each has been built. Counts as of 2026-10-20:
 | `canvases/backlog/` | 27 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
-(`canvases/uploads/` holds 3 more that were never part of the triage split, and
-is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
+(`canvases/uploads/` held 3 more that were never part of the triage split; they
+were deleted as stale duplicates on 2026-11-27. The table read 53 / 27 / 27 until 2026-09-04: one canvas
 had moved from `backlog/` to `integrated/` without the count following it, and
 two more moved out of this folder in the commit that corrected it. It read
 57 / 26 / 27 until 2026-09-07, when the two below left, and 59 / 26 / 27 until

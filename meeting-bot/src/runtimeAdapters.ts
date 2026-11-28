@@ -2,7 +2,8 @@
 import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
 import { MeetAdapter } from './adapters/meet.ts';
-import { TeamsAdapter, type TeamsPage } from './adapters/teams.ts';
+import { TeamsAdapter } from './adapters/teams.ts';
+import { playwrightTeamsPage } from './adapters/teams/page.ts';
 import { ZoomAdapter, type ZoomObf, type ZoomSdkBridge } from './zoomAdapter.ts';
 import { ZoomSidecar } from './zoomSidecar.ts';
 import { signRequest } from './callback.ts';
@@ -15,6 +16,8 @@ import { meetCredentials } from './adapters/meet/signin.ts';
 import { AdapterFailure } from './types.ts';
 import type { MeetingAdapter, Platform } from './types.ts';
 
+/** D5812: how long the adapter's own leave (the hang-up) may take before the browser is closed anyway. */
+export const LEAVE_MS=3000;
 export interface RuntimeFactories {launch?:()=>Promise<Browser>;zoom?:(jwt:string)=>ZoomSdkBridge;fetch?:typeof fetch;zoomWait?:(signal:AbortSignal)=>Promise<void>}
 export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterContext,factories:RuntimeFactories={}):Promise<MeetingAdapter>{
   if(platform==='zoom'){
@@ -42,9 +45,16 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
     const page=await browser.newPage({locale:'en-US'});
     // D3678: a Meet run signs in to Eadwyn's Google account first, its credentials over the run's signed callback.
     const signIn=meetCredentials({origin:context.callbackOrigin,path:`/api/meeting-bots/${context.uid}/meet-credentials`,key:context.secret,...(factories.fetch?{fetch:factories.fetch}:{})});
-    const adapter=platform==='teams'?new TeamsAdapter(page as unknown as TeamsPage):new MeetAdapter(page as unknown as MeetPage,{signIn});
+    // D5812: Teams gets its Playwright driver (built before any goto, so its capture script is in place), never a cast page.
+    const adapter=platform==='teams'?new TeamsAdapter(await playwrightTeamsPage(page)):new MeetAdapter(page as unknown as MeetPage,{signIn});
     const leave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
-    adapter.leave=()=>leaving??(leaving=(async()=>{await Promise.allSettled([Promise.resolve().then(leave),Promise.resolve().then(()=>browser.close())]);})());
+    // D5812: an orderly leave. The adapter hangs up first (bounded by LEAVE_MS), then the browser closes, so the
+    // hang-up is never raced by the close; a hang-up that stalls still ends in the close.
+    adapter.leave=()=>leaving??(leaving=(async()=>{
+      let cancel=()=>{};
+      await Promise.race([Promise.resolve().then(leave).catch(()=>{}),new Promise<void>(resolve=>{cancel=realClock.setTimeout(resolve,LEAVE_MS);})]);cancel();
+      await browser.close().catch(()=>{});
+    })());
     return adapter;
   }catch{await browser.close();throw new AdapterFailure('platform_blocked');}
 }

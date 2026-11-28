@@ -1,0 +1,4 @@
+| Studio's Axal VC package (Licences and Contracts v2 addendum L35) | admin (a territory licence's Administrator) | `/admin/my-licence` (Summary tab) | D5026-p2: `subsidiary/licence/PackageCard.jsx` mounted in `subsidiary/LicenceSummary.jsx`; client `lib/api/licencePackageMine.js` | {backend} | UPGRADE | Builds L35's "Your Axal VC package" card. Not built from L35: the Commercial terms card (the Summary and Terms tabs already show the licence's fees) and its role-refused state LX35B (no role below the licence administrators reads this page, D797), and the program agreements table (the Contract tab's D5051 list). A branch deployment holds no package copy and says Not recorded. |
+
+backend:
+- `licence_package_mine.ts` (`GET /api/licence/mine/package`: the accepted current and next term, frozen programs, accepted price and standalone grants; no recommendation, override or country model)

@@ -13,7 +13,8 @@ import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { createRecordGate } from './recordGate.js';
-import { SOURCES, answerableLine, roomOf, rowTitle } from './roomLibraryModel.js';
+import { SOURCES, answerableLine, roomOf, roomsEmpty, rowTitle } from './roomLibraryModel.js';
+import { RoomCardFacts, RoomsEmpty } from './RoomLibrary.jsx';
 import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
 import {
   UPLOAD_ACCEPT, answerabilityOf, filterLibrary, indexStateOf, isFiltered, libraryFiltersFrom,
@@ -373,6 +374,21 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   });
   const options = libraryOptions(items);
   const narrowed = isFiltered(filters);
+  // D6913 part 4 (RS-18): with From data rooms on and no room file in the Library, an investor's own room list says
+  // whether any room is open to them (`GET /api/research/diligence`, which logs nothing). Read only then.
+  const noRoomRows = !!payload && !items.some((d) => d?.room);
+  const wantRooms = role === 'investor' && filters.source === 'rooms' && noRoomRows;
+  const [rooms, setRooms] = useState({ state: 'idle' });
+  useEffect(() => {
+    if (!wantRooms) return undefined;
+    let live = true;
+    setRooms({ state: 'loading' });
+    api.research.diligence()
+      .then((r) => { if (live) setRooms({ state: 'ready', count: Array.isArray(r?.items) ? r.items.length : null }); })
+      .catch(() => { if (live) setRooms({ state: 'unreadable' }); });
+    return () => { live = false; };
+  }, [wantRooms]);
+  const roomsGap = payload ? roomsEmpty({ source: filters.source, items, rooms }) : null;
   const clearFilters = () => setFilters({ q: '', type: '', index: '', answerable: '', collection: '', source: '', view: 'all' });
   // Clicking the active chip clears it. Two of the four canvases carry no `All`
   // of their own, and adding one the artboard never drew is not this table's
@@ -637,7 +653,9 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
       >
         {/* D6281: a narrowed list with nothing left says so and offers the way
             back, rather than an empty table that reads like an empty library. */}
-        {narrowed && visible.length === 0 && (
+        {/* D6913 part 4 (RS-18): From data rooms with nothing from a room in the Library. */}
+        {roomsGap ? <RoomsEmpty empty={roomsGap} onClear={() => setFilters({ source: '' })} roomsLink={role === 'investor'} /> : null}
+        {!roomsGap && narrowed && visible.length === 0 && (
           <Card className="p-4" data-testid="library-no-match">
             <p className="text-[13px] font-bold">No document matches</p>
             <p className="mt-1 text-[12px] text-axal-muted">
@@ -659,7 +677,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             return (
               <li key={d.uid}>
                 <Card className="p-3.5">
-                  <p className="break-words text-[13px] font-bold text-axal-ink dark:text-gray-100">{d.title}</p>
+                  {/* D6913 part 4 (RS-20 D): a lapsed NDA file is nameless on a card too. */}
+                  <p className="break-words text-[13px] font-bold text-axal-ink dark:text-gray-100">{rowTitle(d)}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     <Pill tone={ix.tone} className="!text-[10px]">{mark(ix)}</Pill>
                     <Pill tone={an.tone} className="!text-[10px]">{mark(an)}</Pill>
@@ -678,6 +697,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                     </button>
                   ) : null}
                   {problem?.action === 'replace' ? <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">{problem.label}</p> : null}
+                  <RoomCardFacts room={roomOf(d)} uid={d.uid} busy={busy} onRemove={remove} />
                 </Card>
               </li>
             );
@@ -723,7 +743,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 // The passage count belongs beside the state and nowhere else:
                 // NULL, not 0, because "never read" and "read into nothing" are
                 // different facts and only one means Ask can cite the file.
-                sub: d.chunk_count == null ? null : `${d.chunk_count} passages`,
+                // D6913 part 4: a lapsed room reference's passages are deleted, so no count is shown for it.
+                sub: d.index_state === 'source_lost' ? null : d.chunk_count == null ? null : `${d.chunk_count} passages`,
               },
               // THE ZONE'S OWN QUESTION, PER ROW, and the one column that is
               // not a restatement of the one before it. A client's document is

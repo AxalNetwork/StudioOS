@@ -27,7 +27,7 @@
  * traction or amounts. Every value is escaped.
  */
 import type { Env } from '../types';
-import { DIRECTORY_LISTED_WHERE, authorSlugs, publicPersonCard, publicStartupCard } from '../routes/public';
+import { authorSlugs, publicPartnerCard, publicPersonCard, publicStartupCard } from '../routes/public';
 import { eventSocialCard } from '../../../frontend/src/lib/eventSocialCard.js';
 import {
   SITE_NAME, SITE_URL, ogEntryFor, ogImageKeys, ogImageUrl, ogTagsFor,
@@ -283,14 +283,12 @@ export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | 
       return recordTags(m, { title: b.name, description: [oneLine(b.stage), line].filter(Boolean).join(' · '), type: 'website' });
     }
     case 'partner': {
-      // The directory's gate, stricter than the page read's `status = 'active'`.
-      const slug = m.key.toLowerCase();
-      const r = await db.prepare(
-        `SELECT name, company, specialization FROM partners
-          WHERE (lower(uid) = ? OR lower(referral_code) = ?) AND ${DIRECTORY_LISTED_WHERE}`,
-      ).bind(slug, slug).first<any>();
-      if (!r?.name) return null;
-      return recordTags(m, { title: r.name, description: [oneLine(r.company), oneLine(r.specialization)].filter(Boolean).join(' · '), type: 'website' });
+      // D8958 (#8958): public.ts publicPartnerCard, anonymous — the directory's gate, and Members only:
+      // a link card is read signed out, so it carries the partner's display name and nothing of the profile.
+      const out = await publicPartnerCard(env, m.key.toLowerCase(), null);
+      const name = out.status === 200 ? oneLine((out.body as any).name) : '';
+      if (!name) return null;
+      return recordTags(m, { title: name, description: "Members only: sign in to Axal VC to see this partner's profile.", type: 'website' });
     }
     case 'handle': {
       // D4289 P2 (#4291): an active influencer's page only; the disclosure rides in the description (FTC 16 CFR 255).

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
+import { outcomeOfError } from '../../lib/mutationOutcome';
 import Sheet from '../../ui/Sheet.jsx';
 import { Pill } from '../investor/PortfolioReports';
 import { periodWord } from '../investor/portfolioReportsModel';
@@ -95,11 +96,16 @@ export function ReportActionSheet({ kind, company, period, onClose }) {
       setAnswer(out || {});
       setStep('receipt');
     } catch (e) {
+      // D4818 part 4: no answer (a timeout, a dropped connection, a gateway
+      // error) is not a refusal. The ask may have been stored and the founders
+      // told, so it is neither called "Not sent" nor offered again: the period
+      // is read again, and its record says whether you asked.
+      if (outcomeOfError(e) === 'unknown') { setStep('unknown'); return; }
       // The Review stays, with the company and period still chosen, and the Worker's sentence.
       setError(refusalOf(e, kind));
     } finally { setBusy(false); }
   };
-  const close = () => onClose(step === 'receipt' || Boolean(error));
+  const close = () => onClose(step === 'receipt' || step === 'unknown' || Boolean(error));
   if (step === 'receipt') {
     const r = receiptOf(kind, answer, company, period);
     return (
@@ -116,7 +122,11 @@ export function ReportActionSheet({ kind, company, period, onClose }) {
   }
   return (
     <Sheet label={review.title} eyebrow={`Review · ${company?.name || 'Company'} · ${periodWord(period?.label)}`} title={review.title} onClose={close} width={520} phone="sheet" testId={`report-review-${kind}`} focusKey={step}
-      footer={(
+      footer={step === 'unknown' ? (
+        <div className="pf-ask-foot">
+          <button type="button" className="pf-btn is-primary" onClick={close} data-testid="report-review-check">Check the period</button>
+        </div>
+      ) : (
         <div className="pf-ask-foot">
           <button type="button" className="pf-btn" onClick={close} disabled={busy} data-testid="report-review-cancel">Cancel</button>
           <button type="button" className="pf-btn is-primary" onClick={go} disabled={busy} aria-describedby={error ? 'pf-ask-error' : undefined} data-testid="report-review-confirm">{busy ? `${kind === WAIVE ? 'Waiving' : 'Asking'}…` : label}</button>
@@ -126,6 +136,12 @@ export function ReportActionSheet({ kind, company, period, onClose }) {
         <p className="pf-ask-step">Step 1 of 2 · Review. Nothing is sent until you confirm.</p>
         <Facts rows={review.facts} testid="report-review-facts" />
         {review.lines.map((l) => <p key={l} className="pf-ask-line">{l}</p>)}
+        {step === 'unknown' ? (
+          <div role="alert" className="pf-ask-error" data-testid="report-review-unknown">
+            <b>No answer came back.</b> {kind === WAIVE ? 'Your waiver' : 'Your request'} for {company?.name || 'this company'} · {periodWord(period?.label)} may or may not have been recorded{kind === WAIVE ? '' : ', and its founders may or may not have been told'}.
+            <span className="pf-ask-kept"> It is not offered again here, so it cannot be made twice. Check the period: its record is read again and says whether {kind === WAIVE ? 'it is waived' : 'you asked'}.</span>
+          </div>
+        ) : null}
         {error ? (
           <div role="alert" id="pf-ask-error" className="pf-ask-error" data-testid="report-review-error">
             <b>{kind === WAIVE ? 'Not waived.' : 'Not sent.'}</b> {error.message}

@@ -69,16 +69,33 @@ export async function writeFeatureUnlock(
     unlockDays?: number | null;
   },
 ): Promise<void> {
+  await (await featureUnlockStatement(env, args)).run();
+}
+
+/**
+ * D9036: the same idempotent unlock write as `writeFeatureUnlock`, prepared but
+ * not run, so a caller can put it in one `env.DB.batch` with the write that
+ * pays for it (the explorer promo's claim): both land, or neither does.
+ */
+export async function featureUnlockStatement(
+  env: Env,
+  args: {
+    userId: number;
+    featureKey: string;
+    paymentIntentId: string;
+    unlockDays?: number | null;
+  },
+): Promise<D1PreparedStatement> {
   await ensureFeatureUnlockSchema(env);
   const days = Number(args.unlockDays);
   const expiresAt = Number.isFinite(days) && days > 0
     ? new Date(Date.now() + days * 86_400_000).toISOString()
     : null;
-  await env.DB.prepare(
+  return env.DB.prepare(
     `INSERT OR IGNORE INTO feature_unlocks
        (user_id, feature_key, expires_at, source_payment_intent_id)
      VALUES (?, ?, ?, ?)`,
-  ).bind(args.userId, args.featureKey, expiresAt, args.paymentIntentId).run();
+  ).bind(args.userId, args.featureKey, expiresAt, args.paymentIntentId);
 }
 
 /**
