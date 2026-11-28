@@ -32,6 +32,11 @@
  *   - the thresholds' hysteresis comes from `levelFor`, fed the open
  *     episode's severity as the previous level, so a value at a boundary does
  *     not flap between open and clear.
+ * D9032: the sweep also reads three of HQ · Platform's detected incidents
+ * (`readIncidentSignals`: the longest cron failure streak, the Stripe webhook's
+ * refusal streak, new dead letters still waiting) and runs them through the
+ * same episodes. They are not in `SNAPSHOT_KEY`, so an unreadable one holds an
+ * open episode and never opens an `unavailable` one.
  * ROUTING. Active HQ Super Admins, in-app, category `operations`, linking
  * HQ · Platform; a member can turn it off with
  * `notification_prefs.platform_capacity.in_app = false`. Each notification's
@@ -42,6 +47,7 @@
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { levelFor, readPlatformCapacity, type Level, type Metric } from './platformCapacity';
+import { readIncidentSignals } from './platformCapacitySignals';
 
 /** The metrics the snapshot keeps: the capacity read's own fixed keys, nothing else. */
 // Part 3 adds the agent sweep (#4592, #4593) and the last verified restore (#4558),
@@ -241,6 +247,9 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
   if (branchOf(env)) return { skipped: 'branch' as const };
   const report = await readPlatformCapacity(env, now);
   const written = opts.snapshot ? await writeSnapshot(env, snapshotRows(report)) : 0;
+  // D9032: HQ · Platform's detected incidents (cron streak, webhook refusals, new
+  // dead letters) are episodes too. Sweep-only and never snapshotted.
+  const metrics = [...report.metrics, ...(await readIncidentSignals(env, now))];
 
   const openRows = await env.DB.prepare(
     `SELECT id, metric_key, severity, muted_until FROM platform_capacity_alerts WHERE scope = ? AND state = 'open'`,
@@ -253,9 +262,9 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
   const lastMeasured: Record<string, string | null> = {};
   for (const r of measuredRows.results) lastMeasured[r.metric_key] = r.at;
 
-  const actions = evaluateAlerts(openRows.results, report.metrics, lastMeasured, now);
+  const actions = evaluateAlerts(openRows.results, metrics, lastMeasured, now);
   const at = now.toISOString();
-  const labelOf = new Map(report.metrics.map((m) => [m.key, m.label]));
+  const labelOf = new Map(metrics.map((m) => [m.key, m.label]));
   const mutedOf = new Map(openRows.results.map((a) => [a.id, a.muted_until]));
   let notified = 0;
   for (const a of actions) {
