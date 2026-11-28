@@ -63,6 +63,7 @@ import usePreflight from './usePreflight';
 import { isQualitative, markLabel } from './versionReviewModel';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
 import { gateOf, overlayOf, repairOf, stepOf, workingDeck } from './preflightUiModel';
+import { draftSummary, findingKey } from './exportGateModel';
 import PreflightOverlay from './PreflightOverlay';
 import {
   ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_HELPER, NOTES_PLACEHOLDER, NO_CARDS,
@@ -279,7 +280,10 @@ export default function PitchEditor() {
     <ShareDialog projectId={projectId} deck={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} onCreated={() => {}}
       onReviewCards={(uid) => { setShareDialog(null); actionRef.current?.('review_cards', uid); }} />
   ) : shareDialog === 'export' && current ? (
-    <ExportDialog versions={versionList} current={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} />
+    // D8772 part 3 (PTF05): with the editor open, Export reads the draft (how it differs) and its rows offer "Show in your draft".
+    <ExportDialog versions={versionList} current={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)}
+      draft={editorOn ? actionRef.current?.('draft') ?? null : null}
+      onShowInDraft={editorOn ? (target) => { setShareDialog(null); actionRef.current?.('show_in_draft', target); } : null} />
   ) : null;
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
@@ -739,6 +743,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'preflight') { setFinding(null); setSheet('preflight'); if (!pf.result && !pf.running) pf.run(); return; }
     // D1370 (pf1c/pf1d): Share and Export from the page: check first, then the gate or the dialog.
     if (id === 'gate') { if (readOnly || (arg !== 'share' && arg !== 'export')) return; setGate(arg); if (!gp.current && !gp.running) gp.run(); return; }
+    // D8772 part 3 (PTF05): what Export reads of the draft, and its "Show in your draft".
+    if (id === 'draft') return draftSummary({ deck: base.deck, cards, dirty, groups: pf.current && !pf.running ? pf.groups : null });
+    if (id === 'show_in_draft') { showInDraft(arg); return; }
     // D1552 (#3799): ⋯ › Whole deck · uses AI › Fix with critique.
     if (id === 'critique') { if (!readOnly) setDialog({ kind: 'critique' }); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
@@ -788,6 +795,17 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     setSheet(null); setGate(null); setFinding(row.id);
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
+  // D8772 part 3 (PTF05): Export's "Show in your draft" names the element by its card's uid (the export numbers its
+  // slides without hidden cards); the draft's own finding about it, when its check is current, opens the strip.
+  const showInDraft = (t) => {
+    const i = t?.uid ? cards.findIndex((c) => c?.uid === t.uid) : -1;
+    if (i < 0) return;
+    const same = pf.current && !pf.running && pf.groups ? [...pf.groups.fix, ...pf.groups.look].find((r) => findingKey(r, cards) === t.key) : null;
+    if (same) { show(same); return; }
+    choose(i);
+    if (t.block != null && (cards[i]?.blocks || []).some((b) => b?.id === t.block)) selectBlock(t.block);
+    setSheet(null); setGate(null); setFinding(null);
+  };
   // D8772 (PTF02–PTF04): the repair a source finding offers on its tile, in the draft, and the way back to the same check, re-run on the draft.
   const stripRow = finding ? stripRows.find((r) => r.id === finding) || null : null;
   const stripBlock = stripRow && Number.isInteger(stripRow.card) ? (cards[stripRow.card]?.blocks || []).find((b) => b?.id === stripRow.block) || null : null;

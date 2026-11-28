@@ -109,7 +109,7 @@ test('connected: Export sends the two options to the Google route, then "Created
     const w = writes(v);
     assert.equal(w.length, 1);
     assert.match(w[0].url, /\/decks\/10\/export\/google-slides$/);
-    assert.deepEqual(w[0].body, { notes: false, sources: true }, 'D8771: the investor copy by default');
+    assert.deepEqual(w[0].body, { notes: false, sources: true, confirmed: [] }, 'D8771: the investor copy by default; D8772 part 3: none confirmed');
     assert.equal(v.textOf('pitch-export-google-created').startsWith('Created in Google Slides · Open ›'), true);
     assert.equal(v.props('pitch-export-google-open').href, 'https://docs.google.com/presentation/d/f1/edit');
     assert.equal(v.props('pitch-export-google-open').rel, 'noopener noreferrer');

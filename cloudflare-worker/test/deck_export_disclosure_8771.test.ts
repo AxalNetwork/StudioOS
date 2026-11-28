@@ -136,6 +136,8 @@ function fixture() {
   // A row written before this change: it never said what it carried.
   db.exec("INSERT INTO deck_exports (deck_id, version, format, content_hash, created_by) VALUES (10, 2, 'pptx', '" + 'a'.repeat(64) + "', 1)");
   db.exec(read('cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'));
+  // D8772 part 3: the ledger also keeps the warnings an export confirmed.
+  db.exec(read('cloudflare-worker/sql/migrations/202611271712_8772_deck_exports_confirmed.sql'));
   db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.d8771@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 2, ?, 'Seed deck', 1, 1)`).run(JSON.stringify(SLIDES));

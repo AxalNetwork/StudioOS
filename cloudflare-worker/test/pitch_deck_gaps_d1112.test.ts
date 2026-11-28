@@ -67,6 +67,8 @@ function fixture() {
   db.exec(MIGRATION);
   // D8771 (#8771): the ledger records what each file carried.
   db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'), 'utf8'));
+  // D8772 part 3: the ledger also keeps the warnings an export confirmed.
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611271712_8772_deck_exports_confirmed.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.d1112@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 4, ?, 'Seed deck', 1, 1), (11, 1, 3, '[]', 'Seed deck', 0, 1)`).run(JSON.stringify(SLIDES));
