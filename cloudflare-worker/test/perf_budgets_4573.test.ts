@@ -23,7 +23,7 @@ import { AUTH_SQL, FLOWS, categoryOf, harness, repeats } from './_perf_harness.t
 /** flow → [status, auth, telemetry, route]. Auth is 4 from H1 on (it was 7, and 13 on /api/funds, at the baseline). */
 export const BUDGETS: Record<string, [number, number, number, number]> = {
   health: [200, 0, 0, 0],
-  'auth.me': [200, 4, 2, 3],
+  'auth.me': [200, 4, 2, 6], // D9197: 3 → 6, settings, onboarding and persona ride on /me; each separate read cost 4 auth + 2 telemetry
   'projects.list': [200, 4, 2, 2],
   'projects.read': [200, 4, 2, 3],
   dashboard: [200, 4, 2, 0],
