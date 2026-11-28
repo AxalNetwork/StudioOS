@@ -85,6 +85,7 @@
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
 import { fundProfile } from './researchFundProfile';
+import { likeNeedle } from '../util/likeSearch';
 
 /**
  * The EuroTech list's name. D7744: no read decides a currency from it any
@@ -317,11 +318,6 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
   return q;
 }
 
-/** `%`, `_` and `\` match themselves inside a LIKE … ESCAPE '\' pattern. */
-export function likeLiteral(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
 type Overrides = Awaited<ReturnType<typeof loadOverrides>>;
 
 /** Every distinct raw value of `column`, with how many rows carry it under `clause`. */
@@ -418,7 +414,7 @@ interface Resolved { hq: string | null; focus: string | null }
 function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null) {
   const where: string[] = [];
   const binds: unknown[] = [];
-  if (q.q) { where.push(`name LIKE ? ESCAPE '\\'`); binds.push(`%${likeLiteral(q.q)}%`); }
+  if (q.q) { where.push(`name LIKE ? ESCAPE '\\'`); binds.push(likeNeedle(q.q, 0)); }
   if (q.hq_country && omit !== 'hq_country') {
     if (q.hq_country === 'none') where.push(`TRIM(COALESCE(hq, '')) = ''`);
     else { where.push(`hq IN (SELECT value FROM json_each(?))`); binds.push(r.hq); }

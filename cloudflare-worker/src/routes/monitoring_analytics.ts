@@ -53,6 +53,7 @@ import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, d
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
+import { likeNeedleLower } from '../util/likeSearch';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -256,7 +257,7 @@ function buildAuditWhere(opts: {
   if (opts.planId) { clauses.push('a.report_type = ?'); params.push(opts.planId); }
   if (opts.adminUserId !== null) { clauses.push('a.admin_user_id = ?'); params.push(opts.adminUserId); }
   if (opts.adminQ) {
-    clauses.push('(LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?)');
+    clauses.push("(LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(u.name) LIKE ? ESCAPE '\\')");
     params.push(opts.adminQ, opts.adminQ);
   }
   if (opts.fromBound) { clauses.push('a.exported_at >= ?'); params.push(opts.fromBound); }
@@ -330,7 +331,7 @@ r.get('/audit', async (c) => {
   const toRaw = (c.req.query('to') || '').toString().trim();
   const planId = planIdRaw.slice(0, 100) || null;
   const adminUserId = adminIdRaw && /^\d+$/.test(adminIdRaw) ? Number(adminIdRaw) : null;
-  const adminQ = adminQRaw ? `%${adminQRaw.slice(0, 100).toLowerCase()}%` : null;
+  const adminQ = likeNeedleLower(adminQRaw, 1);
   const fromBound = parseDateBound(fromRaw, false);
   const toBound = parseDateBound(toRaw, true);
 
@@ -392,7 +393,7 @@ r.get('/audit/export.csv', async (c) => {
   const toRaw = (c.req.query('to') || '').toString().trim();
   const planId = planIdRaw.slice(0, 100) || null;
   const adminUserId = adminIdRaw && /^\d+$/.test(adminIdRaw) ? Number(adminIdRaw) : null;
-  const adminQ = adminQRaw ? `%${adminQRaw.slice(0, 100).toLowerCase()}%` : null;
+  const adminQ = likeNeedleLower(adminQRaw, 1);
   const fromBound = parseDateBound(fromRaw, false);
   const toBound = parseDateBound(toRaw, true);
   const action = 'subscription_plan_update';

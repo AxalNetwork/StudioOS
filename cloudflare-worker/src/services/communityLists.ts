@@ -19,6 +19,7 @@
  * a bound key inside `CASE`, never interpolated (`check-sql-prepare`).
  */
 import type { Env } from '../types';
+import { likeNeedle } from '../util/likeSearch';
 
 export const LIST_PAGE_DEFAULT = 25;
 export const LIST_PAGE_MAX = 100;
@@ -62,7 +63,7 @@ function paging(get: Get) {
 }
 
 /** `%`, `_` and `\` are LIKE's own; a search for "C_level" means the underscore. */
-const likeOf = (q: string) => (q ? `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%` : '');
+const likeOf = (q: string) => likeNeedle(q, 1) ?? '';
 
 /* ------------------------------------------------------------------ *
  * CM4 · Job postings

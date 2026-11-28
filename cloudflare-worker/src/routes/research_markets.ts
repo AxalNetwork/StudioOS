@@ -38,6 +38,7 @@ import type { Env } from '../types';
 import { readListedTotals, type ListedTotals } from '../services/listedCompanies';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
+import { likeNeedle, likePrefix } from '../util/likeSearch';
 import { companyGroups, companyPage, directoryNameOrder as byName, type CompanyGroup, type CompanyRow } from '../services/researchDirectoryReads';
 import { euroSizeCents, NO_SIZE_CURRENCY, SERVED_FUNDS } from '../services/researchFundDirectory';
 import { distinctObservationsSql, liveIndexSql, liveRowSql, NO_LIVE_SOURCE_REASON, retrievedAtSql } from '../services/market_intel/liveRows';
@@ -921,11 +922,11 @@ const LISTED_MAX_OFFSET = 200_000;
 const EDGAR_PAGE_SQL = {
   asc: `SELECT cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of
           FROM research_public_companies
-         WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+         WHERE (? = '' OR name LIKE ? ESCAPE '\\' OR ticker LIKE ? ESCAPE '\\')
          ORDER BY name COLLATE NOCASE ASC, ticker LIMIT ? OFFSET ?`,
   desc: `SELECT cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of
            FROM research_public_companies
-          WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+          WHERE (? = '' OR name LIKE ? ESCAPE '\\' OR ticker LIKE ? ESCAPE '\\')
           ORDER BY name COLLATE NOCASE DESC, ticker LIMIT ? OFFSET ?`,
 } as const;
 
@@ -945,13 +946,20 @@ function otherListings(text: string | null): Array<{ symbol: string; exchange: s
  * rows are in this result. Nothing to count when EDGAR is left out or no signal
  * company matched.
  */
+/**
+ * The three binds of a listed-company search: the term (blank means no filter),
+ * "name contains" and "ticker starts with", escaped and capped at D1's 50-byte
+ * LIKE limit (D9167).
+ */
+export const listedSearch = (q: string) => [q, likeNeedle(q, 1) ?? '', likePrefix(q) ?? ''] as const;
+
 export async function countInBoth(env: Env, edgarIn: boolean, q: string, symbols: string[]): Promise<number> {
   if (!edgarIn || symbols.length === 0) return 0;
   const r = await env.DB.prepare(
     `SELECT COUNT(DISTINCT ticker) AS n FROM research_public_companies
-      WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+      WHERE (? = '' OR name LIKE ? ESCAPE '\\' OR ticker LIKE ? ESCAPE '\\')
         AND ticker IN (SELECT value FROM json_each(?))`,
-  ).bind(q, q, q, JSON.stringify(symbols)).first<{ n: number }>();
+  ).bind(...listedSearch(q), JSON.stringify(symbols)).first<{ n: number }>();
   return Number(r?.n ?? 0);
 }
 
@@ -984,9 +992,9 @@ researchMarkets.get('/listed-companies', async (c) => {
       c.env.DB.prepare(
         `SELECT symbol, name, exchange, country, region, sector, market_cap, market_cap_band, employee_band, updated_at
            FROM signal_companies
-          WHERE (? = '' OR name LIKE '%' || ? || '%' OR symbol LIKE ? || '%')
+          WHERE (? = '' OR name LIKE ? ESCAPE '\\' OR symbol LIKE ? ESCAPE '\\')
             AND (? = '' OR sector = ?)`,
-      ).bind(q, q, q, sector, sector).all<ListedRow>(),
+      ).bind(...listedSearch(q), sector, sector).all<ListedRow>(),
       loadOverrides(c.env),
       // Both stores, unfiltered: their sizes, dates, and how many EDGAR tickers
       // are also a signal company's symbol (shown twice, once per source). The
@@ -995,8 +1003,8 @@ researchMarkets.get('/listed-companies', async (c) => {
       edgarIn
         ? c.env.DB.prepare(
           `SELECT COUNT(*) AS n FROM research_public_companies
-            WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')`,
-        ).bind(q, q, q).first<{ n: number }>()
+            WHERE (? = '' OR name LIKE ? ESCAPE '\\' OR ticker LIKE ? ESCAPE '\\')`,
+        ).bind(...listedSearch(q)).first<{ n: number }>()
         : Promise.resolve({ n: 0 }),
     ]);
     rows = signalIn ? (r.results || []) : [];
@@ -1006,7 +1014,7 @@ researchMarkets.get('/listed-companies', async (c) => {
     place = async (skip, take) => {
       if (!edgarIn || take <= 0) return [];
       const page = await c.env.DB.prepare(EDGAR_PAGE_SQL[sortKey === '-name' ? 'desc' : 'asc'])
-        .bind(q, q, q, take, skip).all<EdgarRow>();
+        .bind(...listedSearch(q), take, skip).all<EdgarRow>();
       return page.results || [];
     };
   } catch (e) {

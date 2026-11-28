@@ -45,11 +45,7 @@ const skip = (reason: ChaseSkipReason, period: string | null = null, due_date: s
   ({ eligible: false, reason, period, due_date });
 
 class ReadFailed extends Error {}
-async function rows(stmt: any): Promise<any[]> {
-  const res = await stmt.all();
-  if (!res || res.success === false) throw new ReadFailed('read failed');
-  return res.results || [];
-}
+const failed = (result: { success: boolean }) => result.success === false;
 
 /**
  * The obligation for one company, for this caller. `scope` is the caller's
@@ -59,45 +55,67 @@ async function rows(stmt: any): Promise<any[]> {
 export async function chaseObligation(
   env: Env, scope: PositionScope | null, userId: number, projectId: number, cadence: KpiCadence, today: string,
 ): Promise<ChaseObligation> {
-  if (!scope) return skip('no_obligation');
+  return (await chaseObligations(env, scope, userId, [projectId], cadence, today)).get(projectId)!;
+}
+
+/** D9204: fixed D1 round trips for a bounded list, with the same fail-closed decisions. */
+export async function chaseObligations(
+  env: Env, scope: PositionScope | null, userId: number, projectIds: number[], cadence: KpiCadence, today: string,
+): Promise<Map<number, ChaseObligation>> {
+  const ids = [...new Set(projectIds)];
   const period = completedPeriod(cadence, today);
   const bounds = period ? periodBounds(cadence, period) : null;
-  if (!period || !bounds) return skip('unreadable');
+  const result = new Map<number, ChaseObligation>(ids.map(id => [id, skip(scope ? 'unreadable' : 'no_obligation', scope ? period : null)]));
+  if (!scope || !period || !bounds || !ids.length) return result;
   try {
-    const held = await rows(env.DB.prepare(
-      `SELECT 1 AS held FROM portfolio_positions p
-        WHERE p.project_id = ?
-          AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
-               OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
-        LIMIT 1`,
-    ).bind(projectId, scope.heldCsv, scope.heldCsv, scope.fundCsv));
-    if (!held.length) return skip('no_obligation');
-
-    // The same duties `kpi-compliance` reads (D6204), for this one company.
-    const duties = await rows(env.DB.prepare(
-      `SELECT MIN(due_days) AS due_days
-         FROM reporting_duties
-        WHERE status = 'active' AND due_rule = 'after_end' AND cadence = ?
-          AND (? IS NULL OR holder_user_id = ?)
-          AND project_id = ?`,
-    ).bind(cadence, scope.heldCsv, Number(userId), projectId));
-    const n = duties[0]?.due_days;
-    const dutyDays = n != null && Number.isInteger(Number(n)) && Number(n) >= 0 ? Number(n) : null;
-
-    const updates = await rows(env.DB.prepare(
-      `SELECT DISTINCT period FROM portfolio_updates WHERE project_id = ? AND status = 'submitted'`,
-    ).bind(projectId));
-    if (updates.some((u) => periodCounts(cadence, period, u.period))) return skip('already_reported', period);
-
-    const dueDate = reportDue(bounds.until, dutyDays, false, today).due_date;
-    if (!dueDate) return skip('unreadable', period);
-    const clock = await rows(env.DB.prepare(
-      `SELECT CASE WHEN datetime(?) <= datetime('now') THEN 1 ELSE 0 END AS due`,
-    ).bind(dueDate));
-    if (clock[0]?.due == null) return skip('unreadable', period, dueDate);
-    if (Number(clock[0].due) !== 1) return skip('not_due', period, dueDate);
-    return { eligible: true, period, due_date: dueDate };
+    const selected = JSON.stringify(ids);
+    const held = await env.DB.prepare(`SELECT DISTINCT p.project_id FROM portfolio_positions p
+      WHERE p.project_id IN (SELECT value FROM json_each(?))
+        AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
+          OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)`)
+      .bind(selected, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<{ project_id: number }>();
+    if (failed(held)) throw new ReadFailed('held read failed');
+    const heldSet = new Set((held.results || []).map(row => row.project_id));
+    const heldIds = ids.filter(id => {
+      if (heldSet.has(id)) return true;
+      result.set(id, skip('no_obligation')); return false;
+    });
+    if (!heldIds.length) return result;
+    const heldJson = JSON.stringify(heldIds);
+    const duties = await env.DB.prepare(`SELECT project_id, MIN(due_days) AS due_days FROM reporting_duties
+      WHERE status = 'active' AND due_rule = 'after_end' AND cadence = ? AND (? IS NULL OR holder_user_id = ?)
+        AND project_id IN (SELECT value FROM json_each(?)) GROUP BY project_id`)
+      .bind(cadence, scope.heldCsv, Number(userId), heldJson).all<{ project_id: number; due_days: unknown }>();
+    if (failed(duties)) throw new ReadFailed('duty read failed');
+    const updates = await env.DB.prepare(`SELECT DISTINCT project_id, period FROM portfolio_updates
+      WHERE project_id IN (SELECT value FROM json_each(?)) AND status = 'submitted'`)
+      .bind(heldJson).all<{ project_id: number; period: string }>();
+    if (failed(updates)) throw new ReadFailed('update read failed');
+    const dutyById = new Map((duties.results || []).map(row => [row.project_id, row.due_days]));
+    const reported = new Set((updates.results || []).filter(row => periodCounts(cadence, period, row.period)).map(row => row.project_id));
+    const dueDates = new Map<number, string>();
+    for (const id of heldIds) {
+      const n = dutyById.get(id);
+      const dutyDays = n != null && Number.isInteger(Number(n)) && Number(n) >= 0 ? Number(n) : null;
+      if (reported.has(id)) { result.set(id, skip('already_reported', period)); continue; }
+      const dueDate = reportDue(bounds.until, dutyDays, false, today).due_date;
+      if (dueDate) dueDates.set(id, dueDate);
+    }
+    if (dueDates.size) {
+      const clocks = await env.DB.prepare(`SELECT json_extract(value, '$.id') AS project_id,
+        CASE WHEN datetime(json_extract(value, '$.date')) <= datetime('now') THEN 1 ELSE 0 END AS due
+        FROM json_each(?)`).bind(JSON.stringify([...dueDates].map(([id, date]) => ({ id, date }))))
+        .all<{ project_id: number; due: number | null }>();
+      if (failed(clocks)) throw new ReadFailed('clock read failed');
+      for (const { project_id, due } of clocks.results || []) {
+        const due_date = dueDates.get(project_id)!;
+        result.set(project_id, due == null ? skip('unreadable', period, due_date)
+          : Number(due) !== 1 ? skip('not_due', period, due_date) : { eligible: true, period, due_date });
+      }
+    }
+    return result;
   } catch {
-    return skip('unreadable', period);
+    // An unreadable batch must never make an unverified target eligible.
+    return result;
   }
 }

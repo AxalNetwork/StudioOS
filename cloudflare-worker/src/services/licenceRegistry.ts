@@ -26,6 +26,7 @@ import {
   LICENCE_TYPE_LABELS, licenceContractLegalStatus, loadUserLicenceAgreements,
   programAgreementLegalStatus, userLicenceTemplateFor, type AgreementContext, type LegalStatus, LEGAL_STATUS_LABELS,
 } from './contractAgreementSources';
+import { likeNeedleLower } from '../util/likeSearch';
 
 /** The registry's family filter, as HQ's Licences page offers it (#5060). `all` filters nothing. */
 export const REGISTRY_FAMILIES = ['all', 'operator', 'founder', 'investor', 'operating_partner', 'advisor'] as const;
@@ -121,7 +122,7 @@ const DETAIL_SQL = LIST_SELECT + ' WHERE l.uid = ?';
 
 function whereBinds(q: RegistryQuery): unknown[] {
   const { family, type } = familyColumns(q.family);
-  const like = q.q ? `%${q.q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const like = q.q ? likeNeedleLower(q.q, 0) : null;
   return [
     family, family, type, type,
     q.holder ? 1 : null, q.holder?.type ?? null, q.holder?.id ?? null,

@@ -53,6 +53,7 @@ import { decideRail, getRail, listRail, proposeRail, type RailProposal } from '.
 import { setProspectNextStep, updateProspect } from './raiseWriters';
 import { prospectSignals } from './raiseCycle';
 import { objectionKey } from './narrative/objections';
+import { likeNeedle } from '../util/likeSearch';
 
 // ─────────────────────────────────────────────────────────────── vocabulary
 
@@ -160,7 +161,7 @@ export async function activityRead(env: Env, projectId: number, get: (k: string)
   const q = (get('q') ?? '').trim().slice(0, 100);
 
   // Each filter is bound; an unset one is NULL and matches every row.
-  const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const like = likeNeedle(q, 1);
   const args = [projectId, MODULE_TYPE, kind ? JSON.stringify(ACTIVITY_KINDS[kind]) : null, kind ? JSON.stringify(ACTIVITY_KINDS[kind]) : null,
     investor != null ? String(investor) : null, investor != null ? String(investor) : null, like, like, like, like, like];
   const total = Number((await env.DB.prepare(ACTIVITY_COUNT).bind(...args).first<{ n: number }>())?.n ?? 0);

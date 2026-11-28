@@ -40,6 +40,7 @@ import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { currentMarketFigures, marketFigureHistory, type MarketFigureRow } from './marketFigures';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
+import { likeNeedle } from '../util/likeSearch';
 
 export const CYCLE = 'validate';
 export const QUESTION = 'Is this worth building?';
@@ -1406,7 +1407,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
   const stage = ['lead', 'invited', NO_SLOT, 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
   const channel = ['in_person', 'call', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
-  const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
+  const like = rq.q ? likeNeedle(rq.q, 0)! : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
   const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, stage, channel, channel, channel];

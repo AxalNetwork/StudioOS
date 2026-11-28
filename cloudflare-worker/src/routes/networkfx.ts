@@ -11,6 +11,7 @@ import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
 import { holdsLicence } from '../services/accountLicences';
+import { likeNeedle } from '../util/likeSearch';
 
 const networkfx = new Hono<{ Bindings: Env }>();
 
@@ -463,7 +464,7 @@ networkfx.get('/marketplace/search', async (c) => {
   if (role) { whereClauses.push('u.role = ?'); params.push(role); }
   if (availability) { whereClauses.push('mp.availability = ?'); params.push(availability); }
   if (minRating) { whereClauses.push('mp.rating >= ?'); params.push(parseFloat(minRating)); }
-  if (skill) { whereClauses.push("mp.skills LIKE ?"); params.push(`%${skill.replace(/[%_\\]/g, '')}%`); }
+  if (skill) { whereClauses.push("mp.skills LIKE ? ESCAPE '\\'"); params.push(likeNeedle(skill, 0)); }
   const queryStr = `SELECT mp.*, u.name, u.email, u.role FROM marketplace_profiles mp JOIN users u ON u.id = mp.user_id WHERE ${whereClauses.join(' AND ')} ORDER BY mp.rating DESC, mp.review_count DESC LIMIT 50`;
   const result = await c.env.DB.prepare(queryStr).bind(...params).all();
   rows = (result.results || []).map((r: any) => ({ ...r, skills: safeJson(r.skills, []) }));

@@ -20,6 +20,7 @@
  */
 import type { Env } from '../types';
 import { ISO2 } from './licenceLedgerCore';
+import { likeNeedleLower } from '../util/likeSearch';
 
 export const MARKET_STATUSES = ['recorded', 'provisional', 'not_recorded'] as const;
 export type MarketStatus = (typeof MARKET_STATUSES)[number];
@@ -337,7 +338,7 @@ export function countryCodeOf(raw: unknown): string | null {
  */
 export async function listCountries(env: Env, opts: { q?: string; incomplete?: boolean } = {}): Promise<CountryProfile[]> {
   const q = (opts.q || '').trim().slice(0, 80);
-  const like = `%${q.toLowerCase().replace(/[%_]/g, '')}%`;
+  const like = likeNeedleLower(q, 0)!;
   const res = await env.DB.prepare(
     `SELECT country_code, country_name, region_code, currency_code,
             population, population_status, population_source, population_source_ref, population_as_of,
@@ -345,7 +346,7 @@ export async function listCountries(env: Env, opts: { q?: string; incomplete?: b
             startup_ecosystem_score, startup_ecosystem_rank, startup_score_status, startup_source, startup_source_ref, startup_as_of,
             regulatory_class, regulatory_note, strategic_note, updated_at, updated_by, revision
        FROM country_market_profiles
-      WHERE (? = '' OR country_code = ? OR lower(country_name) LIKE ?)
+      WHERE (? = '' OR country_code = ? OR lower(country_name) LIKE ? ESCAPE '\\')
         AND (? = 0 OR population_status <> 'recorded' OR ppp_status <> 'recorded' OR startup_score_status <> 'recorded')
       ORDER BY country_name, country_code`,
   ).bind(q, q.toUpperCase(), like, opts.incomplete ? 1 : 0).all<Record<string, any>>();

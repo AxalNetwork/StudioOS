@@ -53,6 +53,7 @@ import { toSkillMd, type OutputKind, type Tag } from '../services/agents/skills'
 import { skillByUid, taxonomyMaps, versionOf, type SkillRow } from '../services/agents/skillLinks';
 import { companyEditorIds, openModeration, type ModerationAction, type ModerationRow } from '../services/agents/skillModeration';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
+import { likeNeedle } from '../util/likeSearch';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -127,7 +128,7 @@ adminCompanySkills.get('/', async (c) => {
   const pageRaw = c.req.query('page') ?? '1';
   if (!/^[1-9][0-9]{0,4}$/.test(pageRaw)) return say(c, 400, 'page_invalid', 'Pages are numbered from 1.');
   const page = Number(pageRaw);
-  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const like = likeNeedle(q, 0)!;
   // Two literal queries over the same WHERE (no SQL text is interpolated): the count, then the page.
   const binds = [status, status, q, like, like];
   const total = Number((await c.env.DB.prepare(

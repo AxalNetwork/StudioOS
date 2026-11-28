@@ -307,7 +307,7 @@ test('parseFeedQuery binds normalised instants; trimToSecond holds back only the
   assert.ok(p.ok);
   if (!p.ok) return;
   assert.equal(p.query.upper, '2026-11-07 14:12:08', 'the earlier of the cursor and the range end');
-  assert.equal(p.query.like, '%a!_b!!%');
+  assert.equal(p.query.like, '%a\\_b!%', 'one escaper, the backslash (D9167)');
   // A cursor later than the range's end is bounded by the end, not by itself.
   const late = parseFeedQuery((k) => ({ before: '2026-11-20 09:00:00', to: '2026-11-08' } as any)[k]);
   assert.ok(late.ok && late.query.upper === '2026-11-09 00:00:00');

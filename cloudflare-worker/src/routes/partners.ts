@@ -8,6 +8,7 @@ import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
 import { ensurePartnerGuidanceColumns } from '../services/partnerGuidanceSchema';
+import { likeNeedle } from '../util/likeSearch';
 
 const partners = new Hono<{ Bindings: Env }>();
 const RADAR_AXIS_SLUGS: readonly string[] = RADAR_AXES.map((a) => a.slug);
@@ -106,7 +107,7 @@ partners.get('/matchmaking/recommend', async (c) => {
   const sector = c.req.query('sector');
   const sql = getSQL(c.env);
   const rows = sector
-    ? await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1 AND p.specialization LIKE ${'%' + sector + '%'}`
+    ? await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1 AND p.specialization LIKE ${likeNeedle(sector, 0)} ESCAPE '\\'`
     : await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1`;
   await sql.end();
   // Task #19 — hard consent filter: drop linked-user partners not opted into

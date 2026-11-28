@@ -366,8 +366,6 @@ export async function acceptFlow(env: Env, userId: number, runUid: string, opts:
   return { uid: run.uid, status: 'queued' as FlowStatus };
 }
 
-const likePrefix = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
-
 /**
  * Cancel a run: its open steps close and every pending hold it took is
  * released, never charged. Only the run's own member. A finished run answers
@@ -382,8 +380,8 @@ export async function cancelFlow(env: Env, userId: number, runUid: string, opts:
   if (run.status !== 'cancelled') await closeRun(env, run.uid, 'cancelled', 'cancelled', at, ['queued', 'running', 'waiting_accept']);
   // A cancelled run still releases what an earlier cancel could not; a hold left pending also expires in five minutes.
   const holds = await env.DB.prepare(`SELECT uid FROM ai_budget_reservations
-    WHERE user_id = ? AND status = 'pending' AND idempotency_key LIKE ? ESCAPE '\\'`)
-    .bind(run.user_id, `${likePrefix(holdKey(run.execution_id, ''))}%`).all<{ uid: string }>();
+    WHERE user_id = ?1 AND status = 'pending' AND substr(idempotency_key, 1, length(?2)) = ?2`)
+    .bind(run.user_id, holdKey(run.execution_id, '')).all<{ uid: string }>();
   let released = 0;
   for (const h of holds.results || []) {
     try {

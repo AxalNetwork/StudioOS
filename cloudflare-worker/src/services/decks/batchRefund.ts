@@ -73,8 +73,9 @@ export async function refundBatch(env: Env, input: { batchUid: string; actorId: 
       continue;
     }
     // What is still refundable: what the hold settled, less every refund of this run so far.
-    const done = await env.DB.prepare("SELECT COALESCE(SUM(delta_microusd), 0) AS n FROM ai_credit_ledger WHERE kind = 'adjustment' AND source_ref LIKE ?1")
-      .bind(`${REFUND_REF_PREFIX}${b.uid}:%`).first<{ n: number }>();
+    // An exact prefix, not LIKE: `adj:deck-refund:<uuid>:%` is 54 bytes, over D1's 50-byte LIKE limit (D9167).
+    const done = await env.DB.prepare("SELECT COALESCE(SUM(delta_microusd), 0) AS n FROM ai_credit_ledger WHERE kind = 'adjustment' AND substr(source_ref, 1, length(?1)) = ?1")
+      .bind(`${REFUND_REF_PREFIX}${b.uid}:`).first<{ n: number }>();
     const amount = Math.min(charged, Math.max(0, Number(b.settled) - Number(done?.n || 0)));
     if (amount <= 0) { charges.push({ seq: s.seq, charged_microusd: charged, refunded_microusd: 0, outcome: 'over_settled' }); continue; }
     const uid = crypto.randomUUID();

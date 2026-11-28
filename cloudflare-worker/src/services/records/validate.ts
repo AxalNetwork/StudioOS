@@ -41,6 +41,7 @@ import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSugg
 import { lovablePart, type LovablePart } from '../lovableAppLinks';
 import type { FindingKind } from '../interviewFindings';
 import { suffixAmount } from '../../../../frontend/src/lib/money.js';
+import { likeNeedle } from '../../util/likeSearch';
 
 type Any = Record<string, any>;
 type Body = Record<string, unknown> | FormData;
@@ -1235,7 +1236,7 @@ const market: ModuleSpec = {
     const q = String(query.q ?? '').trim().slice(0, 120).toLowerCase();
     let directory: Array<{ value: string; label: string; website: string | null; country: string | null }> | undefined;
     if (q) {
-      const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+      const like = likeNeedle(q, 1);
       const res = await ctx.env.DB.prepare(
         `SELECT uid, name, website, country FROM research_company_directory
           WHERE lower(name) LIKE ? ESCAPE '\\' OR lower(COALESCE(website, '')) LIKE ? ESCAPE '\\'

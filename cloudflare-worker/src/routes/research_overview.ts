@@ -163,6 +163,7 @@ export interface FundAggregates {
  */
 export async function readFundAggregates(env: Env): Promise<FundAggregates> {
   // The band edges are constants of this file, never request values.
+  // #9170: D1 refuses a compound SELECT of more than five terms, so the six row kinds are two unions of three.
   const bandSql = `CASE ${SIZE_BANDS.map((b, i) => (b.max != null ? `WHEN eur_cents < ${b.max} THEN ${i}` : `ELSE ${i}`)).join(' ')} END`;
   const rows = (await env.DB.prepare(
     `WITH sf AS MATERIALIZED (
@@ -170,18 +171,21 @@ export async function readFundAggregates(env: Env): Promise<FundAggregates> {
               CASE WHEN fund_size_cents > 0 THEN ${EURO_SIZE_SQL} END AS eur_cents
          FROM ${SERVED_FUNDS} AS f)
      SELECT k, rk, v, n, as_of FROM (
-       SELECT 'all' AS k, 0 AS rk, NULL AS v, COUNT(*) AS n, MAX(as_of) AS as_of FROM sf
+       SELECT k, rk, v, n, as_of FROM (
+         SELECT 'all' AS k, 0 AS rk, NULL AS v, COUNT(*) AS n, MAX(as_of) AS as_of FROM sf
+         UNION ALL
+         SELECT 'list', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, source_name), source_name, COUNT(*), MAX(as_of)
+           FROM sf GROUP BY source_name
+         UNION ALL
+         SELECT 'hq', 0, hq, COUNT(*), NULL FROM sf WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq)
        UNION ALL
-       SELECT 'list', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, source_name), source_name, COUNT(*), MAX(as_of)
-         FROM sf GROUP BY source_name
-       UNION ALL
-       SELECT 'hq', 0, hq, COUNT(*), NULL FROM sf WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq
-       UNION ALL
-       SELECT 'focus', 0, sector_focus, COUNT(*), NULL FROM sf WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus
-       UNION ALL
-       SELECT 'vintage', fund_year, fund_year, COUNT(*), NULL FROM sf WHERE fund_year IS NOT NULL GROUP BY fund_year
-       UNION ALL
-       SELECT 'band', b, b, COUNT(*), NULL FROM (SELECT ${bandSql} AS b FROM sf WHERE eur_cents IS NOT NULL) GROUP BY b
+       SELECT k, rk, v, n, as_of FROM (
+         SELECT 'focus' AS k, 0 AS rk, sector_focus AS v, COUNT(*) AS n, NULL AS as_of
+           FROM sf WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus
+         UNION ALL
+         SELECT 'vintage', fund_year, fund_year, COUNT(*), NULL FROM sf WHERE fund_year IS NOT NULL GROUP BY fund_year
+         UNION ALL
+         SELECT 'band', b, b, COUNT(*), NULL FROM (SELECT ${bandSql} AS b FROM sf WHERE eur_cents IS NOT NULL) GROUP BY b)
      ) ORDER BY k, rk`
   ).all<DirRow>()).results || [];
   const of = (k: string) => rows.filter((r) => r.k === k);

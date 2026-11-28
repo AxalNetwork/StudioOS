@@ -27,6 +27,7 @@
 import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { cleanVesting, HolderError, type HolderVesting } from './capTableWrites';
+import { likeNeedleLower } from '../util/likeSearch';
 
 export const ISSUANCE_KINDS = ['founding', 'priced', 'safe', 'note', 'grant', 'exercise', 'transfer', 'conversion', 'cancellation', 'correction'] as const;
 export type IssuanceKind = typeof ISSUANCE_KINDS[number];
@@ -461,7 +462,7 @@ export async function readHistorySection(env: Env, projectId: number, section: t
       }),
     };
   }
-  const like = f.q ? `%${f.q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const like = f.q ? likeNeedleLower(f.q, 0) : null;
   const binds = [projectId, f.kind, f.kind, f.source, f.source, f.has_document, f.has_document, f.from, f.from, f.to, f.to, like, like, like];
   const total = await env.DB.prepare(TIMELINE_COUNT).bind(...binds).first<{ n: number }>();
   const slice = (await env.DB.prepare(TIMELINE_PAGE).bind(...binds, pageSize, offset).all<{ id: number }>()).results || [];

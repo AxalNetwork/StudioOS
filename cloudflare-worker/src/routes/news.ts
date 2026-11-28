@@ -34,6 +34,7 @@ import { canAuthor, computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyNews } from '../services/newsNotify';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes } from '../services/newsRender';
+import { likeNeedle } from '../util/likeSearch';
 
 const news = new Hono<{ Bindings: Env }>();
 
@@ -163,7 +164,7 @@ news.get('/', async (c) => {
   const where: string[] = ["a.status = 'published'"];
   const bind: any[] = [];
   if (sector) { where.push('a.sector = ?'); bind.push(sector); }
-  if (tag) { where.push('a.tags LIKE ?'); bind.push(`%"${tag}"%`); }
+  if (tag) { where.push("a.tags LIKE ? ESCAPE '\\'"); bind.push(likeNeedle(`"${tag}"`, 1)); }
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       u.name AS author_name

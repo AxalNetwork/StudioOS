@@ -22,6 +22,7 @@
  */
 import type { Env } from '../types';
 import { isAdministered } from './fundReportBuild';
+import { likeNeedle } from '../util/likeSearch';
 
 export type PeopleRole = 'gp' | 'ledger';
 export const PEOPLE_ROLES: readonly PeopleRole[] = Object.freeze(['gp', 'ledger']);
@@ -75,7 +76,7 @@ export async function fundPeople(env: Env, fundId: number, role: PeopleRole, q: 
     : await env.DB.prepare(`SELECT id, name, role, is_active FROM users WHERE id = ?`).bind(currentId).first<any>();
   const current = holder ? person(holder, role, Number(currentId)) : null;
   if (!superAdmin) return { role, current, candidates: null };
-  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const like = likeNeedle(q, 0)!;
   const res = await env.DB.prepare(
     `SELECT id, name, role, is_active FROM users
       WHERE role IN ('admin', 'investor') AND is_active = 1

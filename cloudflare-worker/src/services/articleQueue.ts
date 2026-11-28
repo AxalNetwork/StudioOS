@@ -20,6 +20,7 @@
  * says `unreadable` and leaves the rows standing.
  */
 import type { Env } from '../types';
+import { likeNeedle } from '../util/likeSearch';
 
 export const STAGES = ['submitted', 'in_review', 'changes_requested', 'ready', 'scheduled', 'published', 'rejected'] as const;
 export type Stage = typeof STAGES[number];
@@ -92,8 +93,8 @@ export function parseQueueQuery(p: URLSearchParams, limit: number, offset: numbe
   } };
 }
 
-/** A LIKE pattern that matches the words as typed: `%` and `_` are literal. */
-const like = (s: string | null) => (s == null ? null : `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+/** A LIKE pattern that matches the words as typed: `%` and `_` are literal; capped at D1's 50 bytes (D9167). */
+const like = (s: string | null) => (s == null ? null : likeNeedle(s, 0));
 
 /**
  * Each article with its stage, its open comments, its rounds (one per

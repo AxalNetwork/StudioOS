@@ -63,32 +63,47 @@ async function notifyFounderInstant(env: Env, userId: number, type: string, titl
   } catch (e) { console.warn('[admin/cohort] notify failed', e); }
 }
 
+/** Group bulk child rows without leaking their internal cycle key into the API. */
+function groupCycleRows(rows: Record<string, unknown>[]): Map<number, Record<string, unknown>[]> {
+  const groups = new Map<number, Record<string, unknown>[]>();
+  for (const { cohort_cycle_id, __rank: _rank, ...row } of rows) {
+    const id = Number(cohort_cycle_id);
+    const entries = groups.get(id) || [];
+    entries.push(row);
+    groups.set(id, entries);
+  }
+  return groups;
+}
+
 r.get('/timeline', async (c) => {
   await requireAdmin(c);
   await ensureCohortTimingSchema(c.env);
   const cycles = await c.env.DB.prepare(
     `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
   ).all<Record<string, unknown>>();
-  const out = [];
-  for (const cy of cycles.results || []) {
-    const windows = await c.env.DB.prepare(
-      `SELECT week_number, unlock_at, deadline_at FROM week_windows WHERE cohort_cycle_id = ? ORDER BY week_number`,
-    ).bind(cy.id).all<Record<string, unknown>>();
-    const participants = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM users
-        WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`,
-    ).bind(cy.start_at, cy.end_at).first<{ n: number }>();
-    const statuses = await c.env.DB.prepare(
-      `SELECT week_number, status, COUNT(*) AS n FROM company_week_status
-        WHERE cohort_cycle_id = ? GROUP BY week_number, status`,
-    ).bind(cy.id).all<{ week_number: number; status: string; n: number }>();
-    out.push({
-      ...cy,
-      windows: windows.results || [],
-      participant_count: participants?.n ?? 0,
-      status_counts: statuses.results || [],
-    });
-  }
+  const rows = cycles.results || [];
+  if (!rows.length) return c.json({ cycles: [], server_time: new Date().toISOString() });
+  const selected = JSON.stringify(rows.map(cy => cy.id));
+  const windows = await c.env.DB.prepare(`SELECT cohort_cycle_id, week_number, unlock_at, deadline_at
+    FROM week_windows WHERE cohort_cycle_id IN (SELECT value FROM json_each(?)) ORDER BY week_number`)
+    .bind(selected).all<Record<string, unknown>>();
+  const participants = await c.env.DB.prepare(`SELECT c.id AS cohort_cycle_id, COUNT(u.id) AS n
+    FROM cohort_cycles c LEFT JOIN users u ON u.spinout_lab_active = 1
+      AND u.spinout_lab_started_at >= c.start_at AND u.spinout_lab_started_at < c.end_at
+    WHERE c.id IN (SELECT value FROM json_each(?)) GROUP BY c.id`)
+    .bind(selected).all<{ cohort_cycle_id: number; n: number }>();
+  const statuses = await c.env.DB.prepare(`SELECT cohort_cycle_id, week_number, status, COUNT(*) AS n
+    FROM company_week_status WHERE cohort_cycle_id IN (SELECT value FROM json_each(?))
+    GROUP BY cohort_cycle_id, week_number, status`).bind(selected).all<Record<string, unknown>>();
+  const windowsByCycle = groupCycleRows(windows.results || []);
+  const statusesByCycle = groupCycleRows(statuses.results || []);
+  const participantsByCycle = new Map((participants.results || []).map(row => [row.cohort_cycle_id, row.n]));
+  const out = rows.map(cy => ({
+    ...cy,
+    windows: windowsByCycle.get(Number(cy.id)) || [],
+    participant_count: participantsByCycle.get(Number(cy.id)) ?? 0,
+    status_counts: statusesByCycle.get(Number(cy.id)) || [],
+  }));
   return c.json({ cycles: out, server_time: new Date().toISOString() });
 });
 
@@ -116,15 +131,27 @@ r.get('/review', async (c) => {
       WHERE w.unlock_at <= ? AND w.deadline_at > ? ${cycleId ? 'AND c.id = ?' : ''}`,
   ).bind(nowIso, nowIso, ...(cycleId ? [cycleId] : [])).all<Record<string, unknown>>();
   const atRisk: Array<Record<string, unknown>> = [];
-  for (const w of windows.results || []) {
-    const parts = await c.env.DB.prepare(
-      `SELECT id, name, email FROM users
-        WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`,
-    ).bind(w.cycle_start, w.cycle_end).all<{ id: number; name: string | null; email: string }>();
-    for (const p of parts.results || []) {
-      const done = await c.env.DB.prepare(
-        `SELECT milestone_key, completed_at FROM spinout_lab_milestones WHERE user_id = ?`,
-      ).bind(p.id).all<{ milestone_key: string; completed_at: string }>();
+  const currentWindows = windows.results || [];
+  if (!currentWindows.length) return c.json({ review: decided.results || [], at_risk: [], server_time: new Date().toISOString() });
+  const cycleIds = [...new Set(currentWindows.map(w => Number(w.cohort_cycle_id)))];
+  const participants = await c.env.DB.prepare(`SELECT c.id AS cohort_cycle_id, u.id, u.name, u.email
+    FROM cohort_cycles c JOIN users u ON u.spinout_lab_active = 1
+      AND u.spinout_lab_started_at >= c.start_at AND u.spinout_lab_started_at < c.end_at
+    WHERE c.id IN (SELECT value FROM json_each(?)) ORDER BY u.id`)
+    .bind(JSON.stringify(cycleIds)).all<Record<string, unknown>>();
+  const participantsByCycle = groupCycleRows(participants.results || []);
+  const userIds = [...new Set((participants.results || []).map(p => Number(p.id)))];
+  const milestones = userIds.length ? await c.env.DB.prepare(`SELECT user_id, milestone_key, completed_at
+    FROM spinout_lab_milestones WHERE user_id IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify(userIds)).all<{ user_id: number; milestone_key: string; completed_at: string }>() : { results: [] };
+  const completedByUser = new Map<number, Array<{ milestone_key: string; completed_at: string }>>();
+  for (const row of milestones.results || []) {
+    const entries = completedByUser.get(row.user_id) || [];
+    entries.push(row); completedByUser.set(row.user_id, entries);
+  }
+  for (const w of currentWindows) {
+    for (const p of participantsByCycle.get(Number(w.cohort_cycle_id)) || []) {
+      const done = { results: completedByUser.get(Number(p.id)) || [] };
       const completed = (done.results || [])
         .map((row) => ({ key: row.milestone_key, completed_at_ms: sqliteUtcToMs(row.completed_at) ?? 0 }));
       const outcome = evaluateWeekOutcome(Number(w.week_number), completed, Date.now());
@@ -264,36 +291,58 @@ r.get('/applications', async (c) => {
   const cycles = await c.env.DB.prepare(
     `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
   ).all<Record<string, unknown>>();
-  const out = [];
-  for (const cy of cycles.results || []) {
-    const counts = await c.env.DB.prepare(
-      `SELECT status, COUNT(*) AS n FROM cohort_applicants WHERE cohort_cycle_id = ? GROUP BY status`,
-    ).bind(cy.id).all<{ status: string; n: number }>();
-    const byStatus: Record<string, number> = {};
-    for (const row of counts.results || []) byStatus[row.status] = row.n;
-    const applicants = await c.env.DB.prepare(
-      `SELECT ca.id, ca.application_id, ca.user_id, ca.status, ca.rolled_from_cycle_id,
+  const cycleRows = cycles.results || [];
+  if (!cycleRows.length) return c.json({ cycles: [], settings, settings_unreadable: settings === null, server_time: new Date().toISOString() });
+  const selected = JSON.stringify(cycleRows.map(cy => cy.id));
+  const countsByCycle = groupCycleRows((await c.env.DB.prepare(`SELECT cohort_cycle_id, status, COUNT(*) AS n FROM cohort_applicants WHERE cohort_cycle_id IN (SELECT value FROM json_each(?)) GROUP BY cohort_cycle_id, status`).bind(selected).all<Record<string, unknown>>()).results || []);
+  const applicantsByCycle = groupCycleRows((await c.env.DB.prepare(`SELECT * FROM (SELECT ca.cohort_cycle_id, ROW_NUMBER() OVER (PARTITION BY ca.cohort_cycle_id ORDER BY CASE WHEN ca.status = 'pending' THEN 0 ELSE 1 END, ca.created_at DESC) AS __rank, ca.id, ca.application_id, ca.user_id, ca.status, ca.rolled_from_cycle_id,
               ca.decided_at, ca.decided_by, ca.decision_reason, ca.created_at,
               u.name, u.email, a.company_name, a.idea, a.stage, a.jurisdiction
          FROM cohort_applicants ca
          JOIN users u ON u.id = ca.user_id
          LEFT JOIN spinout_applications a ON a.id = ca.application_id
-        WHERE ca.cohort_cycle_id = ?
-        ORDER BY CASE WHEN ca.status = 'pending' THEN 0 ELSE 1 END, ca.created_at DESC
-        LIMIT 200`,
-    ).bind(cy.id).all<Record<string, unknown>>();
+        WHERE ca.cohort_cycle_id IN (SELECT value FROM json_each(?))
+) WHERE __rank <= 200 ORDER BY cohort_cycle_id, __rank`).bind(selected).all<Record<string, unknown>>()).results || []);
+  let lifecycleByCycle = new Map<number, Record<string, unknown>[]>();
+  let lifecycleUnreadable = false;
+  try {
+    lifecycleByCycle = groupCycleRows((await c.env.DB.prepare(`SELECT ca.cohort_cycle_id, ca.id AS applicant_id, a.answers_json, a.withdrawn_at, a.applicant_note,
+                a.applicant_asks_json, a.applicant_note_at
+           FROM cohort_applicants ca LEFT JOIN spinout_applications a ON a.id = ca.application_id
+          WHERE ca.cohort_cycle_id IN (SELECT value FROM json_each(?))`).bind(selected).all<Record<string, unknown>>()).results || []);
+  } catch { lifecycleUnreadable = true; }
+  let interviewsByCycle = new Map<number, Record<string, unknown>[]>();
+  let interviewsUnreadable = false;
+  try {
+    interviewsByCycle = groupCycleRows((await c.env.DB.prepare(`SELECT ca.cohort_cycle_id, ca.id AS applicant_id, i.id, i.scheduled_at, i.duration_min, i.location, i.note, i.status,
+                i.reschedule_requested_at, i.reschedule_reason
+           FROM spinout_application_interviews i
+           JOIN cohort_applicants ca ON ca.application_id = i.application_id
+          WHERE ca.cohort_cycle_id IN (SELECT value FROM json_each(?))
+          ORDER BY i.id ASC`).bind(selected).all<Record<string, unknown>>()).results || []);
+  } catch { interviewsUnreadable = true; }
+  let plansByCycle = new Map<number, Record<string, unknown>[]>();
+  let plansUnavailable = false;
+  try {
+    plansByCycle = groupCycleRows((await c.env.DB.prepare(`SELECT ca.cohort_cycle_id, p.user_id, p.rule_key, p.steps_json, p.started, p.computed_by, p.created_at, p.updated_at
+           FROM spinout_week1_plans p
+           JOIN cohort_applicants ca ON ca.user_id = p.user_id
+          WHERE ca.cohort_cycle_id IN (SELECT value FROM json_each(?))`).bind(selected).all<Record<string, unknown>>()).results || []);
+  } catch { plansUnavailable = true; }
+  const out = [];
+  for (const cy of cycleRows) {
+    const counts = { results: countsByCycle.get(Number(cy.id)) || [] };
+    const byStatus: Record<string, number> = {};
+    for (const row of counts.results || []) byStatus[String(row.status)] = Number(row.n);
+    const applicants = { results: applicantsByCycle.get(Number(cy.id)) || [] };
     // D383 — each applicant's answers, applicant-facing note and live
     // interview, read separately so a database without migrations 315–316
     // still lists its applicants (with those fields null) instead of failing.
     const lifecycle = new Map<number, Record<string, unknown>>();
     try {
       const { parseStoredAnswers, parseStoredAsks } = await import('../services/applicationLifecycle');
-      const lc = await c.env.DB.prepare(
-        `SELECT ca.id AS applicant_id, a.answers_json, a.withdrawn_at, a.applicant_note,
-                a.applicant_asks_json, a.applicant_note_at
-           FROM cohort_applicants ca LEFT JOIN spinout_applications a ON a.id = ca.application_id
-          WHERE ca.cohort_cycle_id = ?`,
-      ).bind(cy.id).all<Record<string, unknown>>();
+      if (lifecycleUnreadable) throw new Error('Lifecycle unavailable');
+      const lc = { results: lifecycleByCycle.get(Number(cy.id)) || [] };
       for (const row of lc.results || []) {
         lifecycle.set(Number(row.applicant_id), {
           answers: parseStoredAnswers(row.answers_json),
@@ -305,14 +354,8 @@ r.get('/applications', async (c) => {
           interview: null,
         });
       }
-      const iv = await c.env.DB.prepare(
-        `SELECT ca.id AS applicant_id, i.id, i.scheduled_at, i.duration_min, i.location, i.note, i.status,
-                i.reschedule_requested_at, i.reschedule_reason
-           FROM spinout_application_interviews i
-           JOIN cohort_applicants ca ON ca.application_id = i.application_id
-          WHERE ca.cohort_cycle_id = ?
-          ORDER BY i.id ASC`,
-      ).bind(cy.id).all<Record<string, unknown>>();
+      if (interviewsUnreadable) throw new Error('Interviews unavailable');
+      const iv = { results: interviewsByCycle.get(Number(cy.id)) || [] };
       for (const row of iv.results || []) {
         const entry = lifecycle.get(Number(row.applicant_id));
         if (entry) { const { applicant_id: _drop, ...rest } = row; entry.interview = rest; }
@@ -325,13 +368,9 @@ r.get('/applications', async (c) => {
     let plansUnreadable = false;
     try {
       const { planView } = await import('../services/week1Plan');
-      const pr = await c.env.DB.prepare(
-        `SELECT p.user_id, p.rule_key, p.steps_json, p.started, p.computed_by, p.created_at, p.updated_at
-           FROM spinout_week1_plans p
-           JOIN cohort_applicants ca ON ca.user_id = p.user_id
-          WHERE ca.cohort_cycle_id = ?`,
-      ).bind(cy.id).all<import('../services/week1Plan').PlanRow>();
-      for (const row of pr.results || []) plans.set(Number(row.user_id), planView(row));
+      if (plansUnavailable) throw new Error('Plans unavailable');
+      const pr = { results: plansByCycle.get(Number(cy.id)) || [] };
+      for (const row of pr.results || []) plans.set(Number(row.user_id), planView(row as unknown as import('../services/week1Plan').PlanRow));
     } catch { plansUnreadable = true; }
     out.push({
       ...cy,

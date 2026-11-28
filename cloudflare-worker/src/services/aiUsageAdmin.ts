@@ -34,6 +34,7 @@
 import type { Env } from '../types';
 import { AI_PAUSED_MESSAGE, AI_USD_SCALE, aiLicenceKey, resolveAiCaps } from './aiBudget';
 import { readSpendLimit } from './aiSpendLimit';
+import { likePrefixLower } from '../util/likeSearch';
 export { AI_PAUSED_MESSAGE, aiPaused, memberAiCap } from './aiBudget';
 
 export const AI_USAGE_RANGES = ['7d', '30d', 'mtd'] as const;
@@ -390,9 +391,9 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   };
 }
 
-/** A LIKE pattern for an email prefix: `%`, `_` and `\` are matched as themselves. */
+/** A LIKE pattern for an email prefix: `%`, `_` and `\` are matched as themselves, capped at D1's 50 bytes (D9167). */
 export function emailPrefixPattern(q: string): string {
-  return `${q.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  return likePrefixLower(q, 0)!;
 }
 
 /**

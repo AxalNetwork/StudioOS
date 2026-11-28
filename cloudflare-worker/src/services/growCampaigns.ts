@@ -2,6 +2,7 @@
 import type { Env, User } from '../types';
 import { Refused } from './growWriters';
 import { calendarDay } from './growKpis';
+import { likeNeedle } from '../util/likeSearch';
 
 type Body = Record<string, unknown>;
 type Campaign = { id: number; uid: string; project_id: number; name: string; goal: string; status: string; starts_on: string | null; ends_on: string | null; budget_cents: number | null; utm_campaign: string | null; segment_id: number | null; audience_kind: string | null; created_by: number | null; created_at: string; archived_at: string | null };
@@ -208,7 +209,7 @@ export async function campaigns(env: Env, pid: number, filters: { status?: strin
   const totals = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM grow_campaigns WHERE project_id = ? AND archived_at IS NULL GROUP BY status').bind(pid).all<{ status: string; n: number }>();
   const counts: Record<string, number> = { all: 0, active: 0, draft: 0, paused: 0, ended: 0 };
   for (const row of totals.results ?? []) { counts[row.status] = row.n; counts.all += row.n; }
-  const search = `%${(filters.q ?? '').replace(/[\\%_]/g, (v) => `\\${v}`)}%`;
+  const search = likeNeedle(filters.q, 0)!;
   const rows = await env.DB.prepare("SELECT * FROM grow_campaigns WHERE project_id = ? AND archived_at IS NULL AND (? IS NULL OR status = ?) AND name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY created_at DESC, id DESC")
     .bind(pid, filters.status && filters.status !== 'all' ? filters.status : null, filters.status ?? null, search).all<Campaign>();
   const records = rows.results ?? [];

@@ -40,6 +40,7 @@ import { SECTORS, isValidSector } from '../data/sectors';
 import { sniffMime } from '../services/aiImages';
 import { forgetArticleStorage } from '../services/storageUsage';
 import { refuse } from '../util/refusal';
+import { likeNeedle } from '../util/likeSearch';
 
 const articles = new Hono<{ Bindings: Env }>();
 
@@ -224,15 +225,16 @@ articles.get('/', async (c) => {
   const where: string[] = ["a.status = 'published'"];
   const bind: any[] = [];
   if (sector) { where.push('a.sector = ?'); bind.push(sector); }
-  if (tag) { where.push('a.tags LIKE ?'); bind.push(`%"${tag}"%`); }
+  if (tag) { where.push("a.tags LIKE ? ESCAPE '\\'"); bind.push(likeNeedle(`"${tag}"`, 1)); }
   if (role && VALID_AUTHOR_ROLES.has(role)) { where.push('u.role = ?'); bind.push(role); }
   if (q) {
     // Lightweight LIKE-based search on title/subtitle. D1 has no FTS by
     // default; this is good enough for the volume we expect on the
-    // public feed. Escapes %/_ to avoid wildcard injection.
-    const safe = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    // public feed. likeNeedle escapes the wildcards and caps the pattern at
+    // D1's 50-byte LIKE limit (D9167).
+    const like = likeNeedle(q, 1);
     where.push('(a.title LIKE ? ESCAPE \'\\\' OR a.subtitle LIKE ? ESCAPE \'\\\')');
-    bind.push(`%${safe}%`, `%${safe}%`);
+    bind.push(like, like);
   }
 
   // Featured strip (D1293): a Super Admin's picks, `featured_at`, come

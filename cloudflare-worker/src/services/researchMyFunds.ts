@@ -14,6 +14,7 @@
 import type { Env } from '../types';
 import { citeSource, getFund, loadFundSources, SERVED_FUNDS } from './researchFundDirectory';
 import { SOURCE_WITHDRAWN_MESSAGE } from './researchFundProfile';
+import { likeNeedle } from '../util/likeSearch';
 
 export const MY_FUNDS_LIMIT_DEFAULT = 50;
 export const MY_FUNDS_LIMIT_MAX = 100;
@@ -78,7 +79,7 @@ export function parseMyFundsQuery(get: (k: string) => string | undefined): MyFun
   };
 }
 
-const likeOf = (q: string) => (q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '');
+const likeOf = (q: string) => likeNeedle(q, 1) ?? '';
 
 // The one WHERE clause both the page and its total use. Each optional clause
 // is switched off by its bound '' (the order of binds is `whereBinds`).

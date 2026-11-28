@@ -26,7 +26,7 @@ import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent
 import { activeGrant, dataRoomOwner, projectNdaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
 import { liveFiles } from '../dataRoomTrash';
 import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
-import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
+import { SERVED_FUNDS } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
@@ -43,6 +43,7 @@ import {
   logProspectEvent, markProspectPassed, rescoreReadiness, revokeDeckLink, saveUseOfFunds, scoreReadinessItem, updateCapHolder,
   updateNarrativeVersion, updateProspect,
 } from '../raiseWriters';
+import { likeNeedle } from '../../util/likeSearch';
 
 const ctxOf = (rc: RecordContext): Ctx => ({ env: rc.env, projectId: rc.projectId, today: new Date().toISOString().slice(0, 10) });
 const day = (v: unknown): string | null => {
@@ -944,7 +945,7 @@ async function capitalOptions(rc: RecordContext, query: Record<string, string>) 
   if (q) {
     const res = await rc.env.DB.prepare(
       `SELECT f.uid, f.name FROM ${SERVED_FUNDS} AS f WHERE f.name LIKE ? ESCAPE '\\' ORDER BY f.name, f.uid LIMIT 20`,
-    ).bind(`%${likeLiteral(q)}%`).all<{ uid: string; name: string }>();
+    ).bind(likeNeedle(q, 1)).all<{ uid: string; name: string }>();
     funds = (res.results || []).map((f) => ({ value: String(f.uid), label: String(f.name) }));
   }
   const people = await rc.env.DB.prepare(

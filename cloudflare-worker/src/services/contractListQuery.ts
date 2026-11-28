@@ -1,4 +1,5 @@
 /** D647 — validated list controls shared by the Contracts page and its pickers. */
+import { likeNeedle } from '../util/likeSearch';
 export const CONTRACT_SORTS = ['created_at', 'sent_at', 'signed_at', 'title', 'recipient', 'days_to_sign'] as const;
 export class ContractQueryError extends Error {}
 
@@ -48,7 +49,7 @@ export function orderContracts<T extends SortableContract>(rows: T[], sort: type
   });
 }
 
-/** SQL LIKE metacharacters in a person's query are literal search characters. */
+/** SQL LIKE metacharacters in a person's query are literal search characters; capped at D1's 50 bytes (D9167). */
 export function contractLike(q: string): string {
-  return `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+  return likeNeedle(q, 0)!;
 }

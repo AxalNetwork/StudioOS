@@ -22,7 +22,8 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import research from '../src/routes/research.ts';
-import { likeLiteral, parseCompanyQuery, CompanyQueryError, PEER_LIMIT } from '../src/services/researchCompanyDirectory.ts';
+import { parseCompanyQuery, CompanyQueryError, PEER_LIMIT } from '../src/services/researchCompanyDirectory.ts';
+import { likeNeedle } from '../src/util/likeSearch.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -141,7 +142,7 @@ test('q matches name or website case-insensitively, and quotes, % and _ stay bou
   assert.deepEqual([quote.status, uids(quote.body)], [200, ['eta']]);
   const inj = await get(db, `/company-directory?q=${encodeURIComponent("' OR 1=1 --")}`);
   assert.deepEqual([inj.status, inj.body.total], [200, 0]);
-  assert.equal(likeLiteral('a%b_c\\d'), 'a\\%b\\_c\\\\d');
+  assert.equal(likeNeedle('a%b_c\\d'), '%a\\%b\\_c\\\\d%');
 });
 
 test('country, founded_from and founded_to filter, and a reversed range is refused', async () => {

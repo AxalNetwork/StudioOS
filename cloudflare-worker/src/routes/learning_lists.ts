@@ -34,6 +34,7 @@ import { requireAuth } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
 import { canSeeLearning } from '../services/learningAccess';
+import { likeNeedle } from '../util/likeSearch';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -51,11 +52,11 @@ const whereOf = (row: { course_title: string | null; program_title: string | nul
   row.course_title ? { kind: 'course' as const, title: row.course_title }
     : row.program_title ? { kind: 'program' as const, title: row.program_title } : null;
 
-/** The search a list read takes (#4648): trimmed, bounded, and as a LIKE pattern in which `%`, `_` and `\` mean themselves. */
+/** The search a list read takes (#4648): trimmed, bounded, and as a LIKE pattern in which `%`, `_` and `\` mean themselves, capped at D1's 50 bytes (D9167). */
 export const MAX_QUERY = 100;
 export function searchOf(raw: unknown): { q: string; pattern: string } {
   const q = typeof raw === 'string' ? raw.trim().slice(0, MAX_QUERY) : '';
-  return { q, pattern: `%${q.replace(/[\\%_]/g, '\\$&')}%` };
+  return { q, pattern: likeNeedle(q, 0)! };
 }
 
 r.get('/exercises', async (c) => {

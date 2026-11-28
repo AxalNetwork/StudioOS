@@ -42,6 +42,7 @@ import { branchOf } from '../util/branch';
 import { companyKybScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { refusalBody, refuse } from '../util/refusal';
+import { likeNeedleWhole } from '../util/likeSearch';
 
 const trust = new Hono<{ Bindings: Env }>();
 
@@ -152,13 +153,16 @@ trust.get('/agreements', async (c) => {
   // varies across deploys, so a single LIKE on `signed_by` is the lowest
   // common denominator).
   let documents: any[] = [];
-  try {
+  // D9167: the whole email or nothing. A blank one bound `%%`, every signed
+  // document; one over D1's 50-byte LIKE limit failed the read.
+  const emailLike = likeNeedleWhole(user.email);
+  if (emailLike) try {
     const docs: any = await c.env.DB.prepare(
       `SELECT id, uid, title, doc_type, status, signed_by, signed_at, created_at
          FROM documents
-        WHERE status = 'signed' AND LOWER(IFNULL(signed_by,'')) LIKE ?
+        WHERE status = 'signed' AND LOWER(IFNULL(signed_by,'')) LIKE ? ESCAPE '\\'
         ORDER BY signed_at DESC LIMIT 100`,
-    ).bind('%' + (user.email || '').toLowerCase() + '%').all();
+    ).bind(emailLike).all();
     documents = docs?.results || [];
   } catch { documents = []; }
 

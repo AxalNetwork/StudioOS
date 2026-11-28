@@ -6,6 +6,7 @@
  * endpoints via shapeJobApplication. Keep this invariant.
  */
 import type { Env, User } from '../types';
+import { likeNeedle } from '../util/likeSearch';
 
 // D691 (#1697): Fractional is last, so every list the board draws keeps its order.
 export const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'intern', 'contract', 'fractional'] as const;
@@ -167,8 +168,8 @@ export function buildPublicJobFeedWhere(filters: {
   if (filters.seniority) { where.push('j.seniority = ?'); binds.push(filters.seniority); }
   if (filters.remote === '1') { where.push('j.remote = 1'); }
   if (filters.q) {
-    where.push('(j.title LIKE ? OR j.summary LIKE ? OR j.location_text LIKE ? OR p.name LIKE ?)');
-    const like = `%${filters.q}%`;
+    where.push("(j.title LIKE ? ESCAPE '\\' OR j.summary LIKE ? ESCAPE '\\' OR j.location_text LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\')");
+    const like = likeNeedle(filters.q, 0)!;
     binds.push(like, like, like, like);
   }
   return { where, binds };

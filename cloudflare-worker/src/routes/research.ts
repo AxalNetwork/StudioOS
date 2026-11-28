@@ -89,6 +89,7 @@ import {
   previewExport, previewImport, exportFundsToSheet, importFundsFromSheet, reconcileImportRun,
 } from '../services/fundSheets';
 import { refuse, refusalBody } from '../util/refusal';
+import { likeNeedle } from '../util/likeSearch';
 import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
@@ -4303,9 +4304,9 @@ research.get('/market-directory', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT slug, name, company_count, source_name, source_boundary, as_of
        FROM research_market_directory
-      WHERE (? = '' OR name LIKE '%' || ? || '%')
+      WHERE (? = '' OR name LIKE ? ESCAPE '\\')
       ORDER BY name COLLATE NOCASE LIMIT 200`
-  ).bind(q, q).all();
+  ).bind(q, likeNeedle(q, 1) ?? '').all();
   return c.json({ items: rows.results || [], source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
 });
 

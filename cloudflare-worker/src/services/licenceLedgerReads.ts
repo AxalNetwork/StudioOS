@@ -25,6 +25,7 @@
 import type { Env } from '../types';
 import { escalationSlaBand, HQ_TIER_CODE, type EscalationRow } from '../rpc/hqOps';
 import { withRequestView } from './escalationRequests';
+import { likeNeedle } from '../util/likeSearch';
 
 /** Ids per `IN (…)` statement. Under D1's 100-parameter ceiling with room to spare. */
 export const ID_CHUNK = 90;
@@ -79,11 +80,6 @@ export class LedgerReadRefusal extends Error {
   constructor(code: string, sentence: string) { super(sentence); this.code = code; this.sentence = sentence; }
 }
 
-/** `%`, `_` and `\` are LIKE's own; a search for "AXL_1" means the underscore. */
-function likePattern(q: string): string {
-  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-}
-
 export type LedgerFilter = { q?: string; kind?: string; status?: string; limit?: unknown; cursor?: unknown };
 
 /**
@@ -108,7 +104,8 @@ export async function pageLicences(env: Env, f: LedgerFilter): Promise<{
     }
     after = [c[0] as number, c[1] as string, c[2] as number];
   }
-  const like = q ? likePattern(q) : '';
+  // `%`, `_` and `\` are LIKE's own; a search for "AXL_1" means the underscore. Capped at D1's 50 bytes (D9167).
+  const like = likeNeedle(q, 1) ?? '';
   const country = q.toUpperCase();
 
   const filterBinds = [kind, kind, status, status, q, like, like, like, country];

@@ -5,6 +5,7 @@
  */
 import { parseStoredTs } from '../sessionStatus';
 import { FEED_OUTCOMES } from './contract';
+import { likeNeedle } from '../../util/likeSearch';
 
 export { FEED_OUTCOMES };
 
@@ -127,8 +128,9 @@ export function parseFeedQuery(q: (k: string) => string | undefined):
   let like: string | null = null;
   if (search) {
     if (search.length > SEARCH_MAX) return { ok: false, field: 'q', message: `A search is at most ${SEARCH_MAX} characters.` };
-    // `!` escapes LIKE's own wildcards, so a search for "50%" finds "50%".
-    like = `%${search.replace(/[!%_]/g, (ch) => `!${ch}`)}%`;
+    // LIKE's own wildcards are escaped, so a search for "50%" finds "50%";
+    // the pattern fits D1's 50-byte LIKE limit (D9167, one escaper: `\`).
+    like = likeNeedle(search, 1);
     applied.q = search;
   }
 
