@@ -68,6 +68,7 @@ import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
 import { PhoneFocus, PhoneTicketCard, threadLabel, useFootFill, useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
+import { EadwynMarkdown, explainRequestBody } from '../../lib/eadwynMarkdown';
 
 // D778 part 12: the file the inventories name the Studio presses at, as `railOptionFor` reads it.
 const STUDIO_FILE = 'components/advisor/PersonalAdvisor.jsx';
@@ -596,7 +597,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         signal: controller.signal,
         // D778 part 12: the press names its option on the run, keeping the mounted rail's page.
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders(), ...railPressHeaders(explainKey) },
-        body: JSON.stringify({ topic, conversation_id: conversationId }),
+        // D9286: a press on the active question names its id, type and options.
+        body: JSON.stringify(explainRequestBody(topic, question, conversationId)),
       });
       if (!res.ok || !res.body) {
         const errBody = await res.text().catch(() => '');
@@ -1340,6 +1342,9 @@ function Bubble({ m, onCtaClick }) {
         {/* Tool messages: prefer rendering the human-readable CTA over the raw envelope. */}
         {m.role === 'tool' && cta ? (
           <ToolPreview preview={toolPreview} />
+        ) : m.role === 'assistant' ? (
+          // D9286: Eadwyn's own text is escaped Markdown, never raw HTML.
+          <EadwynMarkdown text={m.content} />
         ) : (
           m.content
         )}
@@ -1875,7 +1880,7 @@ function TutorPanel({ tutor, onClose }) {
         </button>
       </div>
       <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap min-h-[40px]">
-        {tutor.text || (tutor.streaming ? <span className="text-gray-400 italic">Thinking…</span> : <span className="text-gray-400 italic">No reply.</span>)}
+        {tutor.text ? <EadwynMarkdown text={tutor.text} /> : (tutor.streaming ? <span className="text-gray-400 italic">Thinking…</span> : <span className="text-gray-400 italic">No reply.</span>)}
         {tutor.streaming && tutor.text && <span className="inline-block w-1.5 h-3 bg-violet-500 ml-0.5 animate-pulse align-middle" />}
       </div>
       {(tutor.doc_anchor || tutor.page_target) && (

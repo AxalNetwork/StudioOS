@@ -121,6 +121,7 @@ import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realti
 import { bindingKey } from '../util/schemaBootstrap';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 import { studioOption } from '../services/advisor/studioRail';
+import { explainQuestionContext } from '../services/advisor/explainPrompt';
 import { rolePreviewRefusal, rolePreviewShell } from '../util/investorPreview';
 
 const advisor = new Hono<{ Bindings: Env }>();
@@ -2200,7 +2201,8 @@ advisor.get('/conversations/:id', conversationDetailHandler);
 // ---------------------------------------------------------------------------
 // POST /explain  —  SSE stream of a free-form LLM explanation.
 //
-// Body: { topic: string, conversation_uid?: string }
+// Body: { topic: string, conversation_uid?: string, question_id?, question_type?, options? }
+// D9286: with a question_id the prompt lists that bank question's options, and only those.
 // Stream events:
 //   provider { model, provider, fallback_used, cached }   (Task #16)
 //   delta    { text }
@@ -2237,7 +2239,8 @@ advisor.post('/explain', async (c) => {
   }
   // Workers AI only (Task #31). The aiRouter gracefully refuses (with
   // budget/refusal usage rows) if every model in the chain fails.
-  const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
+  // D9286: an Explain press on a question also names its type and options.
+  const body = await readJson<{ topic?: string; question_id?: string; question_type?: string; options?: unknown; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
 
@@ -2258,6 +2261,8 @@ advisor.post('/explain', async (c) => {
   // otherwise the LLM would leak the existence of upgrade-gated
   // or future-week content.
   const requestedQid = body?.question_id ? String(body.question_id).trim() : '';
+  // D9286: the visible bank question the press named, whose own options the model is held to.
+  let explainedQuestion: Question | null = null;
   if (requestedQid) {
     const answeredRows = await c.env.DB.prepare(
       `SELECT question_id FROM advisor_answers WHERE user_id = ?`,
@@ -2265,7 +2270,13 @@ advisor.post('/explain', async (c) => {
     const answered = new Set<string>((answeredRows.results || []).map((r) => r.question_id));
     const gate = await loadAdvisorGate(c.env, user);
     const { visible } = selectBank(user, answered, gate, undefined);
-    if (!visible.some((q) => q.id === requestedQid)) {
+    // D9286: the Explain press now sends the active question's id, so the
+    // question may be one /answer also takes outside the visible bank: a
+    // detector, a re-ask of an answered one, or a dynamic reflection.
+    explainedQuestion = visible.find((q) => q.id === requestedQid)
+      || (DETECTOR_IDS.includes(requestedQid) || answered.has(requestedQid) || DYNAMIC_ID_RE.test(requestedQid)
+        ? questionById(requestedQid) : null);
+    if (!explainedQuestion) {
       return c.json({ error: 'question_not_available' }, 409);
     }
   }
@@ -2287,7 +2298,9 @@ advisor.post('/explain', async (c) => {
   // Hashed via promptHash() into advisor_turn_audit so prompt revisions
   // can be correlated across the audit log.
   const persona = personaFor(user);
-  const systemPromptText = `${ADVISOR_SYSTEM_PROMPT}\n\nUser context: role=${persona}, name=${user.name || 'unknown'}.`;
+  // D9286: a press on a question lists that question's options, and only those.
+  const questionContext = explainedQuestion ? `\n\n${explainQuestionContext(explainedQuestion, body?.options)}` : '';
+  const systemPromptText = `${ADVISOR_SYSTEM_PROMPT}\n\nUser context: role=${persona}, name=${user.name || 'unknown'}.${questionContext}`;
 
   const conversationUid = (body?.conversation_id || body?.conversation_uid) ? String(body?.conversation_id || body?.conversation_uid) : null;
   let conversationId: number | null = null;
