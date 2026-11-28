@@ -1,10 +1,12 @@
 // #6312: the coordinator's label, slot, staleness, marker, delta and digest rules.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { recentPulls } from '../coordinator.mjs';
 import {
   planLabels, slotOf, isStandardSlotLabel, slotPicker, slotLoad, classifyProposal, proposalLabels,
   marker, parseMarkers, alreadyDone, staleReasons, renderNote, planFromFindings, deltaSelect,
   landedName, parseDigests, compareDigests, boardsOf,
+  prRelationships, claimEvidence, lifecycleSuggestion, verifiedClosure, applyReviewedItem,
 } from './coordinator.mjs';
 
 test('planLabels swaps the state, keeps one slot, and reports what changed', () => {
@@ -112,16 +114,19 @@ test('the status note starts with S1: and ends with the marker', () => {
 });
 
 test('planFromFindings closes only what the verifier allowed and drops unsupported notes', () => {
+  const evidence = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(number => [number,
+    { issue: { number }, facts: { claim: { state: 'absent' } } }]));
   const steps = planFromFindings([
-    { number: 1, verdict: 'close_done', verification: { safe_to_close: true } },
-    { number: 2, verdict: 'close_done', verification: { safe_to_close: false, unfinished: 'U', label_change_ok: true }, label_change: { state: 'state:ready' } },
+    { number: 1, verdict: 'close_done', verification: { safe_to_close: true, note_supported: true } },
+    { number: 2, verdict: 'close_done', verification: { safe_to_close: false, unfinished: 'U', label_change_ok: true, note_supported: true }, label_change: { state: 'state:ready' } },
     { number: 7, verdict: 'close_done', verification: { safe_to_close: true, note_supported: false } },
     { number: 8, verdict: 'needs_status_fix', label_change: { state: 'state:ready' }, verification: {} },
+    { number: 9, verdict: 'needs_status_fix', label_change: { state: 'state:ready' }, verification: { note_supported: false, label_change_ok: true } },
     { number: 3, verdict: 'needs_status_fix', label_change: { state: 'state:blocked' }, verification: { note_supported: false, label_change_ok: false } },
     { number: 4, verdict: 'keep_as_is', verification: {} },
-    { number: 5, verdict: 'split_or_rescope', remaining_work: 'old', verification: { corrected: { remaining_work: 'new' } } },
-    { number: 6, verdict: 'close_superseded', verification: { safe_to_close: true } },
-  ]);
+    { number: 5, verdict: 'split_or_rescope', remaining_work: 'old', verification: { note_supported: true, corrected: { remaining_work: 'new' } } },
+    { number: 6, verdict: 'close_superseded', verification: { safe_to_close: true, note_supported: true } },
+  ], { evidence, canClose: () => true });
   const st = n => steps.find(x => x.number === n);
   assert.equal(st(1).close, 'completed');
   assert.equal(st(2).close, null); assert.equal(st(2).note.unfinished, 'U'); assert.deepEqual(st(2).labelChange, { state: 'state:ready' });
@@ -131,6 +136,7 @@ test('planFromFindings closes only what the verifier allowed and drops unsupport
   assert.equal(st(6).close, 'not_planned');
   assert.equal(st(7).close, null, 'no close without its note');
   assert.equal(st(8).labelChange, null, 'a label change nobody verified is dropped');
+  assert.equal(st(9).labelChange, null, 'a label change needs a supported note for apply and recovery');
   assert.throws(() => planFromFindings([{ number: 1, verdict: 'keep_as_is' }, { number: 1, verdict: 'keep_as_is' }]), /two findings/);
 });
 
@@ -145,6 +151,168 @@ test('deltaSelect re-reads new issues, issues named by merged PRs, and issues wi
   ];
   const got = deltaSelect({ issues, since, lastNoteAt: { 3: '2026-11-14T02:00:00Z', 4: '2026-11-14T02:00:00Z' }, mergedPrBodies: ['Closes #5'] });
   assert.deepEqual([...got.keys()].sort(), [1, 3, 5]);
+});
+
+test('partial handback #4570 stays separate from closure intent and quoted examples', () => {
+  const links = prRelationships('Closes #4570 and #123. Details in #8\n\nPart of #4570\nRefs #9\nCloses https://github.com/Elsewhere/Project/issues/44\n```txt\nCloses #99\n```');
+  assert.deepEqual([...links], [[4570, 'partial'], [123, 'closing'], [9, 'partial']]);
+  assert.deepEqual([...prRelationships('Finish lifecycle reconciliation. Closes #8661. Refs #6312.\n`Closes #18`\n> Closes #20')],
+    [[8661, 'closing'], [6312, 'partial']]);
+});
+
+test('a reference inside an HTML comment is not intent, however the comment is assembled', () => {
+  assert.deepEqual([...prRelationships('Refs #7\n<!-- Closes #5 -->')], [[7, 'partial']]);
+  // Removing the inner comment joins the outer halves into a new one. A single pass would read Closes #5.
+  assert.deepEqual([...prRelationships('Refs #7\n<!-<!-- x -->- Closes #5 -->')], [[7, 'partial']]);
+  assert.deepEqual([...prRelationships('<!-<!-<!-- a -->- b -->- Closes #6 -->\nCloses #8')], [[8, 'closing']]);
+});
+
+test('expired claims stay held and a 403 or a label receipt cannot supply absence', () => {
+  const issue = { number: 8661, labels: ['task', 'state:ready'] };
+  const holder = { version: 1, issue: 8661, slot: 'S24', agent: 'Codex', session: 'test', at: '2025-11-01T00:00:00Z', ttlHours: 24 };
+  assert.deepEqual(claimEvidence(8661, { ref: 'a', message: JSON.stringify(holder) }, issue, []), { state: 'held', ref: 'a', holder });
+  assert.equal(claimEvidence(8661, { status: 403 }, issue, []).state, 'unknown');
+  assert.equal(claimEvidence(8661, {}, issue, []).state, 'unknown');
+  assert.equal(claimEvidence(8661, { status: 404 }, issue, [{ body: 'STATUS\nClaimed by label' }]).state, 'unknown');
+  assert.equal(claimEvidence(8661, { status: 404 }, { ...issue, assignees: ['current-holder'] }, []).state, 'unknown');
+  assert.equal(claimEvidence(8661, { status: 404 }, issue, []).state, 'absent');
+  const comments = [
+    { id: 17, body: 'STATUS\nClaimed by label', created_at: '2026-01-01' },
+    { id: 18, body: 'Hand back this task to the coordinator.', created_at: '2026-01-02', author_association: 'OWNER', html_url: 'https://example.test/18' },
+  ];
+  assert.equal(claimEvidence(8661, { status: 404, handbackComment: 18 }, issue, comments).state, 'absent');
+  assert.equal(claimEvidence(8661, { ref: 'a', message: JSON.stringify(holder), handbackComment: 18 }, issue, comments).state, 'held');
+  assert.equal(claimEvidence(8661, { status: 404, handbackComment: 18 }, { ...issue, labels: ['state:in-progress'] }, comments).state, 'unknown');
+});
+
+test('rolling alerts and landing lists are observations, and unlabelled tasks still get triage', () => {
+  const facts = { claim: { state: 'absent' }, prs: [], dependencies: [] };
+  for (const body of ['<!-- studioos-landing-list:v1 -->', '<!-- studioos-scan-alert:v1 -->']) {
+    assert.equal(lifecycleSuggestion({ body, labels: ['task'] }, facts).action, 'observe');
+  }
+  for (const labels of [['task'], ['task', 'state:review'], ['task', 'state:ready', 'state:blocked']]) {
+    assert.equal(lifecycleSuggestion({ labels }, facts).action, 'triage');
+  }
+  assert.match(lifecycleSuggestion({ labels: ['task', 'state:ready', 'needs-design'] }, facts).reason, /design or owner gate/);
+  const blocked = { labels: ['task', 'state:blocked', 'needs-design'] };
+  assert.equal(lifecycleSuggestion(blocked, { ...facts, dependencies: [{ state: 'closed', url: 'https://example.test/1' }] }).action, 'verify_blockers');
+  assert.equal(lifecycleSuggestion(blocked, { ...facts, claim: { state: 'held' } }).action, 'observe');
+});
+
+test('delta revisits dependents and explicit events without declaring any gate resolved', () => {
+  const since = '2026-11-26T00:00:00Z';
+  const quiet = { created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z' };
+  const issues = [1, 2, 3].map(number => ({ ...quiet, number }));
+  const pick = deltaSelect({ issues, since, lastNoteAt: {}, changedDependencies: new Map([[1, 34]]), eventIssues: [2] });
+  assert.deepEqual([...pick], [[1, 'dependency #34 changed'], [2, 'event concerns this issue']]);
+});
+
+test('a busy or unreadable PR feed keeps verified rows and identifies incomplete evidence', () => {
+  const since = '2026-11-26T00:00:00Z';
+  const pull = { updated_at: '2026-11-26T01:00:00Z', merged_at: '2026-11-26T01:00:00Z' };
+  const page = Array.from({ length: 100 }, () => pull);
+  const capped = recentPulls(since, () => page);
+  assert.equal(capped.rows.length, 1000);
+  assert.match(capped.incomplete, /page cap/);
+  const interrupted = recentPulls(since, path => {
+    if (path.endsWith('&page=1')) return page;
+    throw new Error('read failed');
+  });
+  assert.equal(interrupted.rows.length, 100);
+  assert.match(interrupted.incomplete, /could not be read/);
+  assert.deepEqual(recentPulls(since, () => [pull]), { rows: [pull], incomplete: null });
+});
+
+test('topic merges #8518/#8529/#8585/#8591 need verified main files; a partial PR does not close', () => {
+  const repo = 'AxalNetwork/StudioOS', blob = 'a'.repeat(40), mainSha = 'b'.repeat(40);
+  // The four issue records were delivered through #8567, #8582, #8602 and #8600.
+  // These synthetic GitHub rows model the period before their final main inclusion.
+  const prs = [8567, 8582, 8602, 8600].map(number => ({ number, baseRepo: repo, mergedAt: '2026-11-25', base: 'topic', state: 'closed', relationship: 'partial', inclusion: 'not_an_ancestor' }));
+  const documents = number => ({ pr: number, path: `topic/${number}.mjs`, blob });
+  const verification = { scope_complete: true, source_prs: prs.map(pr => pr.number), main_paths: prs.map(pr => documents(pr.number)) };
+  const finding = { verdict: 'close_done', verification };
+  const evidence = { facts: { mainSha, prs, dependencies: [] } };
+  const pullFiles = n => [{ filename: documents(n).path, sha: blob, status: 'added' }];
+  const reads = { repo, readBlob: (_path, sha) => ({ type: 'file', sha: sha === mainSha ? blob : null }), readPullFiles: pullFiles };
+  assert.equal(verifiedClosure(finding, evidence, reads), false, 'partial-only scope stays open');
+  prs[3].relationship = 'closing';
+  reads.readPullFiles = () => [];
+  assert.equal(verifiedClosure(finding, evidence, reads), false, 'topic merge without a squash witness cannot close');
+  reads.readPullFiles = n => [{ ...pullFiles(n)[0], sha: 'c'.repeat(40) }];
+  assert.equal(verifiedClosure(finding, evidence, reads), false, 'topic merge requires the exact delivered blob');
+  reads.readPullFiles = pullFiles;
+  assert.equal(verifiedClosure(finding, evidence, reads), true, 'matching blobs can prove squash inclusion');
+  assert.equal(verifiedClosure({ ...finding, verification: { ...verification, unfinished: 'one criterion' } }, evidence, reads), false);
+});
+
+test('a PR ancestor still needs a witnessed file it changed', () => {
+  const repo = 'AxalNetwork/StudioOS', blob = 'a'.repeat(40);
+  const pr = { number: 301, baseRepo: repo, mergedAt: '2026-11-25', state: 'closed', relationship: 'closing', inclusion: 'ancestor' };
+  const data = { facts: { mainSha: 'b'.repeat(40), prs: [pr], dependencies: [] } };
+  const finding = { verdict: 'close_done', verification: { scope_complete: true, source_prs: [301], main_paths: [{ pr: 301, path: 'unrelated.mjs', blob }] } };
+  const reads = { repo, readBlob: () => ({ type: 'file', sha: blob }), readPullFiles: () => [{ filename: 'delivered.mjs', sha: 'c'.repeat(40), status: 'added' }] };
+  assert.equal(verifiedClosure(finding, data, reads), false);
+  finding.verification.main_paths[0].path = 'delivered.mjs';
+  assert.equal(verifiedClosure(finding, data, reads), true, 'an independently verified later edit can be the current main blob');
+});
+
+test('a completed parent requires recorded closed children and an independently verified full scope', () => {
+  const finding = { verdict: 'close_done', verification: { scope_complete: true, completed_children: [1, 2] } };
+  const data = { facts: { prs: [], dependencies: [{ number: 1, state: 'closed', stateReason: 'completed' }, { number: 2, state: 'open' }] } };
+  assert.equal(verifiedClosure(finding, data, {}), false);
+  data.facts.dependencies[1] = { number: 2, state: 'closed', stateReason: 'not_planned' };
+  assert.equal(verifiedClosure(finding, data, {}), false);
+  data.facts.dependencies[1].stateReason = 'completed';
+  assert.equal(verifiedClosure(finding, data, {}), true);
+  assert.equal(verifiedClosure({ ...finding, verification: { ...finding.verification, scope_complete: false } }, data, {}), false);
+});
+
+test('a PR that opens during #8626-style review skips the entire apply item', async () => {
+  const issue = { number: 8626, labels: ['state:blocked'], state: 'open', updated_at: 'old' };
+  const facts = { mainSha: 'old-main', prs: [], commentDigest: 'old-comments', claim: { state: 'absent' } };
+  const evidence = { issue, facts };
+  const writes = [];
+  const options = { evidence, patch: { labels: ['state:ready'] }, note: 'reviewed note', go: true,
+    post: () => writes.push('note'), change: () => writes.push('state') };
+  const newFacts = { ...facts, prs: [{ number: 33, state: 'open' }] };
+  const result = await applyReviewedItem({ ...options, read: () => ({ issue, facts: newFacts }) });
+  assert.match(result.stale, /evidence changed/);
+  assert.deepEqual(writes, []);
+});
+
+test('interrupted apply recovers the exact posted note and applied state without its ledger', async () => {
+  const issue = { number: 1, labels: ['state:blocked'], state: 'open', updated_at: 'old' };
+  const facts = { prs: [], commentDigest: 'old-comments', claim: { state: 'absent' } };
+  const evidence = { issue, facts }, patch = { labels: ['state:ready'] };
+  let current = { issue, facts, noteDone: false };
+  let posts = 0, changes = 0;
+  const options = { evidence, patch, note: 'reviewed note', go: true, read: () => current,
+    post: () => {
+      posts++;
+      current = { ...current, issue: { ...issue, updated_at: 'our-note' }, noteDone: true };
+      throw new Error('lost response after posting');
+    },
+    change: () => {
+      changes++;
+      current = { ...current, issue: { ...issue, ...patch, updated_at: 'our-change' } };
+    },
+  };
+  await assert.rejects(applyReviewedItem(options), /lost response/);
+  assert.equal((await applyReviewedItem(options)).applied, true);
+  assert.equal((await applyReviewedItem(options)).recovered, true);
+  assert.deepEqual([posts, changes], [1, 1]);
+});
+
+test('an owner correction after posting the note fences the pending state change', async () => {
+  const issue = { number: 1, labels: ['state:blocked'], state: 'open', updated_at: 'old' };
+  const facts = { mainSha: 'main', commentDigest: 'reviewed' };
+  let current = { issue, facts, noteDone: false };
+  const result = await applyReviewedItem({ evidence: current, patch: { labels: ['state:ready'] }, note: 'reviewed note', go: true,
+    read: () => current,
+    post: () => { current = { issue, facts: { ...facts, commentDigest: 'edited-owner-answer' }, noteDone: true }; },
+    change: () => assert.fail('stale change applied'),
+  });
+  assert.match(result.stale, /evidence changed/);
 });
 
 test('landedName gives boards files the repo name and leaves pages alone', () => {

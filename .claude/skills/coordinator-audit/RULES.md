@@ -26,7 +26,7 @@ From AGENTS.md § Task protocol:
 - Exactly one `state:` label: `ready`, `in-progress`, `blocked` or `review`. There is no `state:in-review`.
 - `needs-decision` and `needs-design` only with `state:blocked`.
 - `state:review` only while a PR for the issue is open.
-- Slots are `slot:S01` to `slot:S37` (AGENTS.md § Slots).
+- Slots are `slot:S01` to `slot:S39` (AGENTS.md § Slots).
 
 Coordinator conventions (D6312; not in AGENTS.md, and AGENTS.md wins if they ever disagree):
 - Merged work that waits only on the owner's live check is `state:blocked` + `needs-decision`, not `state:review`.
@@ -36,7 +36,7 @@ Coordinator conventions (D6312; not in AGENTS.md, and AGENTS.md wins if they eve
 
 - `S01` keeps trackers, owner-only steps, design briefs and owner decisions. No build task stays on S01.
 - A new build task goes to the least-loaded slot among S02 to S37, never `S18` or `S32` (both carry programmes). Ties go to the lower number.
-- Moving an issue that is `state:in-progress` with recent activity needs the owner's word; release only stale claims (no update in 3 days and no open PR).
+- A held ref protects the task even after expiry. An unreadable ref or an unverified label claim needs human reconciliation. Record an explicit handback before treating a legacy label claim as released. The audit never changes claim refs.
 
 ## Notes
 

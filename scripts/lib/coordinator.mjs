@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { parseClaim } from './claims.mjs';
+
 /**
  * D6312: the coordinator's rules apart from GitHub: the labels an issue ends
  * with (one state, `needs-*` only when blocked, standard slots only), the
@@ -24,6 +27,157 @@ export const SLOT_RANGE = [1, 39];
 export const MARKER_VERSION = 'v1';
 /** A run id: starts with a letter or digit, so `--run --go` is never mistaken for one. */
 export const RUN_ID = /^[A-Za-z0-9][\w.-]{0,63}$/;
+
+/**
+ * A body without its HTML comments. One pass can leave a comment behind: removing the inner comment of
+ * `<!-<!-- x -->- Closes #5 -->` joins the outer halves into a new one. Repeat until nothing changes, so
+ * text GitHub hides from a reader is never read as intent.
+ */
+function withoutHtmlComments(body) {
+  let text = String(body || ''), before;
+  do { before = text; text = text.replace(/<!--[\s\S]*?-->/g, ''); } while (text !== before);
+  return text;
+}
+
+// A line or list item may name several issues. Keep intent separate per PR
+// and issue. A partial reference on the same PR wins over a closing keyword.
+export function prRelationships(body, repo = 'AxalNetwork/StudioOS') {
+  const linked = new Map();
+  const reference = '(?:https://github\\.com/[\\w.-]+/[\\w.-]+/issues/\\d+|#\\d+)';
+  const referenceList = new RegExp(`^${reference}(?:(?:\\s*,\\s*|\\s+)(?:and\\s+)?${reference})*`);
+  let fenced = false;
+  for (const line of withoutHtmlComments(body).split('\n')) {
+    if (/^\s{0,3}(?:```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced || /^\s*>/.test(line) || /^(?: {4}|\t)/.test(line)) continue;
+    const prose = line.replace(/`+[^`]*`+/g, ' ');
+    for (const directive of prose.matchAll(/(?:^|[\s.!;])(closes?|fix(?:es)?|resolves?|part of|refs?)\s+/gi)) {
+      const kind = /^(part|ref)/i.test(directive[1]) ? 'partial' : 'closing';
+      const list = referenceList.exec(prose.slice(directive.index + directive[0].length))?.[0] || '';
+      for (const ref of list.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)|#(\d+)\b/g)) {
+        if (ref[1] && ref[1].toLowerCase() !== repo.toLowerCase()) continue;
+        const n = Number(ref[2] || ref[3]);
+        if (kind === 'partial' || !linked.has(n)) linked.set(n, kind);
+      }
+    }
+  }
+  return linked;
+}
+
+export function generatedIssue(issue) {
+  return /<!-- studioos-(?:landing-list|scan-alert|health|section-incident):v1\b/.test(issue.body || '')
+    || /^\[alert\]/i.test(issue.title || '');
+}
+
+// A missing ref is only a positive observation when the exact read returned
+// 404. A label-based claim can persist without a ref. Age proves neither.
+export function claimEvidence(number, { ref, message, status, handbackComment }, issue, comments) {
+  if (ref) {
+    const holder = parseClaim(message);
+    if (holder?.issue !== number) return { state: 'unknown', ref };
+    return { state: 'held', ref, holder };
+  }
+  if (status !== 404) return { state: 'unknown', status: status ?? null };
+  const latestStatus = [...comments].reverse().find(comment => /(?:^|\n)STATUS\s*\n/.test(comment.body || ''));
+  if (issue.labels.includes('state:in-progress')) return { state: 'unknown', reason: 'issue still marked in progress' };
+  if (issue.assignees?.length || /claimed by label/i.test(latestStatus?.body || '')) {
+    const handback = comments.find(comment => comment.id === handbackComment);
+    if (!handback || !['OWNER', 'MEMBER', 'COLLABORATOR'].includes(handback.author_association)
+      || !/\bhand(?:s|ed)?[ -]back\b|\brelease(?:d|s)?\s+(?:the\s+)?claim\b/i.test(handback.body || '')
+      || (latestStatus && handback.created_at <= latestStatus.created_at)) return { state: 'unknown', reason: 'assignee or label-based ownership needs a verified handback' };
+    return { state: 'absent', handback: { id: handback.id, url: handback.html_url } };
+  }
+  return { state: 'absent' };
+}
+
+export function issueEvidenceDigest(value) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+export function lifecycleSuggestion(issue, { claim, prs, dependencies }) {
+  if (generatedIssue(issue)) return { action: 'observe', reason: 'generated report or alert' };
+  if (claim?.state !== 'absent') return { action: 'observe', reason: `ownership ${claim?.state || 'unknown'}` };
+  const states = issue.labels.filter(l => l.startsWith('state:'));
+  if (issue.labels.some(label => ['needs-design', 'needs-decision'].includes(label)) && !states.includes('state:blocked')) {
+    return { action: 'triage', reason: 'the task state conflicts with a design or owner gate' };
+  }
+  const open = prs.filter(pr => pr.state === 'open' && pr.implementation);
+  if (open.length) return states.length === 1 && states[0] === 'state:review' ? null
+    : { action: 'state:review', reason: 'open implementation PR', links: open.map(pr => pr.url) };
+  const closing = prs.filter(pr => pr.relationship === 'closing' && pr.inclusion === 'ancestor');
+  if (closing.length) return { action: 'verify_closure', reason: 'review full acceptance against recorded main', links: closing.map(pr => pr.url) };
+  if (states.includes('state:review') || (issue.labels.includes('task') && (states.length !== 1 || !STATES.includes(states[0])))) {
+    return { action: 'triage', reason: 'determine remaining scope and the correct task state' };
+  }
+  if (states.includes('state:blocked') && dependencies.some(item => item.state === 'closed')) {
+    return { action: 'verify_blockers', reason: 'a dependency closed; verify each remaining gate', links: dependencies.map(item => item.url) };
+  }
+  if (issue.labels.includes('tracker') && dependencies.length && dependencies.every(item => item.state === 'closed')) {
+    return { action: 'verify_closure', reason: 'linked work closed; verify the parent’s remaining scope', links: dependencies.map(item => item.url) };
+  }
+  const landedParts = prs.filter(pr => pr.relationship === 'partial' && pr.inclusion === 'ancestor');
+  if (landedParts.length) return { action: 'verify_remaining_scope', reason: 'a partial delivery reached main', links: landedParts.map(pr => pr.url) };
+  return null;
+}
+
+export function verifiedClosure(finding, { facts }, { repo, readBlob, readPullFiles }) {
+  const v = finding.verification;
+  if (facts.prs.some(pr => pr.state === 'open' && pr.implementation)) return false;
+  const closed = n => facts.dependencies.some(item => item.number === n && item.state === 'closed');
+  if (finding.verdict === 'close_superseded') return Number.isSafeInteger(v.replacement_issue) && closed(v.replacement_issue);
+  if (v.scope_complete !== true || v.unfinished) return false;
+  const children = v.completed_children || [];
+  const completed = n => facts.dependencies.some(item => item.number === n && item.state === 'closed' && item.stateReason === 'completed');
+  if (!Array.isArray(children) || !children.every(completed)) return false;
+  const witnesses = v.main_paths || [];
+  if (!Array.isArray(witnesses) || witnesses.length > 20) return false;
+  if (v.source_prs && !Array.isArray(v.source_prs)) return false;
+  const sources = (v.source_prs || []).map(n => facts.prs.find(pr => pr.number === n));
+  if (sources.some(pr => !pr?.mergedAt || pr.baseRepo !== repo)) return false;
+  if (!sources.some(pr => pr.relationship === 'closing') && !children.length) return false;
+  if (sources.length && !witnesses.length) return false;
+  try {
+    const witnessedPrs = new Set();
+    const changedFiles = new Map();
+    for (const { path, blob, pr: number } of witnesses) {
+      if (typeof path !== 'string' || path.split('/').some(p => !p || p === '.' || p === '..') || !/^[0-9a-f]{40}$/.test(blob)) return false;
+      const pr = sources.find(item => item.number === number);
+      if (!pr) return false;
+      const file = readBlob(path, facts.mainSha);
+      if (file.type !== 'file' || file.sha !== blob) return false;
+      if (!changedFiles.has(number)) changedFiles.set(number, readPullFiles(number));
+      const inPull = changedFiles.get(number).some(item => item.filename === path && item.status !== 'removed'
+        && (pr.inclusion === 'ancestor' || item.sha === blob));
+      if (!inPull) return false;
+      witnessedPrs.add(number);
+    }
+    return sources.every(pr => witnessedPrs.has(pr.number));
+  } catch { return false; }
+}
+
+/** Revalidate before each write, including recovery when the local ledger is gone. */
+export async function applyReviewedItem({ evidence, patch, note, read, post, change, go }) {
+  const { updated_at: initialAt, ...initial } = evidence.issue;
+  const target = { ...initial, ...patch };
+  const observations = issueEvidenceDigest(evidence.facts);
+  const matches = async () => {
+    const current = await read();
+    const { updated_at: at, ...issue } = current.issue;
+    if (issueEvidenceDigest(current.facts) !== observations) return { stale: 'reviewed PR, dependency, comment, claim or main evidence changed' };
+    if (issueEvidenceDigest(issue) === issueEvidenceDigest(initial) && (at === initialAt || current.noteDone)) return { noteDone: current.noteDone };
+    if (current.noteDone && issueEvidenceDigest(issue) === issueEvidenceDigest(target)) return { recovered: true };
+    return { stale: 'issue changed since review' };
+  };
+  const before = await matches();
+  if (before.stale || before.recovered || !go) return before;
+  if (note && !before.noteDone) {
+    await post(note);
+    const after = await matches();
+    if (after.stale || after.recovered) return after;
+    if (!after.noteDone) return { stale: 'posted note is not visible on revalidation' };
+  }
+  if (Object.keys(patch).length) await change(patch);
+  return { applied: true };
+}
 
 /** `slot:s39` → `S39`; anything that is not a slot label → null. */
 export function slotOf(label) {
@@ -216,7 +370,7 @@ export function renderNote(f, { runId, mainSha, date, labelText = '', closing = 
  * verifier said it is safe; a note is dropped when the verifier could not
  * support it; a label change is applied only when the verifier accepted it.
  */
-export function planFromFindings(findings) {
+export function planFromFindings(findings, { evidence, canClose } = {}) {
   const seen = new Set();
   return findings.map(f => {
     if (seen.has(f.number)) throw new Error(`two findings for #${f.number}`);
@@ -224,16 +378,24 @@ export function planFromFindings(findings) {
     const v = f.verification || {};
     const isClose = f.verdict === 'close_done' || f.verdict === 'close_superseded';
     // A close always comes with its note: an unsupported note blocks the close too.
-    const closing = isClose && v.safe_to_close === true && v.note_supported !== false;
+    const facts = evidence?.[f.number];
+    const protectedIssue = evidence && (!facts || facts.facts.claim.state !== 'absent' || generatedIssue(facts.issue));
+    const closing = isClose && v.safe_to_close === true && v.note_supported === true
+      && facts && !protectedIssue && canClose(f, facts);
     const merged = { ...f, ...(v.corrected || {}) };
-    if (isClose && !closing && v.unfinished) merged.unfinished = v.unfinished;
+    if (isClose && !closing) {
+      merged.verdict = 'needs_status_fix';
+      merged.unfinished = v.unfinished || 'Verified full-scope evidence on main is still needed.';
+    }
     const quiet = f.verdict === 'keep_as_is' && !merged.remaining_work && !merged.owner_question && !f.label_change;
+    const note = protectedIssue || v.note_supported !== true || quiet ? null : merged;
     return {
       number: f.number,
       kind: f.kind || null,
-      note: v.note_supported === false || quiet ? null : merged,
-      labelChange: closing ? null : (v.label_change_ok === true ? f.label_change || null : null),
+      note,
+      labelChange: !note || closing || v.label_change_ok !== true ? null : f.label_change || null,
       close: closing ? (f.verdict === 'close_superseded' ? 'not_planned' : 'completed') : null,
+      ...(facts ? { evidence: facts } : {}),
     };
   });
 }
@@ -244,14 +406,17 @@ export function planFromFindings(findings) {
  * that follows a note), or named by a PR merged since `since`.
  * `lastNoteAt` maps issue → ISO time of its latest audit note.
  */
-export function deltaSelect({ issues, since, lastNoteAt, mergedPrBodies = [], graceMinutes = 10 }) {
+export function deltaSelect({ issues, since, lastNoteAt, mergedPrBodies = [], changedDependencies = new Map(), eventIssues = [], graceMinutes = 10, repo }) {
   const named = new Set();
-  for (const b of mergedPrBodies) for (const m of String(b || '').matchAll(/#(\d{1,6})\b/g)) named.add(Number(m[1]));
+  for (const body of mergedPrBodies) for (const n of prRelationships(body, repo).keys()) named.add(n);
+  const events = new Set(eventIssues);
   const sinceMs = Date.parse(since), grace = graceMinutes * 60e3;
   const out = new Map();
   for (const i of issues) {
     const note = lastNoteAt[i.number] ? Date.parse(lastNoteAt[i.number]) : null;
-    if (Date.parse(i.created_at) > sinceMs) out.set(i.number, 'new since the last audit');
+    if (events.has(i.number)) out.set(i.number, 'event concerns this issue');
+    else if (changedDependencies.has(i.number)) out.set(i.number, `dependency #${changedDependencies.get(i.number)} changed`);
+    else if (Date.parse(i.created_at) > sinceMs) out.set(i.number, 'new since the last audit');
     else if (named.has(i.number)) out.set(i.number, 'named by a merged PR');
     else if (Date.parse(i.updated_at) > sinceMs && (note === null || Date.parse(i.updated_at) > note + grace)) out.set(i.number, 'activity after its last audit note');
   }
