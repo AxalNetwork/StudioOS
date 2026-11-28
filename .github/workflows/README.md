@@ -19,6 +19,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `archive-observer-deploy.yml` | Archive observer deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
 | `backup-d1.yml` | Daily D1 Backup → R2 | — | — | — | — | backup (advisory, conditional) | `workflow_dispatch` · backup (advisory, conditional) |
 | `beta-readiness-reaudit.yml` | Beta Readiness Re-audit Reminder | — | — | — | — | open-tracking-issue (advisory) | `workflow_dispatch` · open-tracking-issue (advisory) |
+| `billing-webhook-contracts.yml` | Billing webhook contracts | Stripe webhook fulfilment (real Worker, local D1) (advisory, conditional) | — | — | — | — | — |
 | `branch-provision.yml` | Provision a branch | — | — | — | — | — | `workflow_dispatch` · provision ${{ inputs.code }} (advisory) |
 | `build-worker-contracts.yml` | Build Worker contracts | Build connector and mapping contracts (advisory, conditional) | — | — | — | — | — |
 | `capacity-planner.yml` | Capacity pilot planner | — | — | — | — | — | `workflow_call` · submit (advisory, conditional) |

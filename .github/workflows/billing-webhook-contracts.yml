@@ -1,0 +1,51 @@
+name: Billing webhook contracts
+
+# #9165: billing_webhook_fulfilment.test.mjs boots the real Worker against a
+# local D1 and replays Stripe events (no double grant on replay, out-of-order
+# subscription events, a delete scoped to one subscription, the founder-tier
+# and investor pipes). It is gated on RUN_BILLING_WEBHOOK_TEST because it takes
+# about two minutes, and nothing set the variable, so it went dark. This job
+# sets it on the pull requests that touch the webhook or the test, and
+# billing_webhook_ci_9165.test.mjs fails if no workflow sets it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - 'cloudflare-worker/src/routes/billing*.ts'
+      - 'cloudflare-worker/src/services/stripe*.ts'
+      - 'cloudflare-worker/src/services/planSubscription.ts'
+      - 'cloudflare-worker/src/services/financialEvents.ts'
+      - 'cloudflare-worker/test/billing_webhook_*.test.mjs'
+      - 'cloudflare-worker/test/_schema_once.mjs'
+      - '.github/workflows/billing-webhook-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: billing-webhook-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Stripe webhook fulfilment (real Worker, local D1)
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+      - name: Stripe webhook fulfilment invariants
+        env:
+          RUN_BILLING_WEBHOOK_TEST: '1'
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/billing_webhook_fulfilment.test.mjs
