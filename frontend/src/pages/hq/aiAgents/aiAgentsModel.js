@@ -58,6 +58,8 @@ export function viewFor(pathname = '') {
     if (a && b === 'edit') return { tab: 'skills', sub: 'editor', skill: decodeURIComponent(a) };
     return { tab: 'skills', sub: 'axal' };
   }
+  // D8070 part 2: Policies › Capabilities, the second view of the Policies tab (SA10, D4137-p2).
+  if (tab === 'operations' && a === 'policies' && b === 'capabilities') return { tab: 'operations', sub: 'capabilities' };
   if (tab === 'operations') return { tab: 'operations', sub: ['spend', 'policies', 'audit'].includes(a) ? a : 'runs' };
   return { tab: 'overview', sub: null };
 }
