@@ -131,7 +131,7 @@ export const TRACKER_WARNING = 'Ordinary tickets and their replies may be mirror
 export const TRACKER_WARNING_LINK = Object.freeze({ label: 'Read private disclosure options', path: '/trust/disclosure' });
 
 /** The guide page's "On this page", in the canvas's order, only for the parts this guide has. */
-export function guideOutline(sub, { related = 0, feedback = false, stuck = false } = {}) {
+export function guideOutline(sub, { related = 0, support = false, feedback = false, stuck = false } = {}) {
   return [
     sub?.overview && { id: 'overview', label: 'Overview' },
     Array.isArray(sub?.beforeYouStart) && sub.beforeYouStart.length > 0 && { id: 'before-you-start', label: 'Before you start' },
@@ -140,21 +140,73 @@ export function guideOutline(sub, { related = 0, feedback = false, stuck = false
     Array.isArray(sub?.tips) && sub.tips.length > 0 && { id: 'tips', label: 'Tips' },
     Array.isArray(sub?.pitfalls) && sub.pitfalls.length > 0 && { id: 'pitfalls', label: 'Pitfalls' },
     related > 0 && { id: 'related', label: 'Related guides' },
+    support && { id: 'get-help', label: 'Get help' },
     feedback && { id: 'feedback', label: 'Did this answer it?' },
     stuck && { id: 'still-stuck', label: 'Still can’t get in?' },
   ].filter(Boolean);
 }
 
 /**
- * A ticket opened from a guide after "No" carries the guide's link and the
- * member's own words, and nothing else: both shown, both editable.
+ * A ticket opened from a guide carries the guide's link, the search that led
+ * there (D4640) and the member's own words, and nothing else: all shown, all
+ * editable before Submit. No record, note or account detail is copied in.
  */
-export function guideTicketDraft({ anchor, title, missing }) {
+export function guideTicketDraft({ anchor, title, missing, query }) {
   const words = String(missing || '').trim();
   const firstLine = words.split(/\n/)[0].slice(0, 120).trim();
+  const q = cleanQuery(query);
   return {
     title: (firstLine || `Question about “${title}”`).slice(0, 200),
-    description: `From the guide: /help/${anchor}${words ? `\n\n${words}` : ''}`,
+    description: `From the guide: /help/${anchor}${q ? `\nSearched for: “${q}”` : ''}${words ? `\n\n${words}` : ''}`,
+  };
+}
+
+// ── D4640: the journey from a question to a guide and back ─────────────────
+
+/** A search carried in an address is at most this long: a question, not a document. */
+export const QUERY_MAX = 200;
+
+/** The query as an address or a ticket carries it: trimmed, one line, at most `QUERY_MAX`. */
+export function cleanQuery(query) {
+  return String(query || '').replace(/\s+/g, ' ').trim().slice(0, QUERY_MAX).trim();
+}
+
+/** The Help home showing a search's results, `/help?q=<query>`; `/help` with no query. */
+export function searchHref(query) {
+  const q = cleanQuery(query);
+  return q ? `/help?q=${encodeURIComponent(q)}` : '/help';
+}
+
+/**
+ * A guide's address carrying the search that found it, `/help/<area>/<guide>?q=<query>`,
+ * so the guide can offer the results again and a ticket from it can say what was searched.
+ */
+export function guideHrefFor(anchor, query) {
+  const q = cleanQuery(query);
+  return q ? `/help/${anchor}?q=${encodeURIComponent(q)}` : `/help/${anchor}`;
+}
+
+/**
+ * A plain left click on a result: the page opens it itself, so the results'
+ * address can be kept first. Any other click (a new tab, a modifier) is the
+ * browser's.
+ */
+export const isPlainClick = (e) => !!e && e.button === 0 && !e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey;
+
+/** What's new: its body is a separate Markdown file the guide fetches, so the search index never holds it. */
+export const RELEASE_NOTES_ANCHOR = 'changelog/release-notes';
+
+/**
+ * What the search reads, said where the results are (D4640). The index holds
+ * each guide's title and written text; release notes load on their own page
+ * and are not searched, so the line links them when this viewer can read them.
+ */
+export function searchScope(sections) {
+  const s = (sections || []).find((x) => x.id === RELEASE_NOTES_ANCHOR.split('/')[0]);
+  const g = s?.subsections.find((x) => x.id === RELEASE_NOTES_ANCHOR.split('/')[1]);
+  return {
+    line: g ? 'Searches guide titles and text. Release notes are not searched.' : 'Searches guide titles and text.',
+    notes: g ? { anchor: RELEASE_NOTES_ANCHOR, label: `Read ${s.title}` } : null,
   };
 }
 

@@ -118,7 +118,8 @@ test('HC3: the results draw the live line, chips, an option per result and the 2
   assert.match(layout, /aria-controls="help-results"/);
   assert.match(layout, /aria-activedescendant=\{activeId \|\| undefined\}/);
   assert.match(layout, /if \(e\.key === 'ArrowDown' \|\| e\.key === 'ArrowUp'\)/);
-  assert.match(layout, /if \(r\) \{ e\.preventDefault\(\); navigate\(guideHref\(r\.anchor\)\); \}/);
+  // D4640: Enter opens the selected guide through the same path a click takes, keeping the search.
+  assert.match(layout, /if \(r\) \{ e\.preventDefault\(\); openGuide\(r\.anchor\); \}/);
   assert.match(layout, /else if \(e\.key === 'Escape'\)/);
 });
 
