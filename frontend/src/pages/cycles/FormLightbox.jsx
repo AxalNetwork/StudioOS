@@ -28,7 +28,7 @@
  * completion belongs to the form instance that sent it.
  */
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
-import Lightbox from '../../ui/Lightbox.jsx';
+import Lightbox, { useLightboxPage } from '../../ui/Lightbox.jsx';
 import { MODULES } from './modules.js';
 import { CYCLES, safeHref } from './cycleModel.js';
 import { validate } from './forms.js';
@@ -208,6 +208,18 @@ function FieldHead({ fill, name, label, value, busy, children }) {
 
 /** What stays live behind an open form: the AIRail and the Ask panel (`data-sheet-keep`, D1317's own mark). */
 export const FORM_KEEP = Object.freeze(['[data-sheet-keep]']);
+
+/**
+ * D8729 part 3 (#8729, SFD12C): below 1024px the form is a page (D695) whose
+ * bar shows only the title and the module Back returns to, so the dialog's
+ * first line, "Atlas Orchard · Build · Solution design", was lost there. When
+ * Studio named the venture, the page draws that line at the top of its body;
+ * as a dialog the eyebrow already carries it, so nothing more is drawn.
+ */
+function PageVentureLine({ text }) {
+  if (!useLightboxPage()) return null;
+  return <p className="m-0 px-5 pt-4 text-[11px] font-extrabold uppercase tracking-wide text-axal-muted dark:text-gray-400" data-testid="cycle-form-venture">{text}</p>;
+}
 
 export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, venture = null, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null, focusField = null }) {
   const id = useId();
@@ -391,6 +403,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   </div>;
   // D1443 part 4 (#3992, S1's B = a): the rail and the Ask panel stay live beside the open form, so Ask opens next to it.
   return <Lightbox keep={FORM_KEEP} pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={dismiss} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
+    {typeof venture === 'string' && venture.trim() ? <PageVentureLine text={eyebrow} /> : null}
     {readOnly ? <p role="status" data-testid="cycle-form-read-only" className="m-0 px-5 pt-4 text-[13px] text-axal-muted dark:text-gray-400">{readOnly}</p> : null}
     {readRecovery ? <div className="px-5 py-4">{readRecovery}</div> : null}
     {!readRecovery && <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">

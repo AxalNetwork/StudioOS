@@ -28,3 +28,9 @@
 .fs-advisor-unavailable-note strong { color: #292638; font-size: 12.5px; }
 :root[data-theme="dark"] .fs-advisor-unavailable, .dark .fs-advisor-unavailable { background: rgba(17, 24, 39, .4); border-color: #374151; }
 :root[data-theme="dark"] .fs-advisor-unavailable-note strong, .dark .fs-advisor-unavailable-note strong { color: #fff; }
+
+/* D8729 part 3 (#8729): a phone's 44px target. `min-h-11` on an `sm-btn` (the
+   Next card's primary, the venture links in the unavailable notice) lost to
+   `.sm-btn { min-height: 40px }` in studioModules.css, which is unlayered and
+   so beats Tailwind's layered utilities: measured at 40px at 390 × 844. */
+.fs-root .sm-btn.min-h-11 { min-height: 44px; }
