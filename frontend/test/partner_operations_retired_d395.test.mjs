@@ -101,9 +101,13 @@ test('D395: no link in the product still points at a retired address, except the
     assert.equal(to, SUCCESSOR[from], `shellConfig says ${from} → ${to}; App.jsx says ${SUCCESSOR[from]}`);
   }
   // Partner Studio's body is P2 (D564); its links name the successors.
+  // D8733: each feed alert opens its own item, so the successors are named with the item they carry
+  // (`studioLink('/delivery/board', { engagement })`, built in the feed's model); the tiles still link the Board.
   const home = codeOnly(raw('frontend/src/pages/partner/PartnerHomeP2.jsx'));
-  assert.match(home, /to: '\/delivery\/board'/);
-  assert.match(home, /to: '\/delivery\/health'/);
+  const feed = codeOnly(raw('frontend/src/pages/partner/firmFeedModel.js'));
+  assert.match(home, /href: '\/delivery\/board'/);
+  assert.match(feed, /studioLink\('\/delivery\/board', /);
+  assert.match(feed, /studioLink\('\/delivery\/health', /);
   const tabs = codeOnly(raw('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx'));
   assert.match(tabs, /\{ to: '\/pipeline\/retainers', label: 'Retainers'/);
   assert.match(tabs, /\{ to: '\/offers\/proof', label: 'Proof'/);

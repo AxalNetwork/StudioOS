@@ -114,5 +114,48 @@ export default {
         { label: 'Roadmap', href: '#build/roadmap' },
       ],
     },
+    // D8994 (#8994): Share outside Axal (D6864, D6897). Every label a step quotes is one the page draws, and every
+    // rule is the Worker's own (services/raiseEvidenceShare.ts); help_evidence_share_8994.test.mjs pins both.
+    {
+      id: 'share-evidence',
+      title: 'Raise › Evidence: share evidence outside Axal',
+      roles: ['admin', 'founder'],
+      overview:
+        "Share outside Axal makes a dated copy of the evidence you already share, for a reader who is not on Axal. You get a link, or a PDF copy, and send it yourself: Axal sends nothing. The reader opens the link with no sign-in and sees no more than an invited investor on Axal would see at that point. A Private item, a quote without consent and a file the data room refuses never leave.",
+      beforeYouStart: [
+        "Only the venture’s founders can share outside Axal. An admin or Super Admin reading the venture gets no Share outside Axal action and cannot open its Shared links.",
+        'At least one item at Raise › Evidence is shared beyond Private, as Summary or After NDA. Until then the sheet says “Nothing is shared beyond Private yet, so there is no pack to make.”',
+      ],
+      howto: [
+        'Open Raise › Evidence (/raise/evidence) and choose Share outside Axal, beside Add evidence. The Evidence pack sheet opens.',
+        'Under Output choose Link or PDF. A link is dated, has an expiry and a view limit, and you can revoke it. A PDF is an A4 page you download and send yourself; it cannot be stopped or counted.',
+        'Under Who reads it, keep Before an NDA: coverage only, or choose An NDA is signed outside Axal. For the second, tick “I confirm an NDA with this reader is signed outside Axal.” and enter Day the NDA was signed, which cannot be in the future. Axal stores your confirmation and that day; it does not hold or check the NDA.',
+        'Enter a Label, such as who the pack is for, in up to 80 characters. For a link, set Expires after (days), from 1 to 90 (14 unless you change it), and View limit, from 1 to 100 (10 unless you change it).',
+        'Check The reader sees. Before an NDA every row reads coverage only. After an NDA each item reads Summary with figure, Summary, no figure, Summary · Not recorded, or Value withheld with its reason; untick an item under Items in this pack to leave it out.',
+        'Choose Create pack, or Download PDF for a PDF. For a link, Pack ready shows it and says “Nothing was sent. Copy the link and send it yourself.” Use Copy link. The pack carries no file: to let this reader open files, give them Data room access.',
+        'To share your readiness instead, open Raise › Fundraising readiness (/raise/fundraising-readiness) and choose Share outside Axal. The Readiness snapshot sheet takes Who it is for, an optional Covering line of one sentence (at most 200 characters), Link or PDF, and the same expiry and Views allowed. Choose Create link.',
+        'What the reader sees at /share/evidence/<link>: a page headed Evidence pack with your venture’s name, dated “As of” the day you made it, saying “This pack does not update”. Before an NDA it shows What is on record: area, kind, source, how many and the newest day, with no figures, files or quotes. After an NDA it shows Evidence, each item with its source, day and strength, a figure only for items you share After NDA, and Value withheld with its reason. Claims these items back gives each claim’s state in words. A Mismatch is never hidden, and the note you wrote on it shows under it as Founder’s note while it was written against the figure you still state. The footer gives the day the link expires. There is no sign-in and no Eadwyn.',
+        'A readiness snapshot reader, at /share/readiness/<link>, sees the seven readiness areas, each with its score out of 10, its evidence, what is missing and the day it was scored. An area with no score reads Not scored yet, never 0; Team reads Team is assessed by a person. There is no overall score and no Product-market fit row.',
+        'To follow or stop a link, open Shared links (/raise/evidence/shared). Each row gives what it shares, the item count, when it was created and expires, views against the limit, when it was last opened, and its state: Live, Expired, Used up or Revoked. On a Live row choose Revoke, review what it stops, and confirm Revoke link.',
+        'Outcome: the reader opens the dated copy until it expires, uses its last view or is revoked. After that they see only a page that says why: This link has expired, This link has been opened as many times as its sender allowed, or This link was stopped by the founder. An unknown or mistyped address says This link does not open anything. None of these pages names the venture or shows any evidence, and none uses a view. A revoked, expired or used-up row stays on Shared links, in grey.',
+      ],
+      tips: [
+        'For a pack after an NDA, Ask Eadwyn under The reader sees proposes a selection of items for one reader you describe, and on a readiness snapshot Use Eadwyn’s draft offers a covering line. Each run shows its cost and runs only when you confirm it. Accept selection only ticks rows, and an accepted line stays yours to edit; you still make the pack, and nothing is sent.',
+        'Shared links lists your readiness snapshots and Raise status pages beside your evidence packs, and your PDF copies apart under PDF copies, so you can see everything that left Axal in one place.',
+      ],
+      pitfalls: [
+        'Every open uses one view, including the same reader opening the page again or reloading it. Set the view limit with that in mind.',
+        'A pack is frozen when you make it and the reader’s copy never changes. When your evidence changes, a Live row says Changed since sent; choose Make a new pack, send the new link, and revoke the old one if it should stop. Could not be compared means the current evidence could not be read, not that nothing changed.',
+        'Revoking stops the link, not a PDF copy that already left. A PDF cannot be stopped and its opens are not counted.',
+        'The link is the only key: anyone who holds a live link can open it. Send it only to the reader you labelled it for.',
+      ],
+      related: [
+        { label: 'Data Room', href: '#validate-grow/data-room' },
+        { label: 'NDA flows', href: '#legal/nda' },
+        { label: 'Sharing your pitch deck via a link', href: '#build/deck-share-viewer' },
+        { label: 'AI allowance and token balance', href: '#account/balances' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
   ],
 };

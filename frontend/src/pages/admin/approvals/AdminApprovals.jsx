@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
+import { branchLabel, branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
+import { fromStudio } from '../studioOverdue';
 import { useHeldGlance } from '../heldFigures';
 import { HQ_LANES, LINE, MOVED_KEY, MOVED_NOTICE, RAIL_NOTE, TITLE, laneViews, tabOf } from './approvalsModel';
 import { assignItems, queueStep, decidedQueryOf, inboxQueryOf, itemOfPath, refusalToast, waitingFigure } from './inboxModel';
@@ -33,6 +34,13 @@ import { Decided } from './ApprovalsDecided';
  * Not-a-queue card), because the reachability walk (admin_route_reachability)
  * reads navigation syntax, and for LP applications, Best-Fit, Due diligence
  * and Spin-Out moderation this page is the HQ-held shell's only way in.
+ *
+ * D8728 (#8728) — opened from Studio (router state `{ from: '/studio' }`, the
+ * overdue card's "Review overdue in Approvals"), the header carries the crumb
+ * "Studio › Approvals" ("‹ Studio" on a phone); a direct visit or a shared
+ * link has none, so it never claims a route the reader did not take (SAD13
+ * L6). On a branch the scope chip names the territory the read ran for
+ * (`branchLabel`) instead of HQ's fixed "HQ-held accounts" label.
  */
 
 
@@ -40,6 +48,17 @@ import { Decided } from './ApprovalsDecided';
 export { BandPill, UrgencyPill } from './approvalsUi';
 export { LaneDoor, HqDoor } from './approvalDoors';
 export { AssignDialog, OwnerCell } from './ApprovalsAssign';
+
+const STUDIO_CRUMB = { to: '/studio', label: 'Studio', current: TITLE };
+
+/** D8728: the scope chip on a branch — the territory this inbox was read for. */
+export function TerritoryChip({ user }) {
+  return (
+    <span className="inline-flex rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="admin-page-scope">
+      {`${branchLabel(user) || 'This territory'} · this territory`}
+    </span>
+  );
+}
 
 /** The page itself; `viewer` stands in for the signed-in account where a caller has one (tests). */
 export function ApprovalsPage({ viewer = null }) {
@@ -129,7 +148,7 @@ export function ApprovalsPage({ viewer = null }) {
   );
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-approvals">
-      <AdminPageHeader title={TITLE} line={LINE} scope notice={{ text: notice.text, onDismiss: notice.dismiss }} tabs={tabs} data-testid="approvals-header" />
+      <AdminPageHeader crumb={fromStudio(loc.state) ? STUDIO_CRUMB : null} title={TITLE} line={LINE} scope={!studio} chip={studio ? <TerritoryChip user={user} /> : null} notice={{ text: notice.text, onDismiss: notice.dismiss }} tabs={tabs} data-testid="approvals-header" />
       {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} superAdmin={superAdmin} studio={studio} callerId={user?.id ?? null} onAssign={openAssign} toast={setToastText} /> : null}
       {tab === 'lanes' ? <Lanes views={views} glance={glance} inbox={inbox} superAdmin={superAdmin} /> : null}
       {tab === 'decided' ? <Decided decided={decided} superAdmin={superAdmin} /> : null}

@@ -18,6 +18,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
+import StudioBackLink from './investor/StudioBackLink';
 import { usePageMeta } from '../lib/seo';
 import { track } from '../lib/funnel';
 import { api } from '../lib/api';
@@ -787,7 +788,8 @@ export function PricingBody({ user = null }) {
 /** A member's /pricing: inside the app shell, so the page sets its own title. */
 function MemberPricing({ user }) {
   usePageMeta({ title: 'Pricing' });
-  return <PricingBody user={user} />;
+  // D8731 (#8731): Usage & quota's "Compare investor plans" opens this page; on a phone it offers ‹ Studio back.
+  return <><StudioBackLink /><PricingBody user={user} /></>;
 }
 
 /**

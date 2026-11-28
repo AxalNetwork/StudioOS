@@ -91,6 +91,8 @@ export const SURFACES = [
   ['prompt', 'cloudflare-worker/src/services/market_intel/extractors/index.ts', 'the paraphrase systemPrompt'],
   // D6862: Eadwyn's read of a decision's evidence, its system message and its task card.
   ['prompt', 'cloudflare-worker/src/services/verdictSummary.ts', 'the evidence read systemPrompt'],
+  ['prompt', 'cloudflare-worker/src/services/agents/skillCompareProposals.ts', 'D8827: the Compare with Axal proposals systemPrompt'],
+  ['copy', 'frontend/src/pages/team/SkillProposals.jsx', 'D8827: Eadwyn\'s rail on Compare with Axal — summary, proposals, unavailable state'],
   ['copy', 'frontend/src/pages/cycles/VerdictEvidencePanel.jsx', 'the Read the evidence task card on Record a decision'],
   ['copy', 'frontend/src/pages/cycles/FeedbackTab.jsx', 'Grow › Feedback: Eadwyn\'s theme placements and their review (D6865 part 2)'],
 ];

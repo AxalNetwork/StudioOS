@@ -9,7 +9,12 @@ export default function FundOverviewSection({
   F, P, downloadBrief, briefBusy, briefErr, econ
 }) {
 return (
-<section id="fund" aria-label="Fund and terms" tabIndex={-1} className="space-y-6 scroll-mt-6">
+<section id="fund" aria-labelledby="fund-heading" tabIndex={-1} className="space-y-6 scroll-mt-6">
+      {/* D8731 (#8731): the heading Studio's "See Axal VC Fund terms" names; it takes focus on arrival at #fund. */}
+      <div className="flex items-end justify-between gap-3">
+        <h2 id="fund-heading" tabIndex={-1} data-section-heading="" className={LBL}>Fund and terms</h2>
+        <span className="text-[11.5px] text-gray-400 dark:text-gray-500">The fund brief, open to every investor</span>
+      </div>
       {/* hero + raise progress */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e1533] via-[#2d1d52] to-[#3b2470] p-8 text-white">

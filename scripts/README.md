@@ -147,6 +147,7 @@ describes itself in [the generated list](#the-files) below.
 | `__pycache__/` | Python bytecode. Not source. |
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
+| `qualification/` | D8688 (#8688): the role qualification. `role-matrix.mjs` runs the five role scenarios and a pending-review control through the real Worker on local synthetic data, and prints the role-by-role pass/fail matrix. It fails closed on any target that is not isolated. See its README. |
 
 ## The files
 

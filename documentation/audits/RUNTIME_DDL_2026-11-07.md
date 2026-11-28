@@ -77,3 +77,10 @@ through `runSchemaBootstrap`. A failed schema check returns
 next request. Anonymous reads that bypassed role bootstrap still bypass it.
 
 The guard baseline drops from 310 to 309 statements, in 41 files instead of 42.
+
+### #5343 batch 5 — ten service bootstraps
+
+Ten service bootstraps whose failure path was already settled move onto
+`runSchemaBootstrap`; the guard baseline drops from 304 to 266 statements, in 30
+files instead of 40. The files, the two kept back (`referralCommissions.ts`,
+`sanctions.ts`) and why are in `documentation/architecture/decisions/D5343-p5.md`.
