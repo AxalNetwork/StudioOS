@@ -18,6 +18,7 @@ import ColleagueSeatsPanel from '../ColleagueSeatsPanel';
 import AxalCheckout from '../../components/AxalCheckout';
 import { TIER_PLANS } from '../../components/PaywallModal';
 import { openCheckout } from '../../components/checkout/checkoutEntry';
+import { INSTITUTIONAL_CONTACT_HREF } from '../../components/checkout/checkoutModel';
 import { FREE, priceText, usePlansRead } from '../../lib/planPrices';
 import BillingDashboard from '../../components/BillingDashboard';
 import { formatStripeAmount } from '../../lib/money';
@@ -646,7 +647,7 @@ export function InvestorBillingPanel({ flash, billing, overview }) {
                     {current && (
                       <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
                     )}
-                    {t === 'institutional' && <Link to="/contact" className="text-sm text-violet-700 dark:text-violet-300 underline">Contact Axal VC</Link>}
+                    {t === 'institutional' && <Link to={INSTITUTIONAL_CONTACT_HREF} data-testid="billing-contact-institutional" className="text-sm text-violet-700 dark:text-violet-300 underline">Contact Axal VC</Link>}
                     {upgradable && (
                       <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
                         className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">

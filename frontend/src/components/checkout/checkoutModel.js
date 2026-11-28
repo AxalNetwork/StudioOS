@@ -351,6 +351,14 @@ export const cardWords = (m) => `${m?.brand ? m.brand.charAt(0).toUpperCase() + 
 export const savedCardsApply = (plan) => plan?.family !== 'investor';
 
 /**
+ * Where every in-app Institutional "Contact Axal VC" goes (#9066): the
+ * Contact form with Investing / LP pressed, the `invest` intent of
+ * ContactPage.jsx's INTENTS, as the Pricing card already sends it
+ * (pricingModel.js, #6984). A bare `/contact` would open on Spin-Out Lab.
+ */
+export const INSTITUTIONAL_CONTACT_HREF = '/contact?topic=invest';
+
+/**
  * D1054 (PAYX13): a plan the catalogue does not sell, in the canvas's words,
  * with the catalogue's own reason. A negotiated plan offers Contact Axal VC.
  */

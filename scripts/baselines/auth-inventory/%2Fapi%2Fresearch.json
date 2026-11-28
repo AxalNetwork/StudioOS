@@ -2,57 +2,79 @@
   "DELETE /api/research/attachments/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A partner's own proposal attachment: deleted only WHERE uid = ? AND owner_user_id = the caller, so another firm's partner, an admin and the Super Admin get the same 404 a missing one gets; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/benchmarks/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/brief-notes/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "An advisor's own brief note: deleted only WHERE uid = ? AND owner_user_id = the caller, so the venture's founder, another advisor, an admin and the Super Admin get the same 404 a missing note gets and nothing changes; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/collections/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/collections/:uid/documents/:documentUid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The collection is read WHERE owner_user_id = the caller and the membership is removed only for a document WHERE owner_user_id = the caller, so another member's collection, or another member's document under one's own collection, gets the same 404 a missing one gets and removes nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/documents/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/drafts/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/funds/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/funds/:uid/reports/:reportUid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The report is deleted only WHERE uid, fund_uid and owner_user_id = the caller all match, so another member, another member's report under one's own fund, or one's own report under another member's fund gets the same 404 a missing one gets and deletes nothing; no credentials or a disabled owner get 401."
   },
   "DELETE /api/research/market-readings/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A partner's own market reading: deleted only WHERE uid = ? AND owner_user_id = the caller, so another firm's partner, an admin and the Super Admin get the same 404 a missing reading gets; no credentials or a disabled owner get 401."
   },
   "GET /api/research/company-directory/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A catalogue company record has no owner: the Companies rule (admitsCompanies, D7178) is decided before the record is read, so an investor or partner without a Founder or Advisor licence gets one 403 for an existing and a missing company; an admitted signed-in account reads it; no credentials or a disabled account get 401."
   },
   "GET /api/research/company-directory/:uid/completeness": {
     "review": "record_without_ownership_check",
@@ -78,7 +100,9 @@
   "GET /api/research/fund-directory/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A public fund catalogue record has no owner: every signed-in account reads it (D535), through SERVED_FUNDS; no credentials or a disabled account get 401."
   },
   "GET /api/research/fund-shortlist/requests/:requestId": {
     "review": "record_without_ownership_check",
@@ -90,32 +114,44 @@
   "GET /api/research/funds/:uid/reports": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The fund is read WHERE uid = ? AND owner_user_id = the caller before its reports (themselves owner-bound), so another member's dossier gets the same 404 a missing one gets; no credentials or a disabled owner get 401."
   },
   "GET /api/research/funds/sheet/callback": {
     "review": "no_gate_found",
     "kind": "oauth_callback",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The OAuth return carries no session: the gate is the state, HMAC-signed, stored, single-use and expiring (consumeSheetsState), naming who started Connect, who must be a Super Admin. No, unsigned, forged, never-issued, expired or spent state, or the state of an admin who is not the Super Admin or of a founder, redirects to the error page with no code exchange and no token stored."
   },
   "GET /api/research/geographies/:code": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A catalogue geography page has no owner: every signed-in account reads it (D533); no credentials or a disabled account get 401."
   },
   "GET /api/research/market-data/countries/:code": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "Sourced public statistics for one country, not a member's record: every signed-in account reads them (D7318); no credentials or a disabled account get 401."
   },
   "GET /api/research/market-directory/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A catalogue market row has no owner: every signed-in account reads it (D533); no credentials or a disabled account get 401."
   },
   "GET /api/research/market-readings/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A partner's own market reading: read WHERE uid = ? AND owner_user_id = the caller, its attachments owner-bound and its proposals by the caller's own partner_id, so another firm's partner, an admin and the Super Admin get the same 404 a missing reading gets, naming nothing; no credentials or a disabled owner get 401."
   },
   "GET /api/research/market-readings/:uid/summary": {
     "review": "record_without_ownership_check",
@@ -127,7 +163,9 @@
   "GET /api/research/markets/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A catalogue market page has no owner: every signed-in account reads it (D533; D7178 offers Markets to accounts Companies refuses); no credentials or a disabled account get 401."
   },
   "GET /api/research/observations/:id": {
     "review": "record_without_ownership_check",
@@ -160,37 +198,51 @@
   "GET /api/research/sectors/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A catalogue sector page has no owner: every signed-in account reads it; no credentials or a disabled account get 401."
   },
   "PATCH /api/research/ask/answers/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/brief-notes/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "An advisor's own brief note: updated only WHERE uid = ? AND owner_user_id = the caller, so the venture's founder, another advisor, an admin and the Super Admin get the same 404 a missing note gets and nothing changes; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/collections/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/documents/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/drafts/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/funds/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "PATCH /api/research/funds/:uid/reports/:reportUid": {
     "review": "record_without_ownership_check",
@@ -202,16 +254,22 @@
   "POST /api/research/collections/:uid/documents": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The collection and the document are each read WHERE owner_user_id = the caller (ownCollection, then the document), so another member's collection, or the owner's document named from another account's own collection (a share recipient's included), gets the same 404 a missing one gets and inserts nothing; no credentials or a disabled owner get 401."
   },
   "POST /api/research/documents/:uid/reindex": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "A member's own research record: read and written only WHERE uid = ? AND owner_user_id = the caller, so every other account (another member, an advisor the document was shared with or whose grant was revoked, an admin, the Super Admin) gets the same 404 a missing record gets, naming nothing and changing nothing; no credentials or a disabled owner get 401."
   },
   "POST /api/research/funds/:uid/reports": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
+    "note": "The fund is read WHERE uid = ? AND owner_user_id = the caller before createReport writes under the caller's id, so another member's dossier gets the same 404 a missing one gets and nothing is written; no credentials or a disabled owner get 401."
   }
 }

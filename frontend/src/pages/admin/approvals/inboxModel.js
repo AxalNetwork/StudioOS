@@ -9,7 +9,7 @@ export {
   AGE_FILTERS, SORTS, SEARCH_MIN, inboxQueryOf, slaBand, itemPath, itemOfPath, assigneeOf,
   inboxRows, cardAge, filterCount, sortLabel, pageLine, hasNextPage, plusFigure, waitingFigure,
   summaryStrip, WORK_VIEWS, ATTENTION_LINE, workViewOf, viewPatch, workViewCounts, STALE_HOURS,
-  BAND_ROWS, bandedRows, urgencyPill, humanToken, humanWhat, filterChips, waitingOnHq,
+  BAND_ROWS, bandedRows, urgencyPill, humanToken, humanWhat, filterChips, hiddenByFilter, waitingOnHq,
 } from './inboxQueueModel.js';
 
 export { reviewDestination, itemView, historyLines, queueStep, continueLine, refusalToast, errorRef } from './approvalItemModel.js';
