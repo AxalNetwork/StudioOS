@@ -939,7 +939,9 @@ r.post('/:projectUid/files', async (c) => {
     if (!dataUri.startsWith('data:') || comma < 0) {
       return c.json({ detail: 'data must be a base64 data URI' }, 400);
     }
-    const declaredMime = dataUri.slice(5, dataUri.indexOf(';')) || 'application/octet-stream';
+    // #9190 — the type is the header's first part, read up to the comma, so a
+    // URI with no `;` cannot slice a malformed type; storeDataRoomFile checks it.
+    const declaredMime = dataUri.slice(5, comma).split(';')[0];
     let bytes: Uint8Array;
     try {
       const bin = atob(dataUri.slice(comma + 1));
@@ -978,6 +980,33 @@ r.post('/:projectUid/files', async (c) => {
 });
 
 /**
+ * #9190 (D9190) — the types a data room file is stored and served as:
+ * documents, spreadsheets, decks, plain text, archives, raster images, audio
+ * and video. Anything else, a type a browser would run (markup, script, SVG)
+ * included, is stored as `application/octet-stream`. Every write takes its
+ * type from here: the first upload, the Notion snapshot and the version
+ * replace.
+ */
+export const DATA_ROOM_FILE_TYPES: ReadonlySet<string> = new Set([
+  'application/pdf', 'application/rtf', 'application/zip', 'application/json',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.oasis.opendocument.text', 'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/vnd.apple.keynote', 'application/vnd.apple.pages', 'application/vnd.apple.numbers',
+  'text/plain', 'text/csv', 'text/markdown',
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/heic', 'image/tiff',
+  'audio/mpeg', 'audio/mp4', 'audio/wav', 'video/mp4', 'video/quicktime', 'video/webm',
+]);
+
+/** #9190 — a declared type, lower-cased and without parameters, if the allow-list has it; else `application/octet-stream`. */
+export function storedFileType(declared: unknown): string {
+  const type = typeof declared === 'string' ? declared.split(';')[0].trim().toLowerCase() : '';
+  return DATA_ROOM_FILE_TYPES.has(type) ? type : 'application/octet-stream';
+}
+
+/**
  * The upload's storage step: the storage guard, the object under a key the
  * Worker derives (`data-room/<project uid>/<uid>`, never taken from the
  * request), the `data_room_files` row, its log line and the storage notice.
@@ -993,13 +1022,14 @@ export async function storeDataRoomFile(env: Env, a: {
   const { project, user, bytes } = a;
   if (!env.FILES) throw new WriterError(503, 'storage_not_configured');
   if (bytes.byteLength > MAX_FILE_BYTES) throw new WriterError(413, 'too_large');
+  const contentType = storedFileType(a.contentType);
   // D1170 — a data room file counts to the venture's owner (D1169 §1).
   const storage = await assertStorageRoom(env, { projectId: project.id }, bytes.byteLength, user);
   const uid = newUid();
   const key = `data-room/${project.uid}/${uid}`;
   // D6651: a data room original is a record, written once under a fresh key.
   const stored = await putRecord(env.FILES, key, bytes, {
-    httpMetadata: { contentType: a.contentType },
+    httpMetadata: { contentType },
     customMetadata: { project_uid: project.uid, uploaded_by: String(user.id) },
   });
   if (!stored.ok) throw new WriterError(409, 'record_exists');
@@ -1009,7 +1039,7 @@ export async function storeDataRoomFile(env: Env, a: {
         visibility, uploaded_by_user_id, created_at, updated_at,
         access_tier, access_expires_at, dd_request_id, checklist_item)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, project.id, a.folderId, a.name.slice(0, NAME_MAX), key, a.contentType,
+  ).bind(uid, project.id, a.folderId, a.name.slice(0, NAME_MAX), key, contentType,
          bytes.byteLength, a.visibility, user.id, nowIso(), nowIso(),
          a.access.access_tier ?? 'invited', a.access.access_expires_at ?? null,
          a.access.dd_request_id ?? null, a.access.checklist_item ?? null).run();
@@ -1049,7 +1079,7 @@ export async function replaceDataRoomFile(
   const last = await env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM data_room_file_versions WHERE file_id = ?')
     .bind(file.id).first<{ v: number }>();
   const version = Number(last?.v ?? 0) + 1;
-  const contentType = typeof a.contentType === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(a.contentType) ? a.contentType : 'application/octet-stream';
+  const contentType = storedFileType(a.contentType);
 
   // D1170 — the kept version still counts, so the new object is weighed whole.
   const room = await assertStorageRoom(env, { projectId: project.id }, a.bytes.byteLength, a.caller ?? { id: a.userId, role: 'member' });
