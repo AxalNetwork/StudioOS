@@ -9,6 +9,7 @@ import {
   saveConsent,
   COOKIE_ROWS,
   OPEN_PREFERENCES_EVENT,
+  setChooserShown,
 } from '../lib/cookieConsent';
 import './cookieConsent.css';
 
@@ -65,6 +66,10 @@ export default function CookieConsent() {
       focusOnOpenRef.current = false;
     }
   }, [open, view]);
+
+  // #9201: say whether the chooser is drawn, so the product tour waits for it (isChoiceSettled).
+  useEffect(() => { setChooserShown(open); }, [open]);
+  useEffect(() => () => setChooserShown(false), []);
 
   // Reopen (from the footer link) at any time, pre-filled with the saved choice.
   useEffect(() => {

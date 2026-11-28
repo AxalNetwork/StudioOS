@@ -15,6 +15,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { STEPS, anchorShown, placeTip, resolveSteps, stepFrom, tourKey, tourSteps, GUTTER } from '../src/components/productTourModel.js';
 import ProductTour from '../src/components/ProductTour.jsx';
+import { rejectAll } from '../src/lib/cookieConsent.js';
 
 const src = (rel) => readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8');
 const el = (rect) => ({ getBoundingClientRect: () => rect, getClientRects: () => (rect.width || rect.height ? [rect] : []) });
@@ -171,6 +172,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function mountTour({ role, anchors, phone = false, viewport = DESKTOP }) {
   const restore = installDocument('', { focus: true });
+  rejectAll(); // #9201: the tour waits for a cookie choice; these suites start after one.
   const listeners = [];
   globalThis.addEventListener = (type, fn, opt) => listeners.push({ type, fn, opt });
   globalThis.removeEventListener = (type, fn) => { const at = listeners.findIndex((l) => l.type === type && l.fn === fn); if (at >= 0) listeners.splice(at, 1); };
