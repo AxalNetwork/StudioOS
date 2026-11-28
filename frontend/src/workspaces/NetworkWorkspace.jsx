@@ -29,6 +29,8 @@ const AdvisorNetworkIntroductions = lazy(() => import('../pages/advisor/network/
 const AdvisorNetworkOrganizations = lazy(() => import('../pages/advisor/network/OrganizationsZone'));
 const PartnerNetworkOrganizations = lazy(() => import('../pages/partner/OrganizationsZone'));
 const NetworkPage = lazy(() => import('../pages/NetworkPage'));
+// D9025 (#9025): People, the shared directory, one body for every licence (D7676).
+const NetworkPeoplePage = lazy(() => import('../pages/network/NetworkPeoplePage'));
 
 /**
  * `/network/*` — the three zones, for every licence rather than just founders.
@@ -130,6 +132,7 @@ const ADVISOR_ZONE = {
  * zone body and the rail consult, and it distinguishes those two shapes.
  */
 const INTRO = {
+  people: 'One shared directory of founders, investors, advisors and operators. Opening someone never makes them your relationship.',
   relationships: 'People you know and how strongly, from the records you keep here.',
   introductions: 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.',
   organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
@@ -181,7 +184,9 @@ export default function NetworkWorkspace({ role = 'founder' }) {
    * this changes no overview, only which address renders instead of it.
    */
   const forward = isRoot ? legacyZonePath(location.search) : null;
-  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
+  // D9025: `/network/people/:uid` is the People zone with a person's sheet open, not a zone of its own.
+  const peoplePath = !!bucket && /^\/network\/people(\/|$)/.test(location.pathname);
+  const zone = isRoot ? null : (peoplePath ? bucket.zones.find((z) => z.slug === 'people') : zoneForPath(bucket, location.pathname));
   const slug = zone?.slug;
 
   // The filter half of the canvas's header row, bound to the licence and the
@@ -203,6 +208,10 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   const body = useMemo(() => {
     if (isRoot) {
       return <NetworkOverview role={role} />;
+    }
+    // D9025: the same shared directory on every licence; the Worker scopes what each member may read.
+    if (slug === 'people') {
+      return <Suspense fallback={<Loading />}><NetworkPeoplePage /></Suspense>;
     }
     // `embedded`: the three founder pages each draw a full frame of their own
     // — crumb, h1, zone nav and Worker AI rail — because they were built to be
@@ -333,7 +342,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     <WorkspaceShell
       role={role}
       title={isRoot ? bucketTitle(bucket) : undefined}
-      activeSlug={isRoot ? null : undefined}
+      activeSlug={isRoot ? null : (peoplePath ? 'people' : undefined)}
       rail={(
         <WorkerRail
           workspace="Network"

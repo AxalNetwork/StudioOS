@@ -237,7 +237,7 @@ test('NW8 mounted: the Section picker names each zone with its count and opens i
   const v = await mount(populated());
   try {
     assert.deepEqual(v.options('select-network-section'), [
-      ['', 'Overview'], ['/network/relationships', 'Relationships · 142'], ['/network/introductions', 'Introductions · 5'], ['/network/organizations', 'Organizations'],
+      ['', 'Overview'], ['/network/people', 'People'], ['/network/relationships', 'Relationships · 142'], ['/network/introductions', 'Introductions · 5'], ['/network/organizations', 'Organizations'],
     ]);
     assert.match(v.className('tile-network-attention'), /is-marked/);
     assert.doesNotMatch(v.className('tile-network-connections'), /is-marked/);

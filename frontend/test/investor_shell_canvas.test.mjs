@@ -60,6 +60,8 @@ test('investor Fund zones match Pages · Investor Fund (IF1–IF4)', () => {
 test('investor Network zones match Pages · Investor Network (IN1–IN3)', () => {
   const network = investor.rows.find((r) => r.label === 'Network');
   assert.deepEqual(network.zones.map((z) => [z.slug, archetypeLabel(z)]), [
+    // D9025 (#9025): People, the shared directory, first after the Overview (D7676 Q1, answer A).
+    ['people', 'COLLECTION'],
     ['relationships', 'MATCH ENGINE'],
     ['introductions', 'FEED'],
     ['organizations', 'COLLECTION'],

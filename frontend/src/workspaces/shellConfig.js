@@ -136,6 +136,9 @@ export const OFFER_GROUPS = [
  * archetypes and the consent-gate semantics, so it is defined once.
  */
 const NETWORK_ZONES = [
+  // D9025 (#9025): People, the shared directory, is the fifth Network link, after Overview (owner answer A
+  // on #7675, D7676 Q1). `/network/people/:uid` is the same zone with a person's sheet open.
+  { slug: 'people', label: 'People', archetype: A.COLLECTION },
   { slug: 'relationships', label: 'Relationships', archetype: A.MATCH_ENGINE },
   { slug: 'introductions', label: 'Introductions', archetype: A.FEED },
   { slug: 'organizations', label: 'Organizations', archetype: A.COLLECTION },
