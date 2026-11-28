@@ -68,7 +68,7 @@ async function world(t: TestContext, { enabled = true } = {}) {
 }
 
 test('the importer is registered under its own source and asks for exactly the national file of the year', () => {
-  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp', 'bls-ce']);
+  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp', 'bls-ce', 'sec-edgar-facts']);
   assert.equal(IMPORTERS['census-cbp'].source_id, 'census-cbp');
   assert.equal(fileUrl(2023), 'https://www2.census.gov/programs-surveys/cbp/datasets/2023/cbp23us.zip');
   assert.equal(fileUrl(2018), 'https://www2.census.gov/programs-surveys/cbp/datasets/2018/cbp18us.zip');

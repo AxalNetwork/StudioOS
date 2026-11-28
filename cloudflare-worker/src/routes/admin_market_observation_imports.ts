@@ -17,6 +17,8 @@ const REQUEST_WORDS: Record<string, string> = {
   invalid_cursor: 'The continuation does not match this import request.',
   invalid_cbp_parameters: 'Choose one reference year from 2018 to 2023, one to ten NAICS industries (2 to 6 digits, or all) and known County Business Patterns metrics.',
   invalid_bls_ce_parameters: 'Choose one calendar year from 2023 to 2025 and known Consumer Expenditure categories (one to nine).',
+  invalid_sec_edgar_parameters: 'Choose one CIK (digits), one to four known EDGAR concepts and period-end years from 2009 to this year, at most five.',
+  sec_edgar_identity_not_configured: 'The SEC asks automated requests to name who is asking and a contact address. Set the SEC_EDGAR_USER_AGENT binding first. Nothing was requested.',
   source_disabled: 'This source is disabled. No import can run.',
   source_not_found: 'There is no such registered source.',
   unknown_importer: 'Choose a registered importer.',

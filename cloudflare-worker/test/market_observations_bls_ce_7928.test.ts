@@ -97,7 +97,7 @@ async function world(t: TestContext, { enabled = true } = {}) {
 }
 
 test('the importer is registered under its own source and asks for exactly the table of the year', () => {
-  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp', 'bls-ce']);
+  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp', 'bls-ce', 'sec-edgar-facts']);
   assert.equal(IMPORTERS['bls-ce'].source_id, 'bls-ce');
   assert.equal(ceTableUrl(2025), 'https://www.bls.gov/cex/tables/calendar-year/mean-item-share-average-standard-error/cu-area-type-2025.xlsx');
 });

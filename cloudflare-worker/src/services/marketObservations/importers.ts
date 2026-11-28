@@ -4,6 +4,7 @@ import { ImportRequestError } from './write';
 import { ingestEurostatSbs, sbsParams, SBS_IMPORT_LIMITS } from './eurostatSbs';
 import { ingestCensusCbp, cbpParams, CBP_IMPORT_LIMITS } from './censusCbp';
 import { ingestBlsConsumerExpenditure, ceParams, CE_IMPORT_LIMITS } from './blsConsumerExpenditure';
+import { ingestSecEdgarFacts, edgarParams, EDGAR_IMPORT_LIMITS } from './secEdgarFacts';
 
 export const IMPORTERS = Object.freeze({
   'world-bank': { source_id: 'world-bank', parameters: ['from', 'to', 'indicators'] as const,
@@ -16,6 +17,9 @@ export const IMPORTERS = Object.freeze({
   // D7928: BLS Consumer Expenditure means with their published standard errors; its source lands disabled.
   'bls-ce': { source_id: 'bls-ce', parameters: ['year', 'items'] as const,
     limits: CE_IMPORT_LIMITS, validate: ceParams, run: ingestBlsConsumerExpenditure },
+  // D7929: one registrant's reported annual XBRL facts with their accession and restatements; its source lands disabled.
+  'sec-edgar-facts': { source_id: 'sec-edgar-facts', parameters: ['cik', 'concepts', 'from', 'to'] as const,
+    limits: EDGAR_IMPORT_LIMITS, validate: edgarParams, run: ingestSecEdgarFacts },
 });
 export function importerFor(id: unknown) {
   if (typeof id !== 'string' || !Object.hasOwn(IMPORTERS, id)) throw new ImportRequestError('unknown_importer');
