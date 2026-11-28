@@ -69,26 +69,20 @@ r.get('/timeline', async (c) => {
   const cycles = await c.env.DB.prepare(
     `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
   ).all<Record<string, unknown>>();
-  const out = [];
-  for (const cy of cycles.results || []) {
-    const windows = await c.env.DB.prepare(
-      `SELECT week_number, unlock_at, deadline_at FROM week_windows WHERE cohort_cycle_id = ? ORDER BY week_number`,
-    ).bind(cy.id).all<Record<string, unknown>>();
-    const participants = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM users
-        WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`,
-    ).bind(cy.start_at, cy.end_at).first<{ n: number }>();
-    const statuses = await c.env.DB.prepare(
-      `SELECT week_number, status, COUNT(*) AS n FROM company_week_status
-        WHERE cohort_cycle_id = ? GROUP BY week_number, status`,
-    ).bind(cy.id).all<{ week_number: number; status: string; n: number }>();
-    out.push({
-      ...cy,
-      windows: windows.results || [],
-      participant_count: participants?.n ?? 0,
-      status_counts: statuses.results || [],
-    });
-  }
+  const rows = cycles.results || [];
+  const windowsStmt = c.env.DB.prepare(`SELECT week_number, unlock_at, deadline_at FROM week_windows WHERE cohort_cycle_id = ? ORDER BY week_number`);
+  const participantsStmt = c.env.DB.prepare(`SELECT COUNT(*) AS n FROM users WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`);
+  const statusesStmt = c.env.DB.prepare(`SELECT week_number, status, COUNT(*) AS n FROM company_week_status WHERE cohort_cycle_id = ? GROUP BY week_number, status`);
+  // One D1 round trip; binding a prepared statement does not mutate it.
+  const children = rows.length ? await c.env.DB.batch(rows.flatMap(cy => [
+    windowsStmt.bind(cy.id), participantsStmt.bind(cy.start_at, cy.end_at), statusesStmt.bind(cy.id),
+  ])) : [];
+  const out = rows.map((cy, i) => ({
+    ...cy,
+    windows: children[i * 3].results || [],
+    participant_count: (children[i * 3 + 1].results?.[0] as { n: number } | undefined)?.n ?? 0,
+    status_counts: children[i * 3 + 2].results || [],
+  }));
   return c.json({ cycles: out, server_time: new Date().toISOString() });
 });
 
@@ -116,15 +110,18 @@ r.get('/review', async (c) => {
       WHERE w.unlock_at <= ? AND w.deadline_at > ? ${cycleId ? 'AND c.id = ?' : ''}`,
   ).bind(nowIso, nowIso, ...(cycleId ? [cycleId] : [])).all<Record<string, unknown>>();
   const atRisk: Array<Record<string, unknown>> = [];
-  for (const w of windows.results || []) {
-    const parts = await c.env.DB.prepare(
-      `SELECT id, name, email FROM users
-        WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`,
-    ).bind(w.cycle_start, w.cycle_end).all<{ id: number; name: string | null; email: string }>();
-    for (const p of parts.results || []) {
-      const done = await c.env.DB.prepare(
-        `SELECT milestone_key, completed_at FROM spinout_lab_milestones WHERE user_id = ?`,
-      ).bind(p.id).all<{ milestone_key: string; completed_at: string }>();
+  const currentWindows = windows.results || [];
+  const partsStmt = c.env.DB.prepare(`SELECT id, name, email FROM users WHERE spinout_lab_active = 1 AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`);
+  const participants = currentWindows.length ? await c.env.DB.batch<{ id: number; name: string | null; email: string }>(
+    currentWindows.map(w => partsStmt.bind(w.cycle_start, w.cycle_end)),
+  ) : [];
+  const userIds = [...new Set(participants.flatMap(result => (result.results || []).map(p => p.id)))];
+  const doneStmt = c.env.DB.prepare(`SELECT milestone_key, completed_at FROM spinout_lab_milestones WHERE user_id = ?`);
+  const milestones = userIds.length ? await c.env.DB.batch<{ milestone_key: string; completed_at: string }>(userIds.map(id => doneStmt.bind(id))) : [];
+  const completedByUser = new Map(userIds.map((id, i) => [id, milestones[i].results || []]));
+  for (const [i, w] of currentWindows.entries()) {
+    for (const p of participants[i].results || []) {
+      const done = { results: completedByUser.get(p.id) || [] };
       const completed = (done.results || [])
         .map((row) => ({ key: row.milestone_key, completed_at_ms: sqliteUtcToMs(row.completed_at) ?? 0 }));
       const outcome = evaluateWeekOutcome(Number(w.week_number), completed, Date.now());
@@ -264,15 +261,10 @@ r.get('/applications', async (c) => {
   const cycles = await c.env.DB.prepare(
     `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
   ).all<Record<string, unknown>>();
-  const out = [];
-  for (const cy of cycles.results || []) {
-    const counts = await c.env.DB.prepare(
-      `SELECT status, COUNT(*) AS n FROM cohort_applicants WHERE cohort_cycle_id = ? GROUP BY status`,
-    ).bind(cy.id).all<{ status: string; n: number }>();
-    const byStatus: Record<string, number> = {};
-    for (const row of counts.results || []) byStatus[row.status] = row.n;
-    const applicants = await c.env.DB.prepare(
-      `SELECT ca.id, ca.application_id, ca.user_id, ca.status, ca.rolled_from_cycle_id,
+  const cycleRows = cycles.results || [];
+  const countsStmt = c.env.DB.prepare(`SELECT status, COUNT(*) AS n FROM cohort_applicants WHERE cohort_cycle_id = ? GROUP BY status`);
+  const countsByCycle = cycleRows.length ? await c.env.DB.batch<Record<string, unknown>>(cycleRows.map(cy => countsStmt.bind(cy.id))) : [];
+  const applicantsStmt = c.env.DB.prepare(`SELECT ca.id, ca.application_id, ca.user_id, ca.status, ca.rolled_from_cycle_id,
               ca.decided_at, ca.decided_by, ca.decision_reason, ca.created_at,
               u.name, u.email, a.company_name, a.idea, a.stage, a.jurisdiction
          FROM cohort_applicants ca
@@ -280,20 +272,45 @@ r.get('/applications', async (c) => {
          LEFT JOIN spinout_applications a ON a.id = ca.application_id
         WHERE ca.cohort_cycle_id = ?
         ORDER BY CASE WHEN ca.status = 'pending' THEN 0 ELSE 1 END, ca.created_at DESC
-        LIMIT 200`,
-    ).bind(cy.id).all<Record<string, unknown>>();
+        LIMIT 200`);
+  const applicantsByCycle = cycleRows.length ? await c.env.DB.batch<Record<string, unknown>>(cycleRows.map(cy => applicantsStmt.bind(cy.id))) : [];
+  const lifecycleStmt = c.env.DB.prepare(`SELECT ca.id AS applicant_id, a.answers_json, a.withdrawn_at, a.applicant_note,
+                a.applicant_asks_json, a.applicant_note_at
+           FROM cohort_applicants ca LEFT JOIN spinout_applications a ON a.id = ca.application_id
+          WHERE ca.cohort_cycle_id = ?`);
+  let lifecycleByCycle: D1Result<Record<string, unknown>>[] = [];
+  let lifecycleUnreadable = false;
+  try { if (cycleRows.length) lifecycleByCycle = await c.env.DB.batch<Record<string, unknown>>(cycleRows.map(cy => lifecycleStmt.bind(cy.id))); } catch { lifecycleUnreadable = true; }
+  const interviewsStmt = c.env.DB.prepare(`SELECT ca.id AS applicant_id, i.id, i.scheduled_at, i.duration_min, i.location, i.note, i.status,
+                i.reschedule_requested_at, i.reschedule_reason
+           FROM spinout_application_interviews i
+           JOIN cohort_applicants ca ON ca.application_id = i.application_id
+          WHERE ca.cohort_cycle_id = ?
+          ORDER BY i.id ASC`);
+  let interviewsByCycle: D1Result<Record<string, unknown>>[] = [];
+  let interviewsUnreadable = false;
+  try { if (cycleRows.length) interviewsByCycle = await c.env.DB.batch<Record<string, unknown>>(cycleRows.map(cy => interviewsStmt.bind(cy.id))); } catch { interviewsUnreadable = true; }
+  const plansStmt = c.env.DB.prepare(`SELECT p.user_id, p.rule_key, p.steps_json, p.started, p.computed_by, p.created_at, p.updated_at
+           FROM spinout_week1_plans p
+           JOIN cohort_applicants ca ON ca.user_id = p.user_id
+          WHERE ca.cohort_cycle_id = ?`);
+  let plansByCycle: D1Result<Record<string, unknown>>[] = [];
+  let plansUnavailable = false;
+  try { if (cycleRows.length) plansByCycle = await c.env.DB.batch<Record<string, unknown>>(cycleRows.map(cy => plansStmt.bind(cy.id))); } catch { plansUnavailable = true; }
+  const out = [];
+  for (const [cycleIndex, cy] of cycleRows.entries()) {
+    const counts = countsByCycle[cycleIndex];
+    const byStatus: Record<string, number> = {};
+    for (const row of counts.results || []) byStatus[String(row.status)] = Number(row.n);
+    const applicants = applicantsByCycle[cycleIndex];
     // D383 — each applicant's answers, applicant-facing note and live
     // interview, read separately so a database without migrations 315–316
     // still lists its applicants (with those fields null) instead of failing.
     const lifecycle = new Map<number, Record<string, unknown>>();
     try {
       const { parseStoredAnswers, parseStoredAsks } = await import('../services/applicationLifecycle');
-      const lc = await c.env.DB.prepare(
-        `SELECT ca.id AS applicant_id, a.answers_json, a.withdrawn_at, a.applicant_note,
-                a.applicant_asks_json, a.applicant_note_at
-           FROM cohort_applicants ca LEFT JOIN spinout_applications a ON a.id = ca.application_id
-          WHERE ca.cohort_cycle_id = ?`,
-      ).bind(cy.id).all<Record<string, unknown>>();
+      if (lifecycleUnreadable) throw new Error('Lifecycle unavailable');
+      const lc = lifecycleByCycle[cycleIndex];
       for (const row of lc.results || []) {
         lifecycle.set(Number(row.applicant_id), {
           answers: parseStoredAnswers(row.answers_json),
@@ -305,14 +322,8 @@ r.get('/applications', async (c) => {
           interview: null,
         });
       }
-      const iv = await c.env.DB.prepare(
-        `SELECT ca.id AS applicant_id, i.id, i.scheduled_at, i.duration_min, i.location, i.note, i.status,
-                i.reschedule_requested_at, i.reschedule_reason
-           FROM spinout_application_interviews i
-           JOIN cohort_applicants ca ON ca.application_id = i.application_id
-          WHERE ca.cohort_cycle_id = ?
-          ORDER BY i.id ASC`,
-      ).bind(cy.id).all<Record<string, unknown>>();
+      if (interviewsUnreadable) throw new Error('Interviews unavailable');
+      const iv = interviewsByCycle[cycleIndex];
       for (const row of iv.results || []) {
         const entry = lifecycle.get(Number(row.applicant_id));
         if (entry) { const { applicant_id: _drop, ...rest } = row; entry.interview = rest; }
@@ -325,13 +336,9 @@ r.get('/applications', async (c) => {
     let plansUnreadable = false;
     try {
       const { planView } = await import('../services/week1Plan');
-      const pr = await c.env.DB.prepare(
-        `SELECT p.user_id, p.rule_key, p.steps_json, p.started, p.computed_by, p.created_at, p.updated_at
-           FROM spinout_week1_plans p
-           JOIN cohort_applicants ca ON ca.user_id = p.user_id
-          WHERE ca.cohort_cycle_id = ?`,
-      ).bind(cy.id).all<import('../services/week1Plan').PlanRow>();
-      for (const row of pr.results || []) plans.set(Number(row.user_id), planView(row));
+      if (plansUnavailable) throw new Error('Plans unavailable');
+      const pr = plansByCycle[cycleIndex];
+      for (const row of pr.results || []) plans.set(Number(row.user_id), planView(row as unknown as import('../services/week1Plan').PlanRow));
     } catch { plansUnreadable = true; }
     out.push({
       ...cy,

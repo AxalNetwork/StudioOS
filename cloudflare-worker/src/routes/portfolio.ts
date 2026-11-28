@@ -31,7 +31,7 @@ import { getMemberProjectIds } from '../services/projectAccess';
 import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
 import { raiseAttentionAlerts } from '../services/portfolioAttentionAlerts';
 import { positionScope, type PositionScope } from './positions';
-import { CHASE_SKIP_MESSAGES, type ChaseSkipReason, chaseObligation } from '../services/chaseEligibility';
+import { CHASE_SKIP_MESSAGES, type ChaseSkipReason, chaseObligations } from '../services/chaseEligibility';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -504,43 +504,56 @@ r.post('/chase', async (c) => {
       skipped.push(pid);
       skips.push({ project_id: pid, reason, message: CHASE_SKIP_MESSAGES[reason], period, due_date });
     };
-    for (const pid of ids.slice(0, 100)) {
-      // The tenancy gate is on the project, not on the page's overdue list. A
-      // company outside the book reads as having no obligation in it, which
-      // says nothing about whether it exists.
+    const targets = ids.slice(0, 100);
+    const readable = targets.filter(pid => visible == null || visible.includes(pid));
+    const selected = JSON.stringify(readable);
+    const projects = readable.length ? await c.env.DB.prepare(
+      `SELECT id, uid, name, founder_id FROM projects WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+    ).bind(selected).all<any>() : { results: [] };
+    const projectById = new Map((projects.results || []).map(p => [Number(p.id), p]));
+    const obligations = scopeRead ? await chaseObligations(c.env, scope, Number(user.id), [...projectById.keys()], cadence, today) : new Map();
+    const recentRows = readable.length ? await c.env.DB.prepare(
+      `SELECT project_id, uid, created_at FROM (
+        SELECT project_id, uid, created_at, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY datetime(created_at) DESC) AS rank
+        FROM portfolio_update_chases WHERE project_id IN (SELECT value FROM json_each(?))
+        AND chased_by = ? AND datetime(created_at) > datetime('now', '-1 hour')
+      ) WHERE rank = 1`,
+    ).bind(selected, user.id).all<any>() : { results: [] };
+    const recentById = new Map((recentRows.results || []).map(row => [Number(row.project_id), row]));
+    const insert = c.env.DB.prepare('INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at) VALUES (?, ?, ?, ?)');
+    const writes: D1PreparedStatement[] = [];
+    const notifications: Array<{ pid: number; project: any }> = [];
+    for (const pid of targets) {
       if (visible != null && !visible.includes(pid)) { skipAs(pid, 'no_obligation'); continue; }
-      const project = await c.env.DB.prepare('SELECT id, uid, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
-        .bind(pid).first<any>();
+      const project = projectById.get(pid);
       if (!project) { skipAs(pid, 'no_obligation'); continue; }
-      const due = scopeRead
-        ? await chaseObligation(c.env, scope, Number(user.id), pid, cadence, today)
-        : { eligible: false as const, reason: 'unreadable' as const, period: null, due_date: null };
+      const due = obligations.get(pid) || { eligible: false as const, reason: 'unreadable' as const, period: null, due_date: null };
       if (!due.eligible) { skipAs(pid, due.reason, due.period, due.due_date); continue; }
-      // A repeat chase inside the hour answers the existing row rather than
-      // re-notifying the founder — a double-click is not a second ask. Both
-      // sides are normalised (D7650): `created_at` is written as ISO text.
-      const recent = await c.env.DB.prepare(
-        `SELECT uid, created_at FROM portfolio_update_chases
-          WHERE project_id = ? AND chased_by = ? AND datetime(created_at) > datetime('now', '-1 hour')
-          ORDER BY datetime(created_at) DESC LIMIT 1`
-      ).bind(pid, user.id).first<any>();
+      const recent = recentById.get(pid);
       if (recent) {
         chased.push({ project_id: pid, uid: recent.uid, created_at: recent.created_at, already: true, period: due.period, due_date: due.due_date });
         continue;
       }
       const uid = newUid();
       const at = nowIso();
-      await c.env.DB.prepare(
-        'INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at) VALUES (?, ?, ?, ?)'
-      ).bind(uid, pid, user.id, at).run();
+      writes.push(insert.bind(uid, pid, user.id, at));
       chased.push({ project_id: pid, uid, created_at: at, already: false, period: due.period, due_date: due.due_date });
+      notifications.push({ pid, project });
+    }
+    if (writes.length) await c.env.DB.batch(writes);
+    // Notifications remain best-effort and follow the successful write batch.
+    let founders: Array<{ id: number; founder_id: number }> = [];
+    try {
+      if (notifications.length) founders = (await c.env.DB.prepare(
+        `SELECT id, founder_id FROM users WHERE founder_id IN (SELECT value FROM json_each(?)) AND is_active = 1`,
+      ).bind(JSON.stringify(notifications.map(n => n.project.founder_id))).all<{ id: number; founder_id: number }>()).results || [];
+    } catch (e) { console.warn('[portfolio] chase notify failed', (e as any)?.message); }
+    for (const { pid, project } of notifications) {
       // The founder behind the project is notified. Best-effort: the chase
       // row is the record, and a failed notify must not unwrite it.
       try {
-        const founders = await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ? AND is_active = 1')
-          .bind(project.founder_id).all<any>();
         const { notify } = await import('../services/notify');
-        for (const f of (founders.results || [])) {
+        for (const f of founders.filter(f => f.founder_id === project.founder_id)) {
           await notify(c.env, {
             userId: f.id,
             type: 'portfolio_update_chase',
