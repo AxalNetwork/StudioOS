@@ -73,12 +73,15 @@ export function parseTrailers(message) {
  * is exempt: a merge that resolves or adds content is an authored change like any other.
  * `prMerge` is true when GitHub wrote the commit by merging another pull request into this
  * branch (#8606). That pull request's own commits were checked on its own branch, so its
- * merge is exempt too, whatever trailers GitHub's squash message carries.
+ * merge is exempt too, whatever trailers GitHub's squash message carries. `prMergedIn` is true
+ * for one of those commits, brought into the range by such a merge (#9257); it is exempt for the
+ * same reason.
  */
-export function checkCommit({ sha, parents = [], committedAt, message, cleanMerge = false, prMerge = false }) {
+export function checkCommit({ sha, parents = [], committedAt, message, cleanMerge = false, prMerge = false, prMergedIn = false }) {
   const merge = parents.length > 1;
   const row = { sha, merge, exempt: false, slot: null, task: null, run: null, session: null, sessionTrailer: null, problems: [] };
   if (prMerge) return { ...row, exempt: true, prMerge: true };
+  if (prMergedIn) return { ...row, exempt: true, prMergedIn: true };
   if (merge && cleanMerge) return { ...row, exempt: true };
   const trailers = parseTrailers(message);
   for (const [key, valid] of Object.entries(TRAILERS)) {
@@ -105,6 +108,34 @@ export function checkCommit({ sha, parents = [], committedAt, message, cleanMerg
   return row;
 }
 
+/**
+ * #9257: the commits in the range that a listed pull-request merge brought in. For each merge the
+ * list names, they are the commits reachable from its second and later parents but not from its
+ * first, which is the branch's own line. A commit reachable from both is the branch's own and
+ * stays checked. Only commits inside the range are walked, so main's history never counts.
+ */
+export function mergedInCommits(commits, prMerges) {
+  const bySha = new Map(commits.map((c) => [c.sha, c]));
+  const reach = (starts) => {
+    const seen = new Set();
+    const stack = [...starts];
+    while (stack.length) {
+      const sha = stack.pop();
+      if (seen.has(sha) || !bySha.has(sha)) continue;
+      seen.add(sha);
+      stack.push(...(bySha.get(sha).parents ?? []));
+    }
+    return seen;
+  };
+  const out = new Set();
+  for (const c of commits) {
+    if (!prMerges.has(c.sha) || (c.parents ?? []).length < 2) continue;
+    const own = reach([c.parents[0]]);
+    for (const sha of reach(c.parents.slice(1))) if (!own.has(sha) && !prMerges.has(sha)) out.add(sha);
+  }
+  return out;
+}
+
 /** The issue an `agent/<agent>/<issue>-<slug>` branch names, or null. */
 export const branchIssue = (branch) => /^agent\/[^/]+\/([1-9][0-9]*)-/.exec(branch ?? '')?.[1] ?? null;
 
@@ -123,7 +154,8 @@ export function checkRange({ commits, branch = null, base = null, head = null, s
   if (commits.length > MAX_COMMITS) {
     return { ...doc, verdict: 'fail', problems: [`the range adds more than ${MAX_COMMITS} commits`] };
   }
-  doc.commits = commits.map((c) => checkCommit({ ...c, prMerge: prMerges.has(c.sha) }));
+  const mergedIn = mergedInCommits(commits, prMerges);
+  doc.commits = commits.map((c) => checkCommit({ ...c, prMerge: prMerges.has(c.sha), prMergedIn: mergedIn.has(c.sha) }));
   const chained = doc.commits.filter((c) => !c.exempt);
   const distinct = (k) => [...new Set(chained.map((c) => c[k]).filter(Boolean))];
   const slots = distinct('slot');
@@ -170,6 +202,7 @@ export function readCommits(base, head, { cwd = process.cwd() } = {}) {
 export function report(doc) {
   const lines = doc.commits.map((c) => {
     if (c.prMerge) return `agent-provenance: ${c.sha.slice(0, 12)} pull request merged into this branch, exempt`;
+    if (c.prMergedIn) return `agent-provenance: ${c.sha.slice(0, 12)} brought by a pull request merged into this branch, exempt`;
     if (c.exempt) return `agent-provenance: ${c.sha.slice(0, 12)} clean merge, exempt`;
     if (c.problems.length) return `agent-provenance: ${c.sha.slice(0, 12)} FAIL ${c.problems.join('; ')}`;
     return `agent-provenance: ${c.sha.slice(0, 12)} ok slot=${c.slot} task=${c.task} run=${c.run} session=${c.sessionTrailer}`;
