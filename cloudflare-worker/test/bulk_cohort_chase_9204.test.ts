@@ -9,7 +9,8 @@ import portfolio from '../src/routes/portfolio.ts';
 import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
-const secret = '9204-synthetic-jwt-secret-0123456789';
+// A synthetic HS256 signing value for this test's own tokens, built at run time so no commit holds a literal (.gitleaksignore, #9167).
+const secret = 'z'.repeat(64);
 const app = new Hono();
 app.route('/api/admin/cohort', cohort);
 app.route('/api/portfolio', portfolio);

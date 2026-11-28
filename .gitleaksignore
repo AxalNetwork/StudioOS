@@ -387,3 +387,10 @@ d3fc77058c8f8af5fc25d452fafbf7c6b6b36cdc:.gitleaksignore:generic-api-key:338
 # random UUIDs, so no later commit carries a literal. Scoped to the one finding,
 # as D334's entry is.
 194a9814bd9bd54d24d92867ac77833b0a1086ad:cloudflare-worker/test/network_directory_org_apply_7674.test.ts:generic-api-key:16
+# #9167 / #9204 (owner's decision, 2026-11-28): not a credential. The synthetic
+# HS256 signing string in the bulk cohort chase test's first commit signs test
+# tokens for an in-memory database only. It reached PR #9241 when #9248 was
+# merged into that branch, and that commit cannot be rewritten. The next commit
+# builds the value at run time ('z'.repeat(64)), so no later commit carries a
+# literal. Scoped to the one finding, as D334's entry is.
+e4a3d984996669cda5b5f10b953377125c0277d8:cloudflare-worker/test/bulk_cohort_chase_9204.test.ts:generic-api-key:12
