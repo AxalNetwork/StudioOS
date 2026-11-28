@@ -113,7 +113,7 @@ export function teamsMatrix({ site, bot, workflow, dockerfile, botPackage, conta
   try { pkg = JSON.parse(botPackage); } catch { /* fails below */ }
   const pw = (pkg.dependencies ?? {}).playwright;
   add('browser_pinned', 'both', typeof pw === 'string' && /^\d+\.\d+\.\d+$/.test(pw)
-    && /npx --no-install playwright install --with-deps chromium/.test(dockerfile)
+    && /npx --no-install playwright install chromium/.test(dockerfile) && /npx --no-install playwright install-deps chromium/.test(dockerfile)
     && /^FROM node:\d+-[a-z]+-slim@sha256:[a-f0-9]{64} AS base$/m.test(dockerfile) && /npm ci --omit=dev/.test(dockerfile));
   // 12. Container readiness and egress: one instance type, egress on, a readiness probe before the command.
   add('container_readiness_and_egress', 'both', /enableInternet:true/.test(container) && /instance:'standard-2'/.test(container)
