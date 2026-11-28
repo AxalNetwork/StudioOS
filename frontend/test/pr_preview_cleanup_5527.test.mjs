@@ -18,7 +18,7 @@ function cleanup(results, name = 'studioos-pr-123') {
       timeout: 'shift 2; exec "$@"',
       sleep: 'echo "sleep:$1"',
       npx: [
-        'test "$*" = "--yes wrangler@4.125.0 delete $PREVIEW_NAME --force" || exit 2',
+        'test "$*" = "--yes wrangler@4.162.0 delete $PREVIEW_NAME --force" || exit 2',
         'echo attempt >> "$FIXTURE_ATTEMPTS"',
         'count=$(awk \'END {print NR}\' "$FIXTURE_ATTEMPTS")',
         'case "$(cut -d, -f "$count" <<< "$FIXTURE_RESULTS")" in',
