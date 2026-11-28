@@ -898,9 +898,14 @@ export default function TrustCenterPage({ chromeless = false }) {
       // card was fed `summary.ndas`, which is pairwise_ndas rows in a different
       // shape. It is a settled promise now, and the card reads it.
       // `api.kycStatus()` is the same call `<KycVerification />` makes at
-      // `/kyc`. It joins the settled set rather than getting its own effect so
-      // one failed read still leaves the rest of the page standing — the
-      // partial-failure resilience the contract test pins.
+      // `/kyc`, but only a role with a KYC step makes it here (#9198):
+      // KYC_ELIGIBLE_ROLES, the set that decides whether the Verifications tab
+      // draws the identity report at all. `/api/kyc` is a Studio-tier paywall
+      // prefix, so a founder without the tier got a 402 on every load for a
+      // read the page never drew. The role is the one /trust/me answers (the
+      // cached role only when it names none), so the read waits for it; it
+      // still joins the settled set so one failed read leaves the rest of the
+      // page standing — the partial-failure resilience the contract test pins.
       // `/trust/summary` WAS A FOURTH CALL HERE AND IS GONE. Every field it
       // returned had already been repointed — role, score and obligations to
       // /trust/me, the NDA card to /nda/required — and its `kyb` and
@@ -908,10 +913,11 @@ export default function TrustCenterPage({ chromeless = false }) {
       // deleted. Its result was stored in a `legacy` state nothing read, which
       // meant the page paid requireAuth + ensureTrustSchema + seedObligations
       // and two D1 reads on EVERY load for a payload it discarded in full.
+      const trust = api.trustMe();
       const [m, n, k] = await Promise.allSettled([
-        api.trustMe(),
+        trust,
         api.getRequiredNdas(),
-        api.kycStatus(),
+        trust.then((t) => (KYC_ELIGIBLE_ROLES.has(t?.role || cachedRole || 'member') ? api.kycStatus() : null), () => null),
       ]);
       // The shared API client uses its fixed "Session expired" error for 401s.
       // Both widths distinguish an unreadable matrix from an empty one.

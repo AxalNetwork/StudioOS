@@ -7,8 +7,9 @@
  * restores the previous values on unmount so navigating between pages
  * leaves the head clean for SSR/crawler snapshots.
  *
- * Also fires a privacy-friendly first-party analytics beacon via
- * navigator.sendBeacon to /api/public/analytics/pageview. The endpoint
+ * Also fires a privacy-friendly first-party analytics ping (a keepalive
+ * fetch with credentials:'omit', never navigator.sendBeacon — #9198) to
+ * /api/public/analytics/pageview. The endpoint
  * is best-effort: failures are swallowed so analytics never block the
  * render. No third-party trackers, no cookies, no PII.
  */
@@ -43,18 +44,17 @@ export function fireAnalytics(path) {
       referrer: document.referrer || '',
       ts: Date.now(),
     });
-    if (navigator.sendBeacon) {
-      const blob = new Blob([body], { type: 'application/json' });
-      navigator.sendBeacon('/api/public/analytics/pageview', blob);
-    } else {
-      // Fallback for environments without sendBeacon — fire-and-forget fetch.
-      fetch('/api/public/analytics/pageview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        keepalive: true,
-      }).catch(() => {});
-    }
+    // #9198: fetch with credentials:'omit' is the only path. navigator.sendBeacon
+    // always sends cookies and cannot add the CSRF header, so the CSRF
+    // middleware refused it with 403 for every signed-in visitor (the trap
+    // lib/funnel.js documents). With no cookie there is no CSRF surface.
+    fetch('/api/public/analytics/pageview', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
   } catch {
     /* analytics is best-effort; swallow all errors */
   }

@@ -1024,8 +1024,11 @@ auth.get('/me', async (c) => {
   const { influencerActive } = await import('../services/influencers');
   const influencer_active = await influencerActive(c.env, Number(user.id));
 
+  const { memberShell } = await import('../services/memberShell');
+  const shell = await memberShell(c.env, Number(user.id), String(user.role).toLowerCase());
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
+    shell,
     licences: user.licences || [],
     is_active: user.is_active, created_at: user.created_at,
     founder_id: founderId, partner_id: partnerId,

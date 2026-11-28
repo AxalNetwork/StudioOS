@@ -457,6 +457,7 @@ catalogue version only in the fixture.
 
 - `research_fund_shortlist_7845.test.ts` — D7845 atomic shortlist, withholding, ownership and replay checks.
 | `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
+| `member_shell_9197.test.ts` | D9197 member shell read isolation and independent failures. |
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
 `capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
 - `role_qualification_8688.test.ts` — D8688: the five role scenarios and a pending-review control, run through the real Worker on local synthetic data with a second tenant each. Their scenarios and fail-closed fixture are in `_role_qualification_8688.ts`, which `scripts/qualification/role-matrix.mjs` also runs.

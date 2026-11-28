@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { api } from '../src/lib/api.js';
+import { installDocument } from './_contracts_dom.mjs';
 import { runCost, batchCost, spendMeter, formatCost } from '../src/ui/assistCost.js';
 
 const root = resolve(process.cwd());
@@ -307,11 +309,20 @@ test('the rail no longer ASSERTS that the AI gateway does not exist', () => {
     'the header must name the gateway it was wrong about');
 });
 
-test('the spend meter has a live source, and api.js names it', () => {
-  const api = scan(read('frontend/src/lib/api.js'));
-  assert.match(api, /myAiSpend:\s*\(surface\)\s*=>\s*request\(surface == null\s*\?\s*'\/ai\/me\/spend'/,
-    'the self-view endpoint the meter reads');
-  assert.match(api, /monitoringAiUsage:/, 'the admin rollup stays separate');
+test('the spend meter reads its own endpoint and shares concurrent calls', async (t) => {
+  t.after(installDocument());
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (path) => {
+    calls.push(path);
+    return new Response(JSON.stringify({ recorded: true }));
+  });
+  const result = await Promise.all([
+    api.myAiSpend(), api.myAiSpend(), api.myAiSpend('Founder · Network'), api.monitoringAiUsage(),
+  ]);
+  assert.ok(result.every(read => read.recorded));
+  assert.deepEqual(calls, [
+    '/api/ai/me/spend', '/api/ai/me/spend?surface=Founder%20%C2%B7%20Network', '/api/monitoring/ai-usage?days=7',
+  ]);
 });
 
 // ---------- imports of lib/api must name a real export ----------

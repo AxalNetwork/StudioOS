@@ -276,7 +276,8 @@ test('signed in, back from registering: the sheet opens, its three steps refuse 
     await view.change('influencer-apply-rule-no_deal_promotion', { checked: true });
     await view.click('influencer-apply-submit');
     assert.equal(view.textOf('influencer-apply-refusal'), 'Tick every rule first.');
-    assert.equal(view.requests.filter((r) => r.method === 'POST').length, 0, 'nothing is sent until every rule is ticked');
+    // The page-view ping is a POST too (a fetch since #9198); this is about the application.
+    assert.equal(view.requests.filter((r) => r.method === 'POST' && r.url === '/api/influencer/apply').length, 0, 'nothing is sent until every rule is ticked');
     await view.change('influencer-apply-rule-no_self_referral', { checked: true });
     await view.click('influencer-apply-submit');
     const [w] = view.requests.filter((r) => r.method === 'POST' && r.url === '/api/influencer/apply');

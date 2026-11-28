@@ -29,16 +29,17 @@ export function loadPlans() {
 export function resetPlansRead() { pending = null; }
 
 /** The plans read as a state: `{ status: 'loading' | 'ready' | 'error', data }`. */
-export function usePlansRead() {
+export function usePlansRead(enabled = true) {
   const [read, setRead] = useState({ status: 'loading', data: null });
   useEffect(() => {
+    if (!enabled) return undefined;
     let live = true;
     loadPlans().then(
       (data) => { if (live) setRead(data && Array.isArray(data.plans) ? { status: 'ready', data } : { status: 'error', data: null }); },
       () => { if (live) setRead({ status: 'error', data: null }); },
     );
     return () => { live = false; };
-  }, []);
+  }, [enabled]);
   return read;
 }
 
