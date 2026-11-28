@@ -13,6 +13,9 @@
  *     whose outcome is unknown leaves the run `uncertain`; sending the same chunk again (`reconcileChunk`) settles it.
  *   · `sealRun` reads back against the run's membership and only then says Complete.
  *   · `removePrivateFields`, `removeRecord`, `removeSource`: each recorded; an active removal refuses later runs.
+ *   · `openRunStatements`, `sealStatusStatement`, `removalStatements` (D7745-p3): the same writes returned rather than
+ *     run, so #7745's routes put their `admin_audit_log` row in the same `DB.batch`. `openRun`, `sealRun` and the
+ *     removals call them and behave as before.
  *
  * Owner rule #7739 Q3 = B: contact columns, personal profile links and whole person records are never uploaded.
  * A contact column is withheld by default (never written, only counted). The held (encrypted) path exists for a
@@ -286,6 +289,17 @@ export const SQL = Object.freeze({
     fixed_at, fixed_by_run_uid)
     SELECT json_extract(value, '$.s'), json_extract(value, '$.c'), json_extract(value, '$.o'), json_extract(value, '$.k'),
       json_extract(value, '$.h'), json_extract(value, '$.r'), ?2, ?3 FROM json_each(?1)`,
+  // The exclusive open (`openRunStatements` with `exclusive`, D7745-p3): the run is written only while no run is
+  // running, uncertain or partial, the check and the insert in one statement; its rules only if that run was written.
+  insertRunIfNoneOpen: `INSERT INTO research_source_runs (uid, idempotency_key, acted_by_user_id, worker_version, payload_sha256,
+    hash_recipe_id, manifest_json, status, started_at)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, 'running', ?8
+    WHERE NOT EXISTS (SELECT 1 FROM research_source_runs WHERE status IN ('running', 'uncertain', 'partial'))`,
+  insertRulesForRun: `INSERT INTO research_source_column_rules (source_key, column_name, column_order, class, contact_handling, role,
+    fixed_at, fixed_by_run_uid)
+    SELECT json_extract(value, '$.s'), json_extract(value, '$.c'), json_extract(value, '$.o'), json_extract(value, '$.k'),
+      json_extract(value, '$.h'), json_extract(value, '$.r'), ?2, ?3 FROM json_each(?1)
+    WHERE EXISTS (SELECT 1 FROM research_source_runs WHERE uid = ?3)`,
   runForChunk: `SELECT uid, status, manifest_json, hash_recipe_id FROM research_source_runs WHERE uid = ?1`,
   identities: `SELECT source_key, provider_record_id, stated_row_hash FROM research_source_records
     WHERE (source_key || char(31) || provider_record_id) IN (SELECT value FROM json_each(?1))`,
@@ -370,6 +384,19 @@ export interface OpenRunInput {
 }
 
 export async function openRun(db: D1Database, input: OpenRunInput): Promise<{ run_uid: string; replayed: boolean }> {
+  const planned = await openRunStatements(db, input);
+  if (planned.statements.length) await db.batch(planned.statements);
+  return { run_uid: planned.run_uid, replayed: planned.replayed };
+}
+
+/**
+ * `openRun`'s checks and reads, with its writes returned rather than run (D7745-p3), so a caller can add its own
+ * statement (an `admin_audit_log` row) to the same `DB.batch`. A replayed key returns no statements. With `exclusive`
+ * the run insert writes only while no run is running, uncertain or partial, and the rules only if that run was
+ * written: the caller learns which by reading the run back after the batch.
+ */
+export async function openRunStatements(db: D1Database, input: OpenRunInput, opts: { exclusive?: boolean } = {}):
+  Promise<{ run_uid: string; replayed: boolean; manifest: Manifest; statements: D1PreparedStatement[] }> {
   if (typeof input.idempotencyKey !== 'string' || input.idempotencyKey.length < 8 || input.idempotencyKey.length > 200) throw new SourceStoreRefusal('idempotency_key_required');
   if (typeof input.payloadSha256 !== 'string' || !HEX64.test(input.payloadSha256)) throw new SourceStoreRefusal('payload_sha256_invalid');
   const manifest = validateManifest(input.manifest);
@@ -379,7 +406,7 @@ export async function openRun(db: D1Database, input: OpenRunInput): Promise<{ ru
   const prior = await db.prepare(SQL.runByKey).bind(input.idempotencyKey).first<{ uid: string; payload_sha256: string }>();
   if (prior) {
     if (prior.payload_sha256 !== input.payloadSha256) throw new SourceStoreRefusal('idempotency_key_reused');
-    return { run_uid: prior.uid, replayed: true };
+    return { run_uid: prior.uid, replayed: true, manifest, statements: [] };
   }
   const removals = (await db.prepare(SQL.activeRemovals).bind(sourceKeys).all<{ scope: string; source_key: string }>()).results ?? [];
   const removedSource = removals.find((r) => r.scope === 'source');
@@ -411,12 +438,14 @@ export async function openRun(db: D1Database, input: OpenRunInput): Promise<{ ru
     });
   }
   const now = input.now.toISOString();
-  await db.batch([
-    db.prepare(SQL.insertRun).bind(runUid, input.idempotencyKey, input.actorUserId ?? null, input.workerVersion ?? null,
-      input.payloadSha256, input.hashRecipeId ?? null, JSON.stringify(manifest), now),
-    db.prepare(SQL.insertRules).bind(JSON.stringify(newRules), now, runUid),
-  ]);
-  return { run_uid: runUid, replayed: false };
+  return {
+    run_uid: runUid, replayed: false, manifest,
+    statements: [
+      db.prepare(opts.exclusive ? SQL.insertRunIfNoneOpen : SQL.insertRun).bind(runUid, input.idempotencyKey, input.actorUserId ?? null,
+        input.workerVersion ?? null, input.payloadSha256, input.hashRecipeId ?? null, JSON.stringify(manifest), now),
+      db.prepare(opts.exclusive ? SQL.insertRulesForRun : SQL.insertRules).bind(JSON.stringify(newRules), now, runUid),
+    ],
+  };
 }
 
 /* ------------------------------------------------------------------ write one chunk */
@@ -560,20 +589,42 @@ export async function sealRun(db: D1Database, runUid: string, now: Date): Promis
   }
   const pending = (JSON.parse(run.uncertain_chunks_json) as unknown[]).length > 0;
   const status: SealResult['status'] = pending || run.status === 'uncertain' ? 'uncertain' : complete ? 'complete' : 'partial';
-  await db.prepare(SQL.setStatus).bind(runUid, status, status === 'uncertain' ? null : now.toISOString()).run();
+  await sealStatusStatement(db, runUid, status, now).run();
   return { status, sources };
+}
+
+/**
+ * The seal's write, returned rather than run (D7745-p3): the run's status, and its verified time unless it is
+ * uncertain. A caller that reads back on its own terms (#7745 names ids against an expected list) writes the status
+ * it reached through this, with its `admin_audit_log` row in the same `DB.batch`.
+ */
+export function sealStatusStatement(db: D1Database, runUid: string, status: SealResult['status'], now: Date): D1PreparedStatement {
+  return db.prepare(SQL.setStatus).bind(runUid, status, status === 'uncertain' ? null : now.toISOString());
 }
 
 /* ------------------------------------------------------------------ removals */
 
 export interface RemovalInput { sourceKey: string; providerRecordId?: string; actorUserId: number | null; now: Date }
 
-async function removal(db: D1Database, scope: 'private_fields' | 'record' | 'source', input: RemovalInput) {
+export type RemovalScope = 'private_fields' | 'record' | 'source';
+
+async function removal(db: D1Database, scope: RemovalScope, input: RemovalInput) {
+  const planned = await removalStatements(db, scope, input);
+  await db.batch(planned.statements);
+  return { scope: planned.scope, counts: planned.counts };
+}
+
+/**
+ * A removal's checks and count, with its writes returned rather than run (D7745-p3), so a caller can add its own
+ * statement (an `admin_audit_log` row) to the same `DB.batch`. The last statement is the removal record.
+ */
+export async function removalStatements(db: D1Database, scope: RemovalScope, input: RemovalInput):
+  Promise<{ scope: RemovalScope; counts: Record<string, number>; statements: D1PreparedStatement[] }> {
   if (typeof input.sourceKey !== 'string' || !SOURCE_KEY.test(input.sourceKey)) throw new SourceStoreRefusal('source_key_invalid');
   const id = scope === 'source' ? null : input.providerRecordId;
   if (scope !== 'source' && (typeof id !== 'string' || id.length === 0)) throw new SourceStoreRefusal('provider_record_id_required');
   const before = await db.prepare(SQL.countRecord).bind(input.sourceKey, id ?? null).first<{ records: number; private_fields: number; flags: number }>();
-  const counts = scope === 'private_fields' ? { private_fields: Number(before?.private_fields ?? 0) }
+  const counts: Record<string, number> = scope === 'private_fields' ? { private_fields: Number(before?.private_fields ?? 0) }
     : { records: Number(before?.records ?? 0), private_fields: Number(before?.private_fields ?? 0), flags: Number(before?.flags ?? 0) };
   const statements = [db.prepare(SQL.deletePrivate).bind(input.sourceKey, id ?? null)];
   if (scope !== 'private_fields') {
@@ -581,8 +632,7 @@ async function removal(db: D1Database, scope: 'private_fields' | 'record' | 'sou
     statements.push(db.prepare(SQL.deleteRecords).bind(input.sourceKey, id ?? null));
   }
   statements.push(db.prepare(SQL.insertRemoval).bind(input.actorUserId ?? null, input.now.toISOString(), scope, input.sourceKey, id ?? null, JSON.stringify(counts)));
-  await db.batch(statements);
-  return { scope, counts };
+  return { scope, counts, statements };
 }
 
 /** A record's private fields. Its id and both hashes stay; a replay does not restore them while the removal stands. */

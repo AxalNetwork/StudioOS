@@ -18,8 +18,11 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import router, { mount, REFUSAL_SENTENCES, researchImportGate } from '../src/routes/research_source_imports.ts';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../src/auth.ts';
-import { AUDIT_ACTIONS, IMPORT_LIMITS } from '../src/services/researchSourceImports.ts';
-import { bodyJson, membershipDigest, sealRun, sha256Hex, type CellValue } from '../src/services/researchSourceRecords.ts';
+import { AUDIT_ACTIONS, IMPORT_LIMITS, SQL as IMPORT_SQL } from '../src/services/researchSourceImports.ts';
+import {
+  SQL as STORE_SQL, bodyJson, membershipDigest, openRunStatements, removalStatements, sealRun, sealStatusStatement, sha256Hex,
+  type CellValue,
+} from '../src/services/researchSourceRecords.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { grantWriteBar } from './_write_bar_session.mjs';
@@ -519,3 +522,61 @@ test('12. every refusal code the router sends has its sentence, and none is buil
   assert.ok(codes.length > 20);
   for (const code of codes) assert.ok(REFUSAL_SENTENCES[code], `${code} has no sentence`);
 });
+
+/* ----------------------------------------------------------- 13. audit rows in the batch (D7745-p3) */
+
+test('13. each run open, seal, reconcile and removal is one batch: the store variant\'s writes, then one audit row right after the write it records', async () => {
+  // Mutations checked: see D7745-p3 (exclusive off, audit moved after the rules, seal status run outside the batch,
+  // audit placed before the removal, a variant that runs its own writes).
+  const f = fixture();
+  const p = await pkg();
+  const label = (sql: string) => {
+    if (/INSERT INTO admin_audit_log/.test(sql)) return 'audit';
+    const hit = Object.entries(STORE_SQL).find(([, v]) => v === sql) ?? Object.entries(IMPORT_SQL).find(([, v]) => v === sql);
+    return hit ? hit[0] : 'other';
+  };
+  const lastBatch = () => f.batches.at(-1)!.map(label);
+
+  // The variants only return statements: calling them writes nothing.
+  const before = snapshot(f);
+  const planned = await openRunStatements(f.env.DB, { idempotencyKey: 'synthetic-unbatched-1', actorUserId: SUPER, payloadSha256: FILE,
+    hashRecipeId: null, manifest: p.manifest, columnClasses: p.column_classes, now: SEAL_CLOCK }, { exclusive: true });
+  const removal = await removalStatements(f.env.DB, 'source', { sourceKey: 'invented_funds', actorUserId: SUPER, now: SEAL_CLOCK });
+  sealStatusStatement(f.env.DB, 'no-such-run', 'complete', SEAL_CLOCK);
+  assert.deepEqual([planned.replayed, planned.statements.length, removal.statements.length], [false, 2, 4]);
+  assert.equal(snapshot(f), before, 'nothing written until a caller batches the statements');
+  assert.equal(f.batches.length, 0);
+
+  const opened = await openRun(f, p);
+  assert.equal(opened.status, 201);
+  assert.deepEqual(lastBatch(), ['insertRunIfNoneOpen', 'audit', 'insertRulesForRun'], 'open');
+  const uid = opened.body.run.uid;
+  const parts = chunks(p.records, 12);
+  for (const [i, records] of parts.entries()) if (i !== 1) await su(f, 'POST', `/runs/${uid}/chunks`, { chunk_index: i, records });
+  assert.equal((await su(f, 'POST', `/runs/${uid}/seal`, { expected: p.entries })).body.status, 'partial');
+  assert.deepEqual(lastBatch(), ['setStatus', 'audit'], 'seal');
+  assert.equal((await su(f, 'POST', `/runs/${uid}/reconcile`, { action: 'resume' })).status, 200);
+  assert.deepEqual(lastBatch(), ['setStatusFrom', 'audit'], 'reconcile');
+  await su(f, 'POST', `/runs/${uid}/chunks`, { chunk_index: 1, records: parts[1] });
+  assert.equal((await su(f, 'POST', `/runs/${uid}/seal`, { expected: p.entries })).body.status, 'complete');
+  assert.deepEqual(lastBatch(), ['setStatus', 'audit'], 'seal again');
+  // The store's own sealRun still writes its status through the same statement.
+  f.db.prepare("UPDATE research_source_runs SET status = 'running', verified_at = NULL WHERE uid = ?").run(uid);
+  assert.equal((await sealRun(f.env.DB, uid, SEAL_CLOCK)).status, 'complete');
+  assert.deepEqual({ ...f.db.prepare('SELECT status, verified_at FROM research_source_runs WHERE uid = ?').get(uid) as object },
+    { status: 'complete', verified_at: SEAL_CLOCK.toISOString() });
+  const rec = p.records[0];
+  assert.equal((await su(f, 'POST', '/removals', { scope: 'private_fields', source_key: rec.source_key, provider_record_id: rec.provider_record_id })).status, 201);
+  assert.deepEqual(lastBatch(), ['deletePrivate', 'insertRemoval', 'audit'], 'private-fields removal');
+  assert.equal((await su(f, 'POST', '/removals', { scope: 'record', source_key: rec.source_key, provider_record_id: rec.provider_record_id })).status, 201);
+  assert.deepEqual(lastBatch(), ['deletePrivate', 'deleteFlags', 'deleteRecords', 'insertRemoval', 'audit'], 'record removal');
+
+  // One row for each act, naming the run and counts only.
+  const rows = audits(f);
+  assert.deepEqual(rows.map((r) => r.action), [AUDIT_ACTIONS.opened, AUDIT_ACTIONS.sealed, AUDIT_ACTIONS.reconciled, AUDIT_ACTIONS.sealed,
+    AUDIT_ACTIONS.removal, AUDIT_ACTIONS.removal]);
+  assert.deepEqual(rows.slice(0, 4).map((r) => JSON.parse(r.filters_json).run_uid), [uid, uid, uid, uid]);
+  assert.deepEqual(JSON.parse(rows[5].filters_json).counts, { records: 1, private_fields: 0, flags: 0 });
+  assert.ok(!JSON.stringify(rows).includes(MARK));
+});
+

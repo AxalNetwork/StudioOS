@@ -59,6 +59,45 @@ time, scope and counts, and one audit row. Afterwards preview reports the record
 removed) and a replay never restores it. A removal clears the live tables only: D1 Time Travel (30 days) and the
 locked nightly export (365 days) keep earlier copies (D7742).
 
+## Mapping: what each record is and what happens to it (D7746)
+
+After a run seals Complete, say record by record what each staged record is and what is to happen to it, under
+`/api/research-source-imports/mappings`. Same gate as the import: a Super Admin, the write bar for a decision, never a
+support session. Nothing here writes the catalogue; promotion is #7751's.
+
+1. **Look** (`GET /mappings`, filters `source`, `kind`, `decision`, `outcome`, `flag`, `offset`): ids, kind,
+   decision, outcome, flag codes, candidate count and the name-column label, 100 a page. There is no search
+   parameter: filter by codes. A record with no decision reads `unresolved` / `no_decision`.
+2. **Read one** (`POST /mappings/record` with `{source_key, provider_record_id}`) only when you need its cells: the
+   only route that returns them, and each read writes one audit row naming the stored record id. It shows the
+   candidates, each with its ground (`name_key`, `manager_fund_number`, `website_host`, `retired_uid`), and the history.
+3. **Decide one** (`POST /mappings/decide`): `kind` (manager, vehicle, accelerator, resource, company, funding_round,
+   individual) and `decision`:
+   - `create` — a new catalogue entity once #7751 promotes it. Until then it counts as unresolved, awaiting promotion.
+   - `link` with `target` `{type: "catalogue_fund", id: <served uid>}` or `{type: "staged_record", source_key, id}`
+     (a record of the same kind that carries `create`) and a `ground`. A ground other than `operator_verified` must be
+     one the candidates show; `operator_verified` needs a `reason`. A retired uid is refused naming where it moved:
+     link to that uid instead.
+   - `retain_private` or `reject`, with a `reason`. A company, a funding round or an individual may only take these.
+   - `note` (optional, at most 280 characters) is private: it is read back only by step 2.
+4. **Decide many** (`POST /mappings/bulk/preview`, then `POST /mappings/bulk/apply` with the same `entries` and the
+   preview's `preview_digest`): at most 500 entries keyed by (source key, provider record id). The whole list is
+   refused on an unknown or repeated key, a kind or decision not allowed, or a record with a shared website. If a
+   named record changed after the preview, the apply answers `preview_stale`: preview again. Applying the same list
+   twice writes nothing. `state_changed` means another decision landed during the write: read again and retry.
+5. **Reconcile** (`GET /mappings/report`): per source and kind, created, linked, retained privately, rejected and
+   unresolved (no decision / awaiting promotion), summing to the staged records; and the staged records, columns and
+   cells against the newest manifest. Only the `summary` (counts) may be quoted outside HQ; the per-record `lines` stay
+   with you. The totals are records, not funds.
+
+**Shared websites.** A host used by more than one staged record or catalogue row, or a hosting or social platform
+(LinkedIn, a site builder, a link page), never proves two records are one. Such a record is flagged
+`shared_website`, its host match is offered but marked, a link on that ground alone is refused, and it can only be
+decided one at a time, on another ground.
+
+**Not to be sent anywhere:** a note, a field value or a mapping list in a path, a query, an issue, a PR, a log or a
+chat. Ids, codes and counts may appear in a log or an audit row.
+
 ## What may appear in a log or an audit row
 
 Codes, source keys, column names, record ids, counts, digests and an error's name. Never a field value. The audit log
