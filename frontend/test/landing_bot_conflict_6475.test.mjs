@@ -253,6 +253,8 @@ function apiFakes({ pr, heads = [] }) {
       if (path.startsWith('issues/66')) return { number: 66, labels: [{ name: 'slot:S21' }] };
       throw new Error(`unexpected read ${path}`);
     },
+    // #8555 (D8555): the stack read answers "not in a stack" for the planned head; landing_bot_native_stacks_8555 covers members.
+    graph: async (_q, v) => ({ nameWithOwner: REPO, pullRequest: { number: v.number, headRefOid: pr.head.sha, isDraft: false, isInMergeQueue: false, autoMergeRequest: null, stack: null, stackEntry: null } }),
   };
   const app = {
     async get(path) { if (/\/comments/.test(path)) return []; throw new Error(`unexpected app read ${path}`); },

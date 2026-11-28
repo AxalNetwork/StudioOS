@@ -42,7 +42,8 @@ function world({ removalReason = 'MERGE_CONFLICT' } = {}) {
     labels: { nodes: s.labels.map((name) => ({ name })) }, autoMergeRequest: null, timelineItems: { nodes: s.timeline },
   });
   const gh = {
-    graph: async () => ({ pullRequests: { nodes: [node()] } }),
+    // #8555 (D8555): the stack read answers "not in a stack" for this head; landing_bot_native_stacks_8555 covers members.
+    graph: async (q) => (/stackEntry/.test(q) ? { nameWithOwner: REPO, pullRequest: { number: 7, headRefOid: s.head, isDraft: s.draft, isInMergeQueue: s.inQueue, autoMergeRequest: null, stack: null, stackEntry: null } } : { pullRequests: { nodes: [node()] } }),
     get: async (p) => {
       if (p.startsWith('actions/workflows/ci.yml/runs?branch=main&event=push&per_page=20')) return { workflow_runs: [{ id: 1, event: 'push', head_branch: 'main', status: 'completed', conclusion: s.mainGreen ? 'success' : 'failure', created_at: T(-30) }] };
       if (p.startsWith('actions/workflows/ci.yml/runs?branch=main&event=push&status=completed')) return { workflow_runs: [{ id: 1, conclusion: s.mainGreen ? 'success' : 'failure' }] };

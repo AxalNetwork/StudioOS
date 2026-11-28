@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { breakers, mode } from './rules.mjs';
 import { allowance, inherited, KIND, recheckOne, refreshSerially, reservationName } from './refresh-rules.mjs';
 import { client } from './keeper.mjs';
+import { stackGuard } from './stack-membership.mjs';
 import { gitIn, mergeMain } from './keeper-merge.mjs';
 
 /**
@@ -114,6 +115,8 @@ export async function applyStage(env, {
   const statuses = [];
   const res = await refreshSerially(act.map((p) => ({ number: p.number, head: { sha: p.sha } })), act.length, {
     recheck: async (pr) => {
+      const stack = await stackGuard({ graph: gh.graph, repo: env.GITHUB_REPOSITORY, number: pr.number, expectedHead: pr.head.sha, boundary: 'the refresh update-branch' });
+      if (stack.hold) return { skip: stack.line };
       const fresh = await gh.get(`pulls/${pr.number}`);
       const files = (await gh.get(`pulls/${pr.number}/files?per_page=100`)).map((f) => ({ path: f.filename, previousPath: f.previous_filename }));
       return recheckOne(pr, fresh, { env, event: env.GITHUB_EVENT_NAME, dispatchPr, repo: env.GITHUB_REPOSITORY, files, breakers: await refreshBreakers(gh, env) });
