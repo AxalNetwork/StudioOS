@@ -44,7 +44,7 @@ export const PURPOSE = {
   'product-testing': 'Members test StudioOS features before they ship.',
 };
 
-/** Each program's own page under Programs. Product testing runs at HQ and has none. */
+/** Each program's own page under Programs. Product testing runs at HQ and is never granted to a studio, so a studio's terms link none. */
 export const PROGRAM_PAGE = {
   'spinout-lab': '/admin/spinout-lab',
   'mentor-cohorts': '/admin/programs/mentor-cohorts',

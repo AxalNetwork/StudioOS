@@ -423,7 +423,8 @@ test('the catalogue for a Super Admin (PG2): HQ\'s line, the credits tile and ch
     assert.equal(view.textOf('programs-chart-credits-foot'), CREDIT_FOOT);
     for (const k of ['spinout-lab', 'mentor-cohorts', 'refer-and-earn', 'perks']) assert.ok(!view.has(`programs-card-${k}-needs`), `${k} draws a Needs-you pill for HQ`);
     assert.equal(view.textOf('programs-card-product-testing-figure'), '2 open · 9 applied, not withdrawn');
-    assert.ok(view.hrefs().includes('/admin/platform/product-testing/programs'));
+    // D5894 (#5894): the card opens Product testing's shell, which links out to its HQ page.
+    assert.ok(view.hrefs().includes('/admin/programs/product-testing'));
     await view.click('programs-layout-cards'); // D4873: "Who · Join" is the card layout's line
     assert.match(view.textOf('programs-card-learning-who'), /Join: Open or by invitation$/);
     assert.ok(!/in the programs assigned to you/.test(view.textOf('programs-chart-joins')));

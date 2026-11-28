@@ -305,6 +305,7 @@ const ADMIN = [
   alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
   alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
   alias('/admin/programs/influencer', key(AD, 'Programs'), 'Influencers, one program page under Programs (D4298).'),
+  alias('/admin/programs/product-testing', key(AD, 'Programs'), 'Product testing, one program page under Programs; its HQ page keeps its own key (D5894).'),
   alias('/admin/programs/:key', key(AD, 'Programs'), 'Any program the registry holds, one generic page under Programs (D4808).'),
   alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
   alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
