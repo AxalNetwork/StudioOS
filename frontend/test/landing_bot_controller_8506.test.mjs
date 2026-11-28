@@ -68,13 +68,14 @@ test('#8506: no controller checkout in the model runner uses a branch name; all 
 });
 
 test('#8506: each caller\'s publish step runs github.sha and receives the runner\'s controller to compare', () => {
-  for (const [file, job] of [['landing-bot-conflict.yml', 'resolve'], ['landing-bot-main-repair.yml', 'repair']]) {
+  for (const [file, job] of [['landing-bot-conflict.yml', 'resolve'], ['landing-bot-main-repair.yml', 'repair'], ['landing-bot-red-pr.yml', 'repair']]) {
     const text = read(file);
     assert.match(text, new RegExp(`CONTROLLER_SHA: \\$\\{\\{ needs\\.${job}\\.outputs\\.controller \\}\\}`), file);
     const apply = text.slice(text.indexOf('\n  apply:'));
     for (const c of checkouts(apply)) assert.equal(c.ref, '${{ github.sha }}', `${file} apply checkout`);
   }
   assert.match(read('landing-bot-main-repair.yml'), /MODEL_HEAD_SHA: \$\{\{ needs\.repair\.outputs\.head \}\}/);
+  assert.match(read('landing-bot-red-pr.yml'), /MODEL_HEAD_SHA: \$\{\{ needs\.repair\.outputs\.head \}\}/);
 });
 
 /** A checkout with FILE, a task, and the patch folder the edit job would write; `over` changes the record. */

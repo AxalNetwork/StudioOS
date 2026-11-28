@@ -6,6 +6,8 @@ import { reservationName, readDailyReservations } from './feeder-budget.mjs';
 import { planSweep, applySweep } from './feeder-sweep.mjs';
 import { enqueueCandidate } from './feeder-enqueue.mjs';
 import { count, triggerAllowed } from './rules.mjs';
+import { client } from './keeper.mjs';
+import { gateLandingDecisions, guardEnqueue } from './stack-membership.mjs';
 
 async function main(stage, env) {
   const repo = 'AxalNetwork/StudioOS';
@@ -31,6 +33,9 @@ async function main(stage, env) {
   const ledger = async (slots = 0) => readDailyReservations({
     get: reader.get, runId, attempt, day, expectedSlots: slots, now: Date.now,
   });
+  // #8555 (D8555): a native stack member or an unread membership is never admitted, and is re-read before the write.
+  const stackRead = client({repo, token: env.GH_TOKEN}).graph;
+  gateLandingDecisions(reader, stackRead, {repo});
   if (stage === 'plan') {
     const readRemainingDaily = async () => Math.max(0, limit - (await ledger()).used);
     const entries = await planSweep({...options, readRemainingDaily});
@@ -57,7 +62,8 @@ async function main(stage, env) {
     appendFileSync(env.GITHUB_STEP_SUMMARY, `PR #${candidate.number} at \`${candidate.expectedHeadOid}\` — ${result.status}\n`);
     return result;
   };
-  await applySweep({...options, readRemainingDaily, enqueue}, plan.entries);
+  const say = line => appendFileSync(env.GITHUB_STEP_SUMMARY, `${line}\n`);
+  await applySweep({...options, readRemainingDaily, enqueue: guardEnqueue(enqueue, stackRead, {repo, say})}, plan.entries);
 }
 
 main(process.argv[2], process.env).catch(error => {

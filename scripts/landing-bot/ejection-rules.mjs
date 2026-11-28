@@ -190,7 +190,7 @@ export function decide(c) {
     retry.push('still conflicting: waiting for the branch keeper\'s scheduled merge of main');
     return waitOrHandBackNow();
   }
-  if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked when it exists'] };
+  if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked'] };
   if (c.klass === 'incompatible') return label(['red only in its merge group: compare it with the entry ahead before it re-enters']);
   if (neverRequeued) return label([`class ${c.klass} is never re-queued`]);
   if (c.mergeable !== true) retry.push('GitHub has not yet said whether the head merges cleanly');

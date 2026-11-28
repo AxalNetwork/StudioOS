@@ -52,7 +52,11 @@ export const UNGATED_COMMENT_TRIGGERS = Object.freeze({});
  * never runs the artifact through an action, and refuses fork and non-pull_request
  * runs. WF-4 holds those three rules for every entry.
  */
-export const TRUSTED_WORKFLOW_RUN = Object.freeze({ 'pr-preview-deploy.yml': 'D7146' });
+export const TRUSTED_WORKFLOW_RUN = Object.freeze({
+  'pr-preview-deploy.yml': 'D7146',
+  // D5622-p2: red-PR repair's trigger. Reads the CI run and the pull request from the API, holds no secret, dispatches only.
+  'pr-repair.yml': 'D5622-p2',
+});
 
 /** A secret that is, or looks like, a Cloudflare credential. Account ids ride along: a PR run reads none. */
 const CLOUDFLARE_SECRET = /\bsecrets\.[A-Z0-9_]*(?:CLOUDFLARE|WRANGLER|CF_API|CF_ACCOUNT)[A-Z0-9_]*\b/;

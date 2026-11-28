@@ -1,0 +1,206 @@
+name: Landing bot red-PR repair
+
+# #5622 (D5622-p2): a model proposes a bounded fix for a pull request's OWN CI
+# failure; a separate job checks it with main's code and commits it to the
+# pull request's branch. Dispatched with one PR by pr-repair.yml (when CI ends
+# red) or by the ejection handler (an own failure removed from the queue).
+# `plan` holds a read-only token and calls no model: it recomputes the verdict
+# with main's scripts/lib/ciClassify.mjs from the API (never the PR's artifact
+# or digest) and acts only on pr_failure; `repair` is the model runner (#6473)
+# with no GitHub write; `apply` holds the App token and no model key, runs no
+# PR code, re-checks the patch with main's pathGuard (rules.mjs),
+# merge-control/src/lib/patchGuard.mjs and merge-policy.mjs, and pushes one
+# normal commit on the planned head, never forced, never to main. A patch that
+# changes a test, fixture, baseline, allowlist, guard or timeout, deletes a
+# test or adds skip/only/todo is refused and the PR gets needs-session. Two
+# attempts per PR for its whole life (#6467); a person signs off the repaired
+# head before it lands (the commit's Landing-Bot-Kind trailer keeps it in the
+# owner's lane). CLOSED BY DEFAULT: nothing runs until the owner sets
+# LANDING_BOT_RED_PR_MAX_FILES and LANDING_BOT_RED_PR_MAX_LINES.
+# scripts/landing-bot/README.md, "Red-PR repair", has the rules.
+
+run-name: Red-PR repair for #${{ inputs.pr }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The pull request whose own CI failure to repair
+        required: true
+        type: string
+      head_sha:
+        description: The head the trigger read (optional; a moved head runs nothing)
+        required: false
+        default: ''
+        type: string
+      run:
+        description: The CI run the trigger read (optional; else the head's newest)
+        required: false
+        default: ''
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-bot-red-pr-${{ inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Recompute the verdict and check every rule
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' || vars.LANDING_BOT_ENABLED == 'dispatch')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    outputs:
+      decision: ${{ steps.plan.outputs.decision }}
+      ref: ${{ steps.plan.outputs.ref }}
+      task: ${{ steps.plan.outputs.task }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_DAILY_MODEL_RUNS: ${{ vars.LANDING_BOT_DAILY_MODEL_RUNS }}
+      LANDING_BOT_DAILY_PUSHES: ${{ vars.LANDING_BOT_DAILY_PUSHES }}
+      LANDING_BOT_RED_PR_MAX_FILES: ${{ vars.LANDING_BOT_RED_PR_MAX_FILES }}
+      LANDING_BOT_RED_PR_MAX_LINES: ${{ vars.LANDING_BOT_RED_PR_MAX_LINES }}
+      RED_PR: ${{ inputs.pr }}
+      RED_PR_HEAD: ${{ inputs.head_sha }}
+      RED_PR_RUN: ${{ inputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # Only to learn the App's login, which counts the bot's own commits; this token reads metadata and nothing else.
+      - name: Read the landing bot's login
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-metadata: read
+      - name: Check every rule before any model call
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/redPr.mjs plan
+      - name: Keep the plan for the apply job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-red-pr-plan
+          path: ${{ runner.temp }}/red-pr/plan.json
+          if-no-files-found: error
+          retention-days: 7
+      # The attempt on this PR, this head and today's model run, each reserved before the model is called.
+      - name: Reserve the attempt on this pull request
+        if: steps.plan.outputs.decision == 'repair'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.attempt_artifact }}
+          path: ${{ runner.temp }}/red-pr/plan.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Reserve this head
+        if: steps.plan.outputs.decision == 'repair'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.head_artifact }}
+          path: ${{ runner.temp }}/red-pr/plan.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Reserve today's model run
+        if: steps.plan.outputs.decision == 'repair'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.day_artifact }}
+          path: ${{ runner.temp }}/red-pr/plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  repair:
+    name: Fix the pull request with a model
+    needs: plan
+    if: needs.plan.outputs.decision == 'repair'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model.yml
+    with:
+      ref: ${{ needs.plan.outputs.ref }}
+      task: ${{ needs.plan.outputs.task }}
+
+  apply:
+    name: Check the patch with main's code and commit it
+    needs: [plan, repair]
+    if: >-
+      always() && github.repository == 'AxalNetwork/StudioOS' &&
+      (needs.plan.outputs.decision == 'repair' || needs.plan.outputs.decision == 'handback')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_RED_PR_MAX_FILES: ${{ vars.LANDING_BOT_RED_PR_MAX_FILES }}
+      LANDING_BOT_RED_PR_MAX_LINES: ${{ vars.LANDING_BOT_RED_PR_MAX_LINES }}
+      MODEL_OUTCOME: ${{ needs.repair.outputs.outcome }}
+      # #8506: the controller commit the model runner's jobs ran; this job runs github.sha and refuses a patch unless
+      # they are one commit and the patch's record names it.
+      CONTROLLER_SHA: ${{ needs.repair.outputs.controller }}
+      MODEL_HEAD_SHA: ${{ needs.repair.outputs.head }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-red-pr-plan
+          path: ${{ runner.temp }}/plan
+      - if: needs.repair.outputs.outcome == 'passed'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-patch
+          path: ${{ runner.temp }}/patch
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Check the patch with main's code, then commit and push it or hand back
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RED_PR_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+          PLAN_DIR: ${{ runner.temp }}/plan
+          PATCH_DIR: ${{ runner.temp }}/patch
+        run: node scripts/landing-bot/redPr.mjs apply

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { breakers, giveUp, LABELS, mode, pathGuard, renderSticky, stickyComment } from './rules.mjs';
 import { composeSticky, conflictOutcome, KEEPER_MAX_ATTEMPTS, keeperAttempts, KIND, plan, pushesReserved, reservationName, RESERVATION_PREFIX } from './keeper-plan.mjs';
 import { gitIn, mergeMain } from './keeper-merge.mjs';
+import { ordinaryOnly, stackHeld } from './stack-membership.mjs';
 
 const REPO = /^[\w-]+\/[\w.-]+$/;
 
@@ -134,7 +135,7 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   const runId = Number(env.GITHUB_RUN_ID);
   const attempt = Number(env.GITHUB_RUN_ATTEMPT);
   // A rerun reserves nothing and pushes nothing: its first attempt's reservation is already counted.
-  const act = attempt === 1 ? result.act : [];
+  const act = attempt === 1 ? await ordinaryOnly(gh.graph, { repo: env.GITHUB_REPOSITORY, prs: result.act, boundary: 'the keeper plan', say: summary }) : [];
   writeFileSync(join(env.RUNNER_TEMP, 'keeper-plan.json'), JSON.stringify({ day, act: act.map((p) => ({ number: p.number, sha: p.head.sha, ref: p.head.ref, attempt: keeperAttempts(p, env.LANDING_BOT_LOGIN).used + 1 })) }));
   output('reservation', reservationName({ day, runId, attempt, n: act.length }));
   output('count', act.length);
@@ -181,6 +182,7 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
       summary(`- #${planned.number}: skipped on re-read`);
       continue;
     }
+    if (await stackHeld(gh.graph, { repo, number: planned.number, head: planned.sha, boundary: 'the keeper merge and push', say: summary })) continue;
     const dir = mkdtempSync(join(env.RUNNER_TEMP, 'keeper-'));
     try {
       const git = gitIn(dir);
@@ -201,6 +203,7 @@ export async function applyStage(env, { gh = client({ repo: env.GITHUB_REPOSITOR
         if (now.head?.sha !== planned.sha) { summary(`- #${planned.number}: push refused because the head moved; left alone`); continue; }
         // GitHub refuses an App push that carries main's workflow-file changes; the update-branch API can do it.
         workflowRefusals += 1;
+        if (await stackHeld(gh.graph, { repo, number: planned.number, head: planned.sha, boundary: 'the keeper update-branch', say: summary })) continue;
         try {
           await app.put(`pulls/${planned.number}/update-branch`, { expected_head_sha: planned.sha });
           await upsertSticky(app, planned.number, env.LANDING_BOT_LOGIN, ['GitHub refused the push, so main was merged through the update-branch API. Pull before you push.'], { k, outcome: 'updated through the update-branch API' });
