@@ -16,6 +16,9 @@
 -- their messages and actions go with them (444's cascade).
 --
 -- Additive: ADD COLUMN with no NOT NULL, CREATE INDEX / TRIGGER IF NOT EXISTS. No BEGIN/COMMIT.
+--
+-- The backfill and the triggers make the rollback classifier call this file manual; its rehearsed recovery (D8532):
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611281314_9277_eadwyn_space.fix.sql
 ALTER TABLE eadwyn_conversations ADD COLUMN scope_kind TEXT;
 ALTER TABLE eadwyn_conversations ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE;
 ALTER TABLE eadwyn_pending_actions ADD COLUMN scope_kind TEXT;
