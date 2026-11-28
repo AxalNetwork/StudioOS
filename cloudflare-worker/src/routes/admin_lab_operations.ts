@@ -41,7 +41,9 @@ r.get('/cohorts/:cohort/capacity', async c => {
 
 // Safe, fixed summaries: legacy reasons can contain staff names. Interview rows
 // and stage transitions are identified as records, never invented event history.
-const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (VALUES (?, ?, ?, ?)), history AS (
+// #9170: D1 refuses a compound SELECT of more than five terms, so the six
+// sources are two unions of three, joined in `history`.
+export const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (VALUES (?, ?, ?, ?)), history_records AS (
   SELECT 'cycle:' || e.id AS id, e.created_at AS at,
     CASE WHEN e.event_type LIKE 'applicant_%' THEN 'decisions' ELSE 'cohort' END AS type,
     e.event_type AS event, c.year || '-' || printf('%02d', c.month) AS cohort,
@@ -70,7 +72,7 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
       AND (SELECT wanted_type FROM params) IN ('', 'weeks')
       AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' WHEN s.triggered_by = 'admin' AND s.admin_user_id IS NOT NULL THEN 'admin' ELSE 'unrecorded' END = (SELECT wanted_by FROM params))
       AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
-  UNION ALL
+), history_actions(id, at, type, event, cohort, about, by, detail, scheduled_at) AS (
   SELECT 'interview:' || i.id, i.updated_at, 'interviews', 'Interview · ' || i.status,
     (SELECT CASE WHEN COUNT(*) = 1 THEN c.year || '-' || printf('%02d', c.month) END FROM cohort_applicants ca
       JOIN cohort_cycles c ON c.id = ca.cohort_cycle_id WHERE ca.application_id = i.application_id),
@@ -107,6 +109,10 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
       AND a.action IN ('incorporation_packet_ready', 'incorporation_filed', 'section_83b_operator_assigned', 'section_83b_operator_review_recorded')
       AND (i.user_id IN (${LAB_PARTICIPANT_IDS}) OR p.founder_id IN
         (SELECT lu.founder_id FROM users lu WHERE lu.id IN (${LAB_PARTICIPANT_IDS})))
+), history AS (
+  SELECT id, at, type, event, cohort, about, by, detail, scheduled_at FROM history_records
+  UNION ALL
+  SELECT id, at, type, event, cohort, about, by, detail, scheduled_at FROM history_actions
 ), labelled AS (
   SELECT *, CASE event
     WHEN 'applicant_approved' THEN 'Application approved'

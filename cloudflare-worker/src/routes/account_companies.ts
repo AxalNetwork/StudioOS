@@ -220,25 +220,34 @@ account.get('/account/companies', async (c) => {
  * Which cycles hold work, per venture. One literal statement over
  * CYCLE_STORES' tables (the SQL guard allows no composed statement); a test
  * holds it to CYCLE_STORES, so a new store cannot be missed here.
+ *
+ * #9170: one union per cycle, then a union of the four. D1 refuses a compound
+ * SELECT of more than five terms, and one flat union of all seventeen stores
+ * made every call report the cycles unreadable. A sixth store in one cycle
+ * needs a second group for it (scripts/check-compound-select.mjs).
  */
 export const PROJECT_CYCLES_SQL = `SELECT DISTINCT cycle, project_id FROM (
-  SELECT 'validate' AS cycle, project_id FROM discovery_interviews
-  UNION ALL SELECT 'validate', project_id FROM pain_groups
-  UNION ALL SELECT 'validate', project_id FROM hypotheses
-  UNION ALL SELECT 'validate', project_id FROM demand_signals
-  UNION ALL SELECT 'build', project_id FROM mvp_features
-  UNION ALL SELECT 'build', project_id FROM venture_risks
-  UNION ALL SELECT 'build', project_id FROM roadmap_okrs
-  UNION ALL SELECT 'build', project_id FROM formation_steps
-  UNION ALL SELECT 'raise', project_id FROM readiness_items
-  UNION ALL SELECT 'raise', project_id FROM pitch_decks
-  UNION ALL SELECT 'raise', project_id FROM data_room_files
-  UNION ALL SELECT 'raise', project_id FROM raise_prospects
-  UNION ALL SELECT 'grow', project_id FROM product_feedback
-  UNION ALL SELECT 'grow', project_id FROM growth_channels
-  UNION ALL SELECT 'grow', project_id FROM growth_partners
-  UNION ALL SELECT 'grow', project_id FROM markets
-  UNION ALL SELECT 'grow', project_id FROM compliance_events
+  SELECT cycle, project_id FROM (
+    SELECT 'validate' AS cycle, project_id FROM discovery_interviews
+    UNION ALL SELECT 'validate', project_id FROM pain_groups
+    UNION ALL SELECT 'validate', project_id FROM hypotheses
+    UNION ALL SELECT 'validate', project_id FROM demand_signals)
+  UNION ALL SELECT cycle, project_id FROM (
+    SELECT 'build' AS cycle, project_id FROM mvp_features
+    UNION ALL SELECT 'build', project_id FROM venture_risks
+    UNION ALL SELECT 'build', project_id FROM roadmap_okrs
+    UNION ALL SELECT 'build', project_id FROM formation_steps)
+  UNION ALL SELECT cycle, project_id FROM (
+    SELECT 'raise' AS cycle, project_id FROM readiness_items
+    UNION ALL SELECT 'raise', project_id FROM pitch_decks
+    UNION ALL SELECT 'raise', project_id FROM data_room_files
+    UNION ALL SELECT 'raise', project_id FROM raise_prospects)
+  UNION ALL SELECT cycle, project_id FROM (
+    SELECT 'grow' AS cycle, project_id FROM product_feedback
+    UNION ALL SELECT 'grow', project_id FROM growth_channels
+    UNION ALL SELECT 'grow', project_id FROM growth_partners
+    UNION ALL SELECT 'grow', project_id FROM markets
+    UNION ALL SELECT 'grow', project_id FROM compliance_events)
 ) WHERE project_id IN (SELECT value FROM json_each(?))`;
 
 account.get('/account/projects', async (c) => {
