@@ -185,11 +185,9 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    // Was 'the request flow lives on a surface a founder cannot open', which
-    // stopped being true when that surface, the AI Matches page, was removed.
-    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // #9106: the sheet D6637 built for every licence (two accepted ties, each decides). Secondary on purpose:
-    // the canvas (NID01) keeps the primary for Request an introduction, still unbuilt above.
+    // D9068 (#9068): the request through Axal (D7678's request sheet), on /api/intro-requests.
+    { label: 'Request an intro', to: '/network/introductions/requests/new' },
+    // #9106: D6637's accepted-ties sheet. Offering stays secondary alongside the request entry.
     { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],

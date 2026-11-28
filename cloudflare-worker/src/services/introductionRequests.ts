@@ -15,7 +15,12 @@
  * own request without operator-only events or contact detail; an operator sees the request without the requester's
  * private notes; a target projection is the shareable brief only. Directory contact points and raw source records
  * (#7672's operator-only table) are never read here.
+ *
+ * WHO WORKS THE OPERATOR SIDE (D9067). A Super Admin's named grant: `operator` works requests, `reviewer` decides
+ * readiness. `staffKindsOf` reads it; the routes gate on it; `grantStaff` and `revokeStaff` write it with a receipt.
  */
+import type { Env } from '../types';
+import { adminAuditStatement } from './adminAudit';
 
 export const REQUEST_STATES = [
   'draft', 'readiness_needed', 'submitted', 'in_review', 'needs_information', 'outreach_ready', 'contacted',
@@ -574,15 +579,24 @@ function pageOut(rows: any[], limit: number, view: (r: any) => any) {
   return { items: page.map(view), next_cursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null };
 }
 
-export async function listForRequester(db: DB, userId: number, q: { state?: string | null; cursor?: string | null; limit?: string | null }) {
+/** Who acts next; the requester's desk draws one lane per value (D9068, NIE01). */
+export const NEXT_ACTORS = ['requester', 'operator', 'target', 'none'] as const;
+
+export async function listForRequester(db: DB, userId: number, q: { state?: string | null; next_actor?: string | null; cursor?: string | null; limit?: string | null }) {
   const limit = pageSize(q.limit);
   const cur = decodeCursor(q.cursor);
   if (q.state && !REQUEST_STATES.includes(q.state as RequestState)) throw refusal(400, 'state_invalid', 'That is not a request state.');
-  const state = q.state || null;
+  if (q.next_actor && !(NEXT_ACTORS as readonly string[]).includes(q.next_actor)) throw refusal(400, 'next_actor_invalid', 'That is not who acts next.');
+  const state = q.state || null, actor = q.next_actor || null;
   // The total and the page share one WHERE, so the count is the whole set the pages walk.
-  const total = await db.prepare(`SELECT COUNT(*) AS n FROM network_intro_requests r WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?)`).bind(userId, state, state).first();
-  const rows = (await db.prepare(REQUEST_SELECT + ` WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?)` + PAGE_TAIL).bind(userId, state, state, ...cursorBinds(cur, limit)).all()).results || [];
-  return { total: total?.n ?? 0, ...pageOut(rows, limit, (r) => requesterView(r)) };
+  const WHERE = ` WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?) AND (? IS NULL OR r.next_actor = ?)`;
+  const binds = [userId, state, state, actor, actor];
+  const total = await db.prepare(`SELECT COUNT(*) AS n FROM network_intro_requests r` + WHERE).bind(...binds).first();
+  const rows = (await db.prepare(REQUEST_SELECT + WHERE + PAGE_TAIL).bind(...binds, ...cursorBinds(cur, limit)).all()).results || [];
+  // Every lane's count from one read, whatever the filter: a lane with nothing in it is a counted zero.
+  const counted = (await db.prepare(`SELECT next_actor, COUNT(*) AS n FROM network_intro_requests WHERE requester_user_id = ? GROUP BY next_actor`).bind(userId).all()).results || [];
+  const lanes = Object.fromEntries(NEXT_ACTORS.map((a) => [a, Number(counted.find((x: any) => x.next_actor === a)?.n ?? 0)]));
+  return { total: total?.n ?? 0, lanes, ...pageOut(rows, limit, (r) => requesterView(r)) };
 }
 
 // ── Operator ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -741,4 +755,79 @@ export async function readinessQueue(db: DB) {
   const rows = (await db.prepare(`SELECT user_id, requirement_key, value_json, evidence_ref IS NOT NULL AS has_evidence_ref, updated_at FROM network_intro_readiness WHERE status = 'submitted' ORDER BY updated_at, user_id LIMIT ?`).bind(PAGE_MAX).all()).results || [];
   const total = await db.prepare(`SELECT COUNT(*) AS n FROM network_intro_readiness WHERE status = 'submitted'`).first();
   return { total: total?.n ?? 0, items: rows.map((r: any) => ({ ...r, value: json(r.value_json, {}), value_json: undefined, has_evidence_ref: !!r.has_evidence_ref })) };
+}
+
+// ── D9067 (#9067): who works the operator side, by a Super Admin's named grant ────────────────────────────────────
+//
+// The owner's answer A of 2026-11-27 on #7673 (D7678, D7677 Q3): an operator is an HQ admin a Super Admin has named;
+// a readiness reviewer is an HQ admin with the Network reviewer entitlement. Being an HQ admin, or a Super Admin, is
+// not enough on its own. A grant has no validity period (none is set until the policy owner sets one): it holds until
+// a Super Admin revokes it. Every grant and revoke lands in the same batch as its `admin_audit_log` row.
+
+export const STAFF_KINDS = ['operator', 'reviewer'] as const;
+export type StaffKind = (typeof STAFF_KINDS)[number];
+const GRANT_REASON_MAX = 500;
+/** What the grant writes need: the database, for the change and its audit row in one batch. */
+type AuditEnv = Pick<Env, 'DB'>;
+
+/** The kinds a person holds now: granted and not revoked. */
+export async function staffKindsOf(db: DB, userId: number): Promise<Set<StaffKind>> {
+  const rows: Array<{ kind: StaffKind }> = (await db
+    .prepare('SELECT kind FROM network_intro_staff_grants WHERE user_id = ? AND revoked_at IS NULL')
+    .bind(userId)
+    .all()).results ?? [];
+  return new Set(rows.map((r) => r.kind));
+}
+
+const grantView = (g: any) => ({
+  uid: g.uid, kind: g.kind, user: { id: g.user_id, uid: g.user_uid ?? null, name: g.user_name ?? null },
+  granted_by: g.granted_by, granted_at: g.granted_at, reason: g.reason,
+  revoked_by: g.revoked_by ?? null, revoked_at: g.revoked_at ?? null,
+});
+
+/** The grants in force, for the Super Admin's list. */
+export async function listStaffGrants(db: DB) {
+  const rows = (await db.prepare(`SELECT g.*, u.uid AS user_uid, u.name AS user_name FROM network_intro_staff_grants g JOIN users u ON u.id = g.user_id WHERE g.revoked_at IS NULL ORDER BY g.kind, g.granted_at, g.id`).all()).results ?? [];
+  return { grants: rows.map(grantView) };
+}
+
+function grantInput(body: any) {
+  const kind = body?.kind;
+  if (!STAFF_KINDS.includes(kind)) throw refusal(400, 'grant_kind_invalid', 'Name the grant: operator or reviewer.');
+  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+  if (!reason || reason.length > GRANT_REASON_MAX) throw refusal(400, 'grant_reason_required', 'Say why, in up to 500 characters. The reason is kept with the grant.');
+  return { kind: kind as StaffKind, reason };
+}
+
+/**
+ * A Super Admin names an operator or a reviewer. The grantee must be an active HQ admin. Granting what is already
+ * held changes nothing and records nothing (`already: true`).
+ */
+export async function grantStaff(env: AuditEnv, superAdminId: number, userId: number, body: any) {
+  const { kind, reason } = grantInput(body);
+  const grantee = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND LOWER(role) = 'admin' AND is_active = 1").bind(userId).first();
+  if (!grantee) throw refusal(404, 'grantee_not_hq_admin', 'Only an active HQ admin can be named an operator or a reviewer.');
+  const id = uid('isg');
+  const [insert] = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO network_intro_staff_grants (uid, user_id, kind, granted_by, reason)
+      SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM network_intro_staff_grants WHERE user_id = ? AND kind = ? AND revoked_at IS NULL)`)
+      .bind(id, userId, kind, superAdminId, reason, userId, kind),
+    adminAuditStatement(env as Env, superAdminId, 'network_intro_grant', { target_user_id: userId, kind, grant_uid: id, reason }, { onlyIfChanged: true }),
+  ]);
+  const row = await env.DB.prepare(`SELECT g.*, u.uid AS user_uid, u.name AS user_name FROM network_intro_staff_grants g JOIN users u ON u.id = g.user_id WHERE g.user_id = ? AND g.kind = ? AND g.revoked_at IS NULL`).bind(userId, kind).first();
+  return { grant: grantView(row), already: !insert.meta?.changes };
+}
+
+/** A Super Admin ends a grant. Revoking what is not held changes nothing and records nothing (`already: true`). */
+export async function revokeStaff(env: AuditEnv, superAdminId: number, userId: number, kindRaw: string, body: any) {
+  const { kind, reason } = grantInput({ ...(body ?? {}), kind: kindRaw });
+  const held = await env.DB.prepare('SELECT uid FROM network_intro_staff_grants WHERE user_id = ? AND kind = ? AND revoked_at IS NULL').bind(userId, kind).first<{ uid: string }>();
+  if (!held) return { grant: null, already: true };
+  const [update] = await env.DB.batch([
+    env.DB.prepare(`UPDATE network_intro_staff_grants SET revoked_by = ?, revoked_at = datetime('now'), revoke_reason = ?
+      WHERE uid = ? AND revoked_at IS NULL`).bind(superAdminId, reason, held.uid),
+    adminAuditStatement(env as Env, superAdminId, 'network_intro_revoke', { target_user_id: userId, kind, grant_uid: held.uid, reason }, { onlyIfChanged: true }),
+  ]);
+  const row = await env.DB.prepare(`SELECT g.*, u.uid AS user_uid, u.name AS user_name FROM network_intro_staff_grants g JOIN users u ON u.id = g.user_id WHERE g.uid = ?`).bind(held.uid).first();
+  return { grant: grantView(row), already: !update.meta?.changes };
 }

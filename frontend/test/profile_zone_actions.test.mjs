@@ -32,11 +32,13 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const APP = read('frontend/src/App.jsx');
+// App.jsx and every route module (D528), so a link into a module's route is checked like one in App.jsx (D9068).
+const APP = readRoutesSource(root);
 
 const PROFILES = {
   founder: {
@@ -94,7 +96,8 @@ const PROFILES = {
     // are stated gaps now. `grow/focus`'s `Change metric` links `/build/kpi`.
     // 18 → 15 (D894): `raise/pitch`'s three links went with that zone. 15 → 13
     // (D1109): `raise/data-room`'s Grant access and Revoke went with its view.
-    links: 13,
+    // 13 → 14 (D9068): `network/introductions`'s `Request an intro` opens the request through Axal.
+    links: 14,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
@@ -478,7 +481,8 @@ const PROFILES = {
     // year, fetched from its own endpoint — so neither is the rows-on-screen
     // dump `exportView` produces. Was 15/14 at PR4.
     zones: 16,
-    links: 1,
+    // 1 → 2 (D9068): `network/introductions`'s `New introduction` opens the request through Axal.
+    links: 2,
     exports: 14,
     // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
     // NOT SHARE WITH PARTNER. Four of them are `AskZone` and `LibraryZone`,

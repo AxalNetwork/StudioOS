@@ -47,6 +47,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `closing/` | D1213 (#2424): the closing room (founder, investor, staff) and Contracts › Closings, from terms agreed to money in the account. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
 | `relationships/` | D1357 (#3572): relationship intelligence: the sharing setting, "Who knows them" on a record, the ask, and Network › Introductions (inbox, follow-ups, log). |
+| `introRequests/` | D9068 (#9068): introductions through Axal, the member side: request readiness, the four-step request, the desk by who acts next and one request's receipt and status, on `/api/intro-requests` (D7673). Start at `introRequests/README.md`. |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
