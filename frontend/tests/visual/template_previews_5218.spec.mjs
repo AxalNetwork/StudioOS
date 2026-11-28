@@ -103,10 +103,12 @@ for (const width of [1440, 390]) {
     const tile = page.getByTestId('pitch-templates-tile-preview_fixture');
     await expect(tile.getByText('The actual stored cover')).toBeVisible();
     await tile.click();
-    await expect(page.getByTestId('pitch-templates-preview').getByText('The actual stored cover')).toBeVisible();
+    // D8770 part 3: below 1024 px the preview opens as a sheet over the covers.
+    const preview = page.getByTestId(width < 1024 ? 'pitch-templates-sheet' : 'pitch-templates-preview');
+    await expect(preview.getByText('The actual stored cover')).toBeVisible();
     expect(detailReads).toBe(1);
-    await page.getByRole('button', { name: 'Preview all slides', exact: true }).click();
-    await expect(page.getByRole('dialog')).toContainText('The saved template structure');
+    await preview.getByTestId('pitch-templates-all').click();
+    await expect(page.getByTestId('pitch-templates-all-dialog')).toContainText('The saved template structure');
     await page.keyboard.press('Escape');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`gallery-${width}.png`), fullPage: true });

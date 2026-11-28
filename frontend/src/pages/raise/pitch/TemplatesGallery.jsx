@@ -6,7 +6,7 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, WorkerRail } from '../../../ui';
 import PitchPage from './PitchPage';
-import { myTemplates, saveAsTemplate, templates } from './deckV2Adapter';
+import { elementsLibrary, myTemplates, saveAsTemplate, templates } from './deckV2Adapter';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates';
 import { deckRail } from './deckRailGroups';
 import { refusalOf } from './newDeckModel';
@@ -18,9 +18,11 @@ import {
 } from './templatesModel';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 import DeckPreview, { previewRead } from './DeckPreview';
-import TemplateSlide, { TemplateFullSize, ViewSwitch, useThemeFonts } from './TemplateSlide';
-import { DEFAULT_VIEW, SCALED_LINE, carryLines, previewFace, previewSlides, takeaway, templateSets } from './templatePreviewModel';
-import { EXAMPLE_NOTE } from './templateExamples';
+import TemplateSlide, { TemplateFullSize, ViewNote, ViewSwitch, useThemeFonts } from './TemplateSlide';
+import {
+  DEFAULT_VIEW, SCALED_LINE, carryLines, decorArt, decorIcons, needsDecorArt, previewFace, previewSlides, sheetCard, takeaway, templateSets, viewFor,
+} from './templatePreviewModel';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 
 /**
  * D1604 (#3716, pd29), wired to the template store by #3876 (canvas pd29c,
@@ -48,6 +50,15 @@ import { EXAMPLE_NOTE } from './templateExamples';
  * first, owner Q1 A) and Blank structure (the store's placeholders, the only
  * thing Use this template sends for: it posts the uid). Each card offers Open
  * full size, which has Previous, Next and Read this slide.
+ *
+ * D8770 part 3 (canvas PTP16, PTP20 to PTP25): each card draws its
+ * template's chrome and decor (the library's icons, shapes and textures read
+ * once per preview, `elementsLibrary`). A preview whose cards could not be
+ * read offers Try again, and Use this template stays off until they read. A
+ * template the example covers none of shows its blank structure and says the
+ * example is unavailable. Below 1024 px the preview opens as a sheet over the
+ * covers (one card, Preview all N slides, Use this template pinned to its
+ * foot), not under all 24 of them, and its controls are 44 px on a phone.
  *
  * A reader (read-only HQ) browses and gets no Use this template and no Save.
  * Gallery and Yours are two buttons with `aria-pressed`, as New deck's Length
@@ -170,11 +181,31 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
   // D8770: Example first (owner Q1, option A); `full` is the card open at full size.
   const [view, setView] = useState(DEFAULT_VIEW);
   const [full, setFull] = useState(null);
+  // D8770 part 3: Try again on a preview that could not be read (PTP16), and the sheet below 1024 px (PTP21).
+  const [tries, setTries] = useState(0);
+  const phone = usePhoneWidth();
   const deck = preview.status === 'ok' ? preview.deck : null;
   useThemeFonts(deck?.theme);
   const face = useMemo(() => previewFace(deck?.theme), [deck]);
   const blank = useMemo(() => (Array.isArray(deck?.cards) ? deck.cards : []), [deck]);
-  const shown = useMemo(() => previewSlides(blank, view, face), [blank, view, face]);
+  // A template the example covers none of is shown as its blank structure, never placeholders posing as the example.
+  const exampleOff = blank.length > 0 && viewFor('example', blank) === 'blank';
+  const shownView = viewFor(view, blank);
+  const shown = useMemo(() => previewSlides(blank, shownView, face), [blank, shownView, face]);
+  // The template's decor drawn by the elements library, read once per preview; without it the ornament is left out.
+  const wantsArt = useMemo(() => needsDecorArt(blank), [blank]);
+  const iconKey = useMemo(() => decorIcons(blank).join(','), [blank]);
+  const [art, setArt] = useState(null);
+  useEffect(() => {
+    setArt(null);
+    if (!wantsArt) return undefined;
+    let live = true;
+    Promise.resolve().then(() => elementsLibrary(iconKey ? { refs: iconKey.split(',') } : {})).then(
+      (r) => { if (live) setArt(decorArt(r)); },
+      (e) => reportError('pitch-templates:decor', e),
+    );
+    return () => { live = false; };
+  }, [wantsArt, iconKey]);
   const aspect = deck?.template?.aspect === '4:3' ? '4:3' : '16:9';
   const cardLabel = (i) => `Slide ${i + 1} of ${shown.length}, ${blank[i]?.title || `Card ${i + 1}`}: ${takeaway(shown[i]) || ''}`;
 
@@ -188,7 +219,7 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
       (e) => { if (live) setPreview({ status: 'error', titles: [] }); reportError('pitch-templates:preview', e); },
     );
     return () => { live = false; };
-  }, [tile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tile?.id, tries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const use = async () => {
     if (!tile || projectId == null) return;
@@ -213,6 +244,44 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
   }
   if (!tiles.length) return <div className={`${CARD} p-6 text-center ${MUTED}`} data-testid={`${testId}-empty`}>{filtered ? NO_MATCH : empty}</div>;
 
+  // Use this template stays off until the template's cards have been read (PTP16).
+  const useButton = canUse && preview.status === 'ok'
+    ? <button type="button" className={`${PRIMARY} max-sm:min-h-[44px]`} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button>
+    : null;
+  // The aside shows the first three cards; the phone sheet one, the first with a chart (PTP21).
+  const asideCards = (phone ? [sheetCard(shown)] : [0, 1, 2]).filter((i) => i < shown.length);
+  const previewBody = tile ? (
+    <>
+      {tile.description ? <span className={MUTED}>{tile.description}</span> : null}
+      {tile.audiences.length ? <span className={SMALL} data-testid="pitch-templates-audiences">For: {tile.audiences.join(', ')}</span> : null}
+      {preview.status === 'loading' ? <span className={SMALL} aria-busy="true" data-testid="pitch-templates-preview-loading">Reading the cards…</span> : null}
+      {preview.status === 'error' ? (
+        <div className="flex flex-col items-start gap-2" role="alert" data-testid="pitch-templates-preview-error">
+          <span className={`text-[12.5px] font-bold ${INK}`}>{PREVIEW_FAILED}</span>
+          <button type="button" className={`${GHOST} max-sm:min-h-[44px]`} onClick={() => setTries((t) => t + 1)} data-testid="pitch-templates-preview-retry"><RefreshCw size={14} aria-hidden="true" /> Try again</button>
+        </div>
+      ) : null}
+      {preview.status === 'ok' ? (
+        <div className="flex flex-col gap-3">
+          <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]" data-testid="pitch-templates-sets">
+            {templateSets(preview.deck).map(([k, v]) => <React.Fragment key={k}><dt className={`${EYE} self-center`}>{k}</dt><dd className={`m-0 ${INK}`}>{v}</dd></React.Fragment>)}
+          </dl>
+          <ViewSwitch view={shownView} onChange={setView} exampleOff={exampleOff} testId="pitch-templates-view" />
+          <ViewNote view={shownView} exampleOff={exampleOff} testId="pitch-templates-example-note" />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{asideCards.map((i) => <TemplateSlide key={`${shownView}-${i}`} slide={shown[i]} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={phone ? 336 : 306} art={art} testId={`pitch-templates-card-${i}`} />)}</div>
+          <button type="button" className={`${GHOST} max-sm:min-h-[44px]`} onClick={() => setAll(true)} data-testid="pitch-templates-all">{phone ? `Preview all ${shown.length} slides` : 'Preview all slides'}</button>
+          {phone ? null : (
+            <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-templates-strip">
+              {preview.titles.map((x, i) => (
+                <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
+              ))}
+            </ol>
+          )}
+        </div>
+      ) : null}
+    </>
+  ) : null;
+
   return (
     <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={label} data-testid={testId}>
@@ -234,50 +303,38 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
           </li>
         ))}
       </ul>
-      <aside className={`${CARD} flex flex-col gap-2.5 p-4`} aria-label="Preview" data-testid="pitch-templates-preview">
-        {tile ? (
-          <>
-            <span className={EYE}>Preview · {tile.label}</span>
-            {tile.description ? <span className={MUTED}>{tile.description}</span> : null}
-            {tile.audiences.length ? <span className={SMALL} data-testid="pitch-templates-audiences">For: {tile.audiences.join(', ')}</span> : null}
-            {preview.status === 'loading' ? <span className={SMALL}>Reading the cards…</span> : null}
-            {preview.status === 'error' ? <span className={SMALL} role="alert" data-testid="pitch-templates-preview-error">{PREVIEW_FAILED}</span> : null}
-            {preview.status === 'ok' ? (
-              <div className="flex flex-col gap-3">
-              <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]" data-testid="pitch-templates-sets">
-                {templateSets(preview.deck).map(([k, v]) => <React.Fragment key={k}><dt className={`${EYE} self-center`}>{k}</dt><dd className={`m-0 ${INK}`}>{v}</dd></React.Fragment>)}
-              </dl>
-              <ViewSwitch view={view} onChange={setView} testId="pitch-templates-view" />
-              {view === 'example' ? <span className={SMALL} data-testid="pitch-templates-example-note">{EXAMPLE_NOTE}</span> : null}
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{shown.slice(0, 3).map((slide, i) => <TemplateSlide key={`${view}-${i}`} slide={slide} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={306} testId={`pitch-templates-card-${i}`} />)}</div>
-              <button type="button" className={GHOST} onClick={() => setAll(true)} data-testid="pitch-templates-all">Preview all slides</button>
-              <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-templates-strip">
-                {preview.titles.map((x, i) => (
-                  <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
-                ))}
-              </ol>
-              </div>
-            ) : null}
-            {canUse ? <button type="button" className={PRIMARY} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button> : null}
-            <RefusalLine refusal={refusal} testId="pitch-templates-refusal" />
-          </>
-        ) : <span className={MUTED}>Select a template to see its cards.</span>}
-      </aside>
+      {phone ? (tile ? (
+        <Lightbox phone="sheet" label={`Preview · ${tile.label}`} title={tile.label} width={560} onClose={() => setSelected(null)} testId="pitch-templates-sheet"
+          footer={useButton || refusal ? <div className="flex flex-col gap-2">{useButton}<RefusalLine refusal={refusal} testId="pitch-templates-refusal" /></div> : null}>
+          <div className="flex flex-col gap-2.5">{previewBody}</div>
+        </Lightbox>
+      ) : null) : (
+        <aside className={`${CARD} flex flex-col gap-2.5 p-4`} aria-label="Preview" data-testid="pitch-templates-preview">
+          {tile ? (
+            <>
+              <span className={EYE}>Preview · {tile.label}</span>
+              {previewBody}
+              {useButton}
+              <RefusalLine refusal={refusal} testId="pitch-templates-refusal" />
+            </>
+          ) : <span className={MUTED}>Select a template to see its cards.</span>}
+        </aside>
+      )}
       {all && tile && preview.status === 'ok' && full == null ? <Lightbox label={`Preview · ${tile.label}`} title={`Preview · ${tile.label}`} width={1100} onClose={() => setAll(false)} testId="pitch-templates-all-dialog"
-        footer={canUse ? <div className="flex justify-end"><button type="button" className={PRIMARY} onClick={() => { setAll(false); setConfirm(true); }} data-testid="pitch-templates-all-use">{USE_TEMPLATE}</button></div> : null}>
+        footer={canUse ? <div className="flex justify-end"><button type="button" className={`${PRIMARY} max-sm:min-h-[44px] max-sm:w-full`} onClick={() => { setAll(false); setConfirm(true); }} data-testid="pitch-templates-all-use">{USE_TEMPLATE}</button></div> : null}>
         <div className="flex flex-col gap-3">
-          <span className="flex flex-wrap items-center gap-3"><ViewSwitch view={view} onChange={setView} testId="pitch-templates-all-view" /><span className={SMALL}>{shown.length} cards · {aspect} · {SCALED_LINE}</span></span>
-          {view === 'example' ? <span className={SMALL}>{EXAMPLE_NOTE}</span> : null}
+          <span className="flex flex-wrap items-center gap-3"><ViewSwitch view={shownView} onChange={setView} exampleOff={exampleOff} testId="pitch-templates-all-view" /><span className={SMALL}>{shown.length} cards · {aspect} · {SCALED_LINE}</span></span>
+          <ViewNote view={shownView} exampleOff={exampleOff} testId="pitch-templates-all-note" />
           <div className="grid gap-3 sm:grid-cols-2">{shown.map((slide, i) => (
-            <figure key={`${view}-${i}`} className="m-0 flex min-w-0 flex-col gap-1">
-              <TemplateSlide slide={slide} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={500} testId={`pitch-templates-all-${i}`} />
+            <figure key={`${shownView}-${i}`} className="m-0 flex min-w-0 flex-col gap-1">
+              <TemplateSlide slide={slide} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={phone ? 358 : 500} art={art} testId={`pitch-templates-all-${i}`} />
               <figcaption className={SMALL}>{i + 1}. {blank[i]?.title || preview.titles[i]}</figcaption>
             </figure>
           ))}</div>
         </div>
       </Lightbox> : null}
       {full != null && tile && preview.status === 'ok' ? (
-        <TemplateFullSize blank={blank} shown={shown} at={full} onMove={setFull} onClose={() => setFull(null)} view={view} onView={setView} face={face} aspect={aspect} />
+        <TemplateFullSize blank={blank} shown={shown} at={full} onMove={setFull} onClose={() => setFull(null)} view={shownView} onView={setView} face={face} aspect={aspect} art={art} exampleOff={exampleOff} phone={phone} />
       ) : null}
       {confirm && tile ? (
         <Lightbox label={USE_TEMPLATE} title={USE_TEMPLATE} width={480} onClose={() => !busy && setConfirm(false)} testId="pitch-templates-dialog"
