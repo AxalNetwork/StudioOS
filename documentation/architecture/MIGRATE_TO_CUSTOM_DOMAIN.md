@@ -6,7 +6,10 @@
 > whole-host custom domain of the same Worker, GitHub Pages serves nothing,
 > and "never attach a custom domain to the apex" is the opposite of the
 > deployed truth (`CLAUDE.md` fact 4, `PRODUCTION.md`). Do not act on the
-> apex instructions below.
+> apex instructions below, nor on its hand `wrangler deploy` step: production
+> ships only through the release workflow (`npm run deploy`,
+> `documentation/operations/DEPLOY.md`), and OAuth registration is
+> `documentation/operations/OAUTH_PROVIDERS.md`.
 
 **Status:** ⚠️ In progress — Cloudflare + code landed, operator deploy + OAuth provider updates pending.
 **Owner:** Infra.

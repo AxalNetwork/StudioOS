@@ -26,7 +26,9 @@ files say how to act on it.
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
 | `FREE_SECURITY_7899.md` | Maintain free deterministic GitHub security controls, handle scanner findings through S21, and roll out Dependency Review safely through the merge queue. |
 | `GITHUB_CONNECTOR_APP.md` | Register the StudioOS GitHub App for the GitHub connector (D655), put its Client ID and secret in production, check, rotate and remove them, and troubleshoot a failed connect. |
-| `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
+| `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub, and set up the sync's secrets and inbound webhook. |
+| `GMAIL_OAUTH.md` | Set up, check and rotate the Gmail OAuth client and refresh token the Worker sends the platform's own email with (#9059). |
+| `OAUTH_PROVIDERS.md` | Find the host every OAuth callback uses (`OAUTH_CALLBACK_BASE_URL`), and register the Google Calendar and LinkedIn clients and their secrets (#9059). |
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
 | `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
 | `TEAMS_ENTRA_5809.md` | Inventory the Microsoft calendar app that creates Teams meetings, register its exact callbacks, set and rotate its client, run the licensed-organizer live proof, and recover from each refusal (#5809). |
