@@ -13,9 +13,14 @@
 // credential that was withdrawn needs to be told it was withdrawn — silently
 // 404ing it looks identical to a typo, which is the wrong answer to
 // "is this real?".
+//
+// For the same reason only a 404 says "No matching credential" (#9178). A 503,
+// any other error or a network failure says verification is unavailable and
+// offers a retry: calling a genuine credential unknown because the API was down
+// is the same wrong answer.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, BadgeCheck, Loader2, ShieldOff } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CloudOff, Loader2, RotateCw, ShieldOff } from 'lucide-react';
 import { api } from '../lib/api';
 
 function fmt(iso) {
@@ -26,17 +31,25 @@ function fmt(iso) {
     : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
+// Only the API's own 404 means the token matches nothing. A network failure
+// has no status, so it never reads as not found.
+export function verifyFailureStatus(err) {
+  return err?.status === 404 ? 'notfound' : 'unavailable';
+}
+
 export default function PublicCertificateVerifyPage() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', data: null });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
+    setState({ status: 'loading', data: null });
     api.publicVerifyCertificate(token)
       .then((d) => alive && setState({ status: 'ready', data: d }))
-      .catch(() => alive && setState({ status: 'notfound', data: null }));
+      .catch((err) => alive && setState({ status: verifyFailureStatus(err), data: null }));
     return () => { alive = false; };
-  }, [token]);
+  }, [token, attempt]);
 
   const d = state.data;
   const verified = state.status === 'ready' && d?.verified;
@@ -65,6 +78,25 @@ export default function PublicCertificateVerifyPage() {
                 This link does not correspond to a credential we can verify. Check the link is
                 complete, or ask the holder to re-share it.
               </p>
+            </div>
+          )}
+
+          {state.status === 'unavailable' && (
+            <div className="p-8 text-center" data-testid="verify-unavailable" role="alert">
+              <CloudOff size={26} className="mx-auto text-gray-400 mb-3" />
+              <div className="text-base font-bold text-gray-900 dark:text-gray-50">Verification is temporarily unavailable, try again</div>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
+                We could not reach the credential registry, so this check has no answer yet.
+                It does not mean the credential is invalid.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAttempt((n) => n + 1)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3.5 py-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
+                data-testid="verify-retry"
+              >
+                <RotateCw size={14} /> Try again
+              </button>
             </div>
           )}
 

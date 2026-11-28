@@ -62,7 +62,7 @@ const FIELDS = [
 const lineage = (over = {}) => ({
   based_on: { skill_uid: HQ, version: 3 },
   reason: 'Our buyers are procurement teams, so we count them from our CRM.',
-  versions: [{ version: 2, based_on_version: 3 }, { version: 1, based_on_version: 3 }],
+  versions: [{ version: 2, based_on_version: 3, published_at: '2026-11-12 09:30:00', by_name: 'Priya Shah' }, { version: 1, based_on_version: 3, published_at: '2026-11-03 16:05:00', by_name: null }],
   base: { uid: HQ, name: '[Sizing fixture]', status: 'published', current_version: 5, retired: false, suspended: false, version: { version: 3, ...V3 }, newest: { version: 5, ...V5 } },
   base_update_available: true,
   company: { side: 'version', version: 2 },
@@ -162,14 +162,26 @@ test('Extend: each refusal is tied to its field; the body sends a name only when
   assert.deepEqual(versionChoices(null), []);
 });
 
-test('history: a null based_on_version reads Not recorded, never "v0"; who published is not recorded', () => {
+test('history: a null based_on_version, publisher or day reads Not recorded, never "v0" or a guessed name', () => {
   const v = compareView(card(extCard()), lineage({ versions: [{ version: 1, based_on_version: null }] }));
-  assert.deepEqual(v.history, [{ version: 1, builtOn: null }]);
+  assert.deepEqual(v.history, [{ version: 1, builtOn: null, by: null, on: null }]);
   const out = renderedText(html(h(History, { rows: v.history })));
   assert.match(out, /Your v1/);
   assert.match(out, /Axal: Not recorded/);
-  assert.match(out, /Published by, when: Not recorded/);
+  assert.match(out, /Published by Not recorded, Not recorded/);
+  assert.doesNotMatch(out, /Not built yet/);
   assert.doesNotMatch(out, /v0\b/);
+  // D8826: the base read's publisher name and day; a blank or address-shaped name is not shown.
+  const rows = compareView(card(extCard()), lineage({ versions: [
+    { version: 3, based_on_version: 3, published_at: '2026-11-12 09:30:00', by_name: ' Priya Shah ' },
+    { version: 2, based_on_version: 3, published_at: '2026-11-03T16:05:00Z', by_name: 'priya@example.test' },
+    { version: 1, based_on_version: 3, published_at: null, by_name: '  ' },
+  ] })).history;
+  assert.deepEqual(rows.map((r) => [r.version, r.by, r.on]), [[3, 'Priya Shah', '12 Nov 2026'], [2, null, '3 Nov 2026'], [1, null, null]]);
+  const drawn = renderedText(html(h(History, { rows })));
+  assert.match(drawn, /Your v3 ?built on Axal v3 ?Published by Priya Shah, 12 Nov 2026/);
+  assert.match(drawn, /Published by Not recorded, 3 Nov 2026/);
+  assert.doesNotMatch(drawn, /@/);
   assert.match(renderedText(html(h(History, { rows: [] }))), /No published versions yet/);
 });
 
@@ -258,6 +270,8 @@ test('states: a standalone skill, an unreadable base, a failed read and the Work
     assert.doesNotMatch(t, /Up to date with/);
     assert.equal(nob.byTestId('compare-table').length, 0, 'no comparison while Axal\'s side is unreadable');
     assert.match(t, /built on Axal v3/, 'history still reads');
+    assert.match(t, /Published by Priya Shah, 12 Nov 2026/, 'with who published each version, and when');
+    assert.match(t, /Published by Not recorded, 3 Nov 2026/);
   } finally { await nob.done(); }
 
   const bad = await mountPage(ROUTES({ base: [500, { error: 'boom' }] }));
