@@ -23,6 +23,7 @@ disagrees with the code, the document is the thing to fix.
 | `GOTCHAS.md` | What will bite me? |
 | `MCP_API_PLATFORM.md` | The MCP engine, member API keys and AI token metering: what exists, the contracts, the security decisions, and which task builds what (#2463). Updated every session. |
 | `PROFILING_V2.md` | The Profiling v2 spec (D356): trait model, question formats, skills evidence, values across roles, the evolution model and its parameters, and what Sessions 7–15 build. The source of truth for that programme; `cloudflare-worker/test/fixtures/profiling-v2-personas.json` is held to it. |
+| `AXAL_FIT_METHODOLOGY.md` | Why Axal Fit scores the way it does: rubrics, weights, bands, values, skill axes and red flags, each reproduced from `cloudflare-worker/src/services/axalFit.ts`, which wins if they disagree. Moved here from `attached_assets/`. |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
 | `CLOUDFLARE-CUTOVER.md` | **Superseded record (2026-08).** The plan that retired GitHub Pages at the apex — executed, then overtaken: since 2026-09-01 the Worker serves both hosts (`PRODUCTION.md` has the current topology). Kept for the 5xx baseline table and the OAuth re-registration table, which is still live work. |
 | `CLOUDFLARE-PAGES-MIGRATION.md` | **Superseded record (2026-08-31).** How the apex moved to Cloudflare Pages for one day, and what bit — the failure mode that still forbids path-scoped apex routes. Pages is a mirror of `docs/` now, not a host. |

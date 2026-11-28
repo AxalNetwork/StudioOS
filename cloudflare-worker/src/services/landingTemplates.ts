@@ -326,13 +326,12 @@ export const TEMPLATE_DESIGN_SOURCES: Record<string, string> = {
  * `brandtemplates/` directory names that are byte-identical duplicate
  * uploads of another directory, not distinct templates — excluded from
  * "every directory maps to a TEMPLATE_SOURCES value" in the provenance test.
- * Verified with a full recursive diff (every file, not just the main page)
- * on 2026-08-07: `Capital Ready Kit 2` is a re-upload of `Capital Ready Kit`
- * with a different folder name and nothing else different.
+ * Empty since the repository cleanup of 2026-11-27: its one entry,
+ * `Capital Ready Kit 2` (a byte-identical re-upload of `Capital Ready Kit`,
+ * verified with a full recursive diff on 2026-08-07), was deleted. Add an
+ * entry only for a duplicate directory that has to stay.
  */
-export const TEMPLATE_SOURCE_DUPLICATE_DIRS: Record<string, string> = {
-  'Capital Ready Kit 2': 'Capital Ready Kit',
-};
+export const TEMPLATE_SOURCE_DUPLICATE_DIRS: Record<string, string> = {};
 
 function escapeHtml(s: string | null | undefined): string {
   if (!s) return '';
