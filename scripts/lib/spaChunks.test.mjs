@@ -147,7 +147,7 @@ const map=refs=>'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f='+JSON.
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(typeof input==='string'?input:input.url), p=u.pathname;
  appendFileSync(process.env.REQUEST_LOG, JSON.stringify([u.origin,p])+'\\n');
- const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
+ const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin','cross-origin-resource-policy':'same-site'};
  if(p==='/api/auth/google/config') return Response.json({configured:false,popup:false,client_id:null});
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
  if(p==='/api/public/version') return Response.json({sha:'a'.repeat(40),version_id:null,built_at:null,missing:['version_id','built_at']});

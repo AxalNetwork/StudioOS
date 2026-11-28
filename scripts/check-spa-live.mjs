@@ -198,12 +198,15 @@ const API_PROBE_LIMITED_PATH =
 // Referrer-Policy, which is deliberately laxer on the public static surface
 // (GOTCHAS, "Referrer-Policy is two-tier"). HSTS is matched on the presence
 // of a max-age so a longer or shorter window is not a deploy failure; the
-// other three must be the exact value the file declares.
+// others must be the exact value the file declares. #9207 added
+// Cross-Origin-Resource-Policy; the opener policy is checked on /login by
+// assertOpenerPolicy below, which wants none at all (D722).
 const REQUIRED_SHELL_HEADERS = [
   ['strict-transport-security', /max-age=\d+/i],
   ['x-content-type-options', /^nosniff$/i],
   ['x-frame-options', /^deny$/i],
   ['referrer-policy', /^strict-origin-when-cross-origin$/i],
+  ['cross-origin-resource-policy', /^same-site$/i],
 ];
 
 // D722 — "Continue with Google" opens Google's own window from /login, and
