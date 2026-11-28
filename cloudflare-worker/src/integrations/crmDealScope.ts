@@ -17,14 +17,15 @@ export type CrmDealKey = 'hubspot_deal_id' | 'sf_opportunity_id';
 const ENABLED_COMPANY =
   'EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)';
 
-/** Outbound sync: the owner's deals changed since the last sync, in an enabled company. Binds (owner, since, integration). */
-export function ownerDealsChangedSinceSql(key: CrmDealKey): string {
+/** Outbound sync: the owner's deals in an enabled company. Binds (owner, since, integration), plus hidden IDs when D5454's guard is requested. */
+export function ownerDealsChangedSinceSql(key: CrmDealKey, excludeHidden = false): string {
   return `SELECT d.id, d.status, d.${key}, d.updated_at ` +
     'FROM deals d ' +
     'LEFT JOIN projects p ON p.id = d.project_id ' +
     'LEFT JOIN founders f ON f.id = p.founder_id ' +
     `WHERE ${FOUNDER_OF_OWNER} AND datetime(d.updated_at) > datetime(?) ` +
     `AND ${ENABLED_COMPANY} ` +
+    (excludeHidden ? 'AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) ' : '') +
     'ORDER BY datetime(d.updated_at) DESC LIMIT 100';
 }
 

@@ -75,6 +75,11 @@ for (const key of ['hubspot_deal_id', 'sf_opportunity_id'] as const) {
     assert.deepEqual(ids(db.prepare(sql).all(ADMIN, SINCE, INTEGRATION_ADMIN)), []);
     // Nothing changed after the watermark: nothing to push.
     assert.deepEqual(ids(db.prepare(sql).all(USER_A, '2026-01-03 00:00:00', INTEGRATION_A)), []);
+    // D5454: the guarded provider read adds its hidden IDs without changing owner or company scope.
+    const guarded = db.prepare(ownerDealsChangedSinceSql(key, true));
+    assert.deepEqual(ids(guarded.all(USER_A, SINCE, INTEGRATION_A, '[]')), [DEAL_A]);
+    assert.deepEqual(ids(guarded.all(USER_A, SINCE, INTEGRATION_A, JSON.stringify([DEAL_A]))), []);
+    assert.deepEqual(ids(guarded.all(USER_A, SINCE, INTEGRATION_A, JSON.stringify([DEAL_B]))), [DEAL_A]);
     // The company scope still applies: with A's company switched off, A's own deal is not pushed.
     db.prepare('UPDATE integration_companies SET enabled = 0 WHERE integration_id = ? AND company_id = ?').run(INTEGRATION_A, COMPANY_A);
     assert.deepEqual(ids(db.prepare(sql).all(USER_A, SINCE, INTEGRATION_A)), []);
