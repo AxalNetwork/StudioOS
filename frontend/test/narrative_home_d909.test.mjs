@@ -177,8 +177,9 @@ test('Versions: each version with where it started, the compare from D908, Read 
   const view = await mounted('/raise/investor-narrative/versions?project_id=3', handler);
   try {
     assert.ok(view.requests.some(([u]) => u.includes('/cycles/raise/narrative/compare?project=3&a=3&b=4')));
-    assert.ok(view.byId('narrative-version-sub').length === 3, 'a based-on line per version the part lists');
-    assert.ok(view.text().includes('from v1 · saved 2026-10-20 · by Fay Founder'));
+    // D9104 (#9104): the list is RAN24a's table; where each version started, when and by whom are its columns.
+    assert.ok(view.byId('narrative-version-row').length === 3, 'a row per version the part lists');
+    assert.ok(['v1', '2026-10-20', 'Fay Founder'].every((cell) => view.text().includes(cell)));
     assert.ok(view.text().includes('Pitch deck v6 · cards 1, 2, 5'));
     assert.ok(view.text().includes('No deck reads this version.'));
     assert.ok(view.text().includes('v4 cannot be deleted while Pitch deck v6 reads it.'));
