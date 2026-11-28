@@ -12,6 +12,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 import { railFor } from '../util/railContext';
 import { refuse } from '../util/refusal';
+import { normalizeEmail } from '../util/accountEmail';
 import {
   type MemberNotice, type Verdict, recordCapture, recordDecision, rejectReasonProblem, tellMember,
 } from '../services/partnerProfileReview';
@@ -550,7 +551,7 @@ profiling.get('/admin/:email', async (c) => {
     WHERE p.email = ${email}
   `;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Profile not found' }, 404); }
-  const member = await sql`SELECT id FROM users WHERE email = ${email}`;
+  const member = await sql`SELECT id FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
   // The profile's own user_id is the member it was written for. The email
   // lookup is only a fallback: an address can move to a later account.
   const memberId = rows[0].user_id ?? member[0]?.id ?? null;
@@ -639,7 +640,7 @@ profiling.post('/admin/:email/verify', async (c) => {
   // D991 — who and when, the reason, the history row and the member's notice.
   const review = await reviewAfterVerdict(c.env, rows[0], newStatus, adminUser.id, reqBody?.reject_reason);
   // Log on the admin's record AND on the target user's record so the target sees it in their private feed.
-  const targetUsers = await sql`SELECT id FROM users WHERE email = ${email}`;
+  const targetUsers = await sql`SELECT id FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
   const targetUserId = targetUsers[0]?.id || null;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_verified', ${`Admin ${adminUser.name} marked user_id=${targetUserId} as ${newStatus}${agreement_type ? ` — agreement: ${agreement_type}` : ''}`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   if (targetUserId) {

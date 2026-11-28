@@ -46,6 +46,7 @@ import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
 import { claimLpRowsAtSignIn } from '../services/lpClaim';
+import { normalizeEmail } from '../util/accountEmail';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -98,14 +99,14 @@ function enrollmentUnavailable(c: any) {
 // -------- factor discovery --------------------------------------------------
 
 sms.get('/factors', async (c) => {
-  const email = (c.req.query('email') || '').toLowerCase().trim().slice(0, 320);
+  const email = normalizeEmail(c.req.query('email')).slice(0, 320);
   if (!email) return c.json({ error: 'Email required' }, 400);
   // Rate-limit per IP so this can't be used as an enumeration oracle.
   const ip = clientIp(c.req.raw);
   const ok = await rate(c.env, `factors-ip:${ip}`, 30, 60);
   if (!ok) return c.json({ error: 'Too many requests' }, 429);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
+  const rows = await sql`SELECT id FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
   await sql.end();
   // Always return the same shape regardless of whether the user exists, to
   // avoid a leak via response-shape diff. Booleans are false on miss.
@@ -233,14 +234,14 @@ sms.post('/sms/disable', async (c) => {
 sms.post('/sms/start-challenge', async (c) => {
   if (!(await isGcipConfigured(c.env))) return gcip503(c);
   const body = await c.req.json().catch(() => ({} as any));
-  const email = String(body?.email || '').toLowerCase().trim();
+  const email = normalizeEmail(body?.email);
   const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
   if (!email) return c.json({ error: 'Email required' }, 400);
   if (!(await rate(c.env, `sms-chal-ip:${clientIp(c.req.raw)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
   if (!(await rate(c.env, `sms-chal-email:${email}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
 
   const sql = getSQL(c.env);
-  const users = await sql`SELECT id, email_verified, is_active FROM users WHERE email = ${email}`;
+  const users = await sql`SELECT id, email_verified, is_active FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
   await sql.end();
   // Don't leak account existence — return a generic 200 with no session_info
   // when the user / SMS factor / verified email is missing. The frontend

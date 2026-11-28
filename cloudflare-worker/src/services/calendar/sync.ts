@@ -20,6 +20,7 @@ import { getSQL } from '../../db';
 import type { CalendarEvent } from '../calendar';
 import { clearSyncError, recordSyncError } from './syncState';
 import { readCopyTarget, type CopyTarget } from './prefs';
+import { normalizeEmail } from '../../util/accountEmail';
 import {
   loadRefreshTokenExport as loadRefreshToken,
   refreshGoogleAccessToken,
@@ -60,8 +61,8 @@ interface SyncRow {
  */
 async function attendeeUserIds(env: Env, ev: CalendarEvent): Promise<number[]> {
   const emails = new Set<string>();
-  if (ev.organizer_email) emails.add(ev.organizer_email.toLowerCase());
-  for (const a of ev.attendees) if (a.email) emails.add(a.email.toLowerCase());
+  if (ev.organizer_email) emails.add(normalizeEmail(ev.organizer_email));
+  for (const a of ev.attendees) if (a.email) emails.add(normalizeEmail(a.email));
   if (emails.size === 0) return [];
   const placeholders = Array.from(emails).map(() => '?').join(',');
   try {

@@ -27,7 +27,7 @@ import { resolve } from 'node:path';
 import { SignJWT, generateKeyPair, exportJWK } from 'jose';
 import { Hono } from 'hono';
 
-import authGoogle, { __testing as stateTesting } from '../src/routes/auth_google.ts';
+import authGoogle, { __testing as stateTesting, withLandingMarker } from '../src/routes/auth_google.ts';
 import { rateLimitMiddleware } from '../src/middleware/rateLimit.ts';
 import { requireFactor, requireStepUp, createJWT } from '../src/auth.ts';
 import { GOOGLE_CERTS_URL, __testing as jwksTesting } from '../src/services/googleIdToken.ts';
@@ -915,4 +915,22 @@ test('every /popup refusal is a sentence with a code, and none is a 401', () => 
   assert.ok(refusals.length >= 10, `found ${refusals.length} refusals`);
   for (const [status, code] of refusals) assert.notEqual(status, 401, `${code} answers 401`);
   assert.ok(!/c\.json\(\s*\{\s*error/.test(handler), 'a refusal bypasses popupRefuse');
+});
+
+// D4580 part 2 (#4580): a kept Grow destination with a fragment. Appended to the whole string, the marker landed in
+// the fragment (`#roles&google=ok`), the SPA never saw it and sent a signed-in person back to /login.
+test('#4580: /callback puts google=ok in the query of a destination with a fragment', async () => {
+  const back = '/grow/talent?tab=open#roles';
+  const db = freshDb();
+  const env = envFor(db);
+  seedUser(db, { id: 52, email: 'returning.d4580@example.test' });
+  const res = await withGoogle(await idToken({ email: 'returning.d4580@example.test', sub: 'sub-d4580-returning' }), async () => callback(env, await startedState(env, { redirect: back })));
+  assert.equal(res.headers.get('location'), 'https://axal.vc/grow/talent?tab=open&google=ok#roles');
+});
+
+test('#4580: withLandingMarker adds the marker before any fragment', () => {
+  assert.equal(withLandingMarker('/dashboard', 'google=ok'), '/dashboard?google=ok');
+  assert.equal(withLandingMarker('/grow/talent?tab=open', 'apple=ok&apple_signup=1'), '/grow/talent?tab=open&apple=ok&apple_signup=1');
+  assert.equal(withLandingMarker('/grow/talent#roles', 'google=ok'), '/grow/talent?google=ok#roles');
+  assert.equal(withLandingMarker('/grow/talent?tab=open#roles?x=1', 'google=ok'), '/grow/talent?tab=open&google=ok#roles?x=1');
 });

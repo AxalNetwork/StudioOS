@@ -53,6 +53,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { agreementOptions } from '../services/partnerAgreements';
 import { csvResponse, stamp, toCsv } from '../services/csv';
 import { HISTORY_LIMIT_MAX, REOPEN_REASON_MAX, profileHistory, reopenProfile } from '../services/partnerProfileReview';
+import { normalizeEmail } from '../util/accountEmail';
 import {
   PROFILE_REF, exportPartnerProfiles, listOptions, listPartnerProfiles, listedByRef, partnerProfileCounts, type ListQuery,
 } from '../services/partnerProfiles';
@@ -144,7 +145,7 @@ r.get('/:ref', async (c) => {
     let unbind: { eligible: boolean; reason: string | null; holder: { user_id: number; name: string | null } | null };
     if (row.user_id == null) unbind = { eligible: false, reason: 'not_bound', holder: null };
     else {
-      const h = await c.env.DB.prepare('SELECT id, name FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1').bind(row.email).first<any>();
+      const h = await c.env.DB.prepare('SELECT id, name FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1').bind(normalizeEmail(row.email)).first<any>();
       unbind = h != null && Number(h.id) === Number(row.user_id)
         ? { eligible: false, reason: 'address_still_theirs', holder: null }
         : { eligible: true, reason: null, holder: h == null ? null : { user_id: Number(h.id), name: h.name ?? null } };
@@ -215,7 +216,7 @@ r.post('/:ref/unbind', async (c) => {
       return refuse(c, 409, { code: 'not_bound', message: 'This profile is not bound to an account, so there is nothing to unbind.' });
     }
     previous = Number(row.user_id);
-    const h = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1').bind(row.email).first<any>();
+    const h = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1').bind(normalizeEmail(row.email)).first<any>();
     holder = h?.id == null ? null : Number(h.id);
     if (holder === previous) {
       return refuse(c, 409, { code: 'address_still_theirs', message: 'The account this profile is bound to still holds its address. Unbind frees a profile only when the address belongs to another account or to none.' });

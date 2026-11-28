@@ -76,6 +76,7 @@ import { refuse } from '../util/refusal';
 import { scheduleCalendarCancellation } from './_eventCalendar';
 import { memberEventLink } from '../services/eventLinks';
 import { onEventCancelled, onEventEdited } from '../services/eventSyndication/hooks';
+import { normalizeEmail } from '../util/accountEmail';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -1068,7 +1069,7 @@ events.post('/:id/invitations', async (c) => {
     if (target) await createInvite(Number(target.id), target.email ?? null, target.name ?? null);
   }
   for (const e of emails) {
-    const target: any = await c.env.DB.prepare(`SELECT id, name FROM users WHERE lower(email) = lower(?)`).bind(e.email).first();
+    const target: any = await c.env.DB.prepare(`SELECT id, name FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1`).bind(normalizeEmail(e.email)).first();
     await createInvite(target ? Number(target.id) : null, e.email, e.name ?? target?.name ?? null);
   }
 

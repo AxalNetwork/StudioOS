@@ -42,7 +42,8 @@ export default function useInactivityTimeout({
       logoutTimerRef.current = setTimeout(() => {
         clearTimers();
         setWarningOpen(false);
-        try { onTimeoutRef.current?.(); } catch (e) { /* ignore */ }
+        // D8793 (#8793): the timer's own sign-out says so, so the sign-in page can tell it from a chosen one.
+        try { onTimeoutRef.current?.({ reason: 'inactivity' }); } catch (e) { /* ignore */ }
       }, warningMs);
     }, warnDelay);
   }, [timeoutMs, warningMs, clearTimers]);

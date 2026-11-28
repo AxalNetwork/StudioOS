@@ -70,14 +70,16 @@ test('the screens name only the area: never the search, the company or the filte
 test('a 401 on a protected page keeps the page and says the session ended', () => {
   const at = { pathname: '/research/companies/company/hg-1', search: '?tab=a', hash: '' };
   assert.equal(sessionEndedRedirectFor(at), `/login?next=${encodeURIComponent('/research/companies/company/hg-1?tab=a')}&ended=1`);
-  assert.equal(sessionEndedRedirectFor({ pathname: '/studio' }), '/login', 'an area that keeps nothing goes to a bare sign-in');
-  assert.equal(sessionEndedRedirectFor({ pathname: `/research/companies/${'x'.repeat(220)}` }), '/login', 'too long is not kept');
+  // D8793 (#8793): every protected page now keeps itself after a 401, and one too long to keep still says why.
+  assert.equal(sessionEndedRedirectFor({ pathname: '/studio' }), `/login?next=${encodeURIComponent('/studio')}&ended=1`);
+  assert.equal(sessionEndedRedirectFor({ pathname: `/research/companies/${'x'.repeat(220)}` }), '/login?ended=1', 'too long is not kept');
   assert.equal(signInContextFor('/research/companies', '?next=x&ended=1').ended, 'Your session ended. Sign in again to go back to Companies.');
   // The request layer uses it, through the same sanitiser as the route guard.
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /window\.location\.href = sessionEndedRedirectFor\(window\.location\);/);
   assert.doesNotMatch(api, /window\.location\.href = '\/login';/);
-  assert.match(read('frontend/src/pages/LoginPage.jsx'), /\{context\?\.ended && \(/);
+  // D8793: the line is drawn from `sessionEndedNotice`, which keeps this area's sentence (frontend/test/session_interrupted_8793.test.mjs).
+  assert.match(read('frontend/src/pages/LoginPage.jsx'), /\{ended && \(/);
 });
 
 // ------------------------------------------------------------------ one held-licence rule (RS-16 B, RCL12)

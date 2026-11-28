@@ -2,6 +2,7 @@
 import type { Env } from '../../types';
 import type { ScopeRef } from '../../agents/runtime';
 import { aiAdminAuditStatement } from './adminAudit';
+import { normalizeEmail } from '../../util/accountEmail';
 
 export type CohortKind = 'user' | 'company' | 'project';
 export class CohortError extends Error {
@@ -35,7 +36,7 @@ export async function addToCohort(env: Env, actorId: number, input: unknown) {
   const b = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string,unknown> : {};
   let kind: CohortKind, target: number;
   if (typeof b.email === 'string' && b.scope == null) {
-    const email=b.email.trim().toLowerCase();
+    const email=normalizeEmail(b.email);
     if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CohortError(400,'Enter a valid founder email.');
     const found=(await env.DB.prepare("SELECT id FROM users WHERE lower(email) = ? AND role = 'founder' AND is_active = 1 AND deletion_requested_at IS NULL LIMIT 2")
       .bind(email).all<{id:number}>()).results ?? [];

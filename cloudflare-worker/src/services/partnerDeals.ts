@@ -12,6 +12,7 @@
  */
 import type { Env } from '../types';
 import { hashEmail } from '../util/hashEmail';
+import { normalizeEmail } from '../util/accountEmail';
 // Task #43 — single source of truth for the per-tier dealroom cap. Used
 // in the expirePartnerDeals revocation paths below; the synchronous
 // activate/redeem grant paths still import dynamically because they
@@ -307,9 +308,9 @@ async function activateSignedPartnerDeal(
 
   // Ensure partner user exists. Match by email (case-insensitive). If found,
   // promote to role='partner' unless already admin (admin > partner).
-  const email = String(deal.recipient_email).toLowerCase();
+  const email = normalizeEmail(deal.recipient_email);
   const existing: any = await env.DB.prepare(
-    `SELECT id, role FROM users WHERE LOWER(email) = ? LIMIT 1`,
+    `SELECT id, role FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1`,
   ).bind(email).first();
 
   let userId: number;
@@ -327,7 +328,7 @@ async function activateSignedPartnerDeal(
   } else {
     const ins: any = await env.DB.prepare(
       `INSERT INTO users (email, name, role, email_verified) VALUES (?, ?, 'partner', 1) RETURNING id`,
-    ).bind(deal.recipient_email, deal.recipient_name || deal.full_name || deal.recipient_email).first();
+    ).bind(email, deal.recipient_name || deal.full_name || deal.recipient_email).first();
     userId = Number(ins.id);
   }
 

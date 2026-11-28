@@ -6,7 +6,7 @@ import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
-import { sessionEndedRedirectFor } from './pendingNext.js';
+import { markSessionEnded, sessionEndedRedirectFor } from './pendingNext.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -664,6 +664,9 @@ export async function request(path, options = {}) {
         // about to become a sign-in screen and leaving a dead token behind
         // would let the next mount re-send it.
         if (!publicPath && !_suppressAuthRedirect) {
+          // D8793 (#8793): leave the marker BEFORE the stored user goes, so every other open tab, which mirrors that
+          // removal and meets its route guard signed out, is sent to the same explained sign-in that keeps its page.
+          markSessionEnded();
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           // Task #10 — capture the bounce BEFORE the hard navigation tears the
@@ -672,7 +675,8 @@ export async function request(path, options = {}) {
           // silent "session expired → /login" redirect debuggable in prod.
           reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
           // D7178 (#7044, RCL04B): an area that keeps its destination (Companies, Grow, Learning) goes to
-          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser; every other page to `/login`.
+          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser. D8793 (#8793): every other
+          // protected page now does too, and one that cannot be kept to `/login?ended=1`, so the page says why.
           window.location.href = sessionEndedRedirectFor(window.location);
         }
         throw new Error('Session expired');
@@ -1525,7 +1529,6 @@ export const api = {
   dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
-  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),

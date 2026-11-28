@@ -25,6 +25,7 @@ import { fetchUserEventsWithSources, attachPushRecords, KNOWN_KINDS, type Calend
 import { describeItems, type CalendarItem } from './items';
 import { cancelMeeting, createMeeting, googleConnection } from '../channels/googleMeet';
 import { MEETING_ERRORS, MeetingProviderError, type MeetingErrorCode } from '../channels/meetings';
+import { normalizeEmail } from '../../util/accountEmail';
 
 /** CAL18, left: what a reader who is not part of the meeting is told. Nothing about the meeting. */
 export const NOT_PARTY = 'Only the people invited and studio admins can open this meeting.';
@@ -69,7 +70,7 @@ async function windowOf(env: Env, kind: CalendarEvent['kind'], id: number): Prom
 async function peopleOf(env: Env, userId: number, ev: CalendarEvent): Promise<{ people: ItemPerson[]; mine: string | null }> {
   // A private session shows no people list (CAL5).
   if (ev.kind === 'expert_booking') return { people: [], mine: null };
-  const emails = [...new Set(ev.attendees.map((a) => String(a.email || '').toLowerCase()).filter(Boolean))];
+  const emails = [...new Set(ev.attendees.map((a) => normalizeEmail(a.email)).filter(Boolean))];
   const byEmail = new Map<string, { id: number; role: string; name: string | null }>();
   if (emails.length) {
     try {

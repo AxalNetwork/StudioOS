@@ -74,6 +74,7 @@ import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
 import { claimLpRowsAtSignIn } from '../services/lpClaim';
+import { normalizeEmail } from '../util/accountEmail';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -138,7 +139,7 @@ async function findUserByEmail(env: Env, email: string): Promise<any | null> {
   if (!email) return null;
   const sql = getSQL(env);
   try {
-    const rows = await sql`SELECT * FROM users WHERE email = ${email.toLowerCase().trim()}`;
+    const rows = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
     return rows.length ? rows[0] : null;
   } finally { try { await sql.end(); } catch {} }
 }
@@ -165,7 +166,8 @@ async function logActivity(env: Env, userId: number, action: string, details: st
  * so:
  *   • in-app inbox row is always written
  *   • web-push fires for any subscribed device
- *   • email is dispatched via the normal pipeline (templating + DLQ)
+ *   • email is the referenced templated send below, not notify()'s own
+ *     channel (D8536 part 4), so each notice is mailed once
  *   • category='security' forces critical-severity → no suppression
  *
  * SMS fan-out: GCIP doesn't expose a generic outbound-SMS API (the
@@ -198,7 +200,10 @@ async function notifyAllChannels(
       body,
       link: `${appUrl}/settings#security`,
       category: 'security',  // critical → bypasses quiet-hours + digest
-      channels: ['in_app', 'email', 'slack'],
+      // D8536 part 4 (the owner's answer 1B): no 'email' here. The notice's
+      // email is the referenced templated send below; notify()'s own email
+      // (sendNotificationEmail) had no reference and mailed it a second time.
+      channels: ['in_app', 'slack'],
       payload: { ticket_id: ticketId, template_key: template },
     });
   } catch (e) { console.error('[recover] notify fanout failed', e); }
@@ -228,8 +233,8 @@ async function notifyAllChannels(
  * the step that sent it: `started.open` when the ticket opens, then the status
  * the transition wrote and, where the step counts people, how many
  * (`started.awaiting_contacts.1`, `started.awaiting_admin_cosign.2`,
- * `resolved.resolved`, `resolved.denied`); `claim.trusted` / `claim.admin` for
- * the claim emails. Each step mails once; a retry of the same step reconciles.
+ * `resolved.resolved`, `resolved.denied`); `claim.trusted.<n>` / `claim.admin.<n>`
+ * for the claim emails, n being the approvals that issued the link (D8536 part 4). Each step mails once; a retry of the same step reconciles.
  */
 function recoveryNoticeRef(ticketId: number, template: 'auth_recovery_started' | 'auth_recovery_resolved', occasion: string): SendReference | null {
   if (!Number.isSafeInteger(ticketId) || ticketId <= 0) return null;
@@ -837,10 +842,18 @@ recover.post('/trusted-contact/attest', async (c) => {
     const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&trusted=1`;
     const claimRef = recoveryNoticeRef(ticketId, 'auth_recovery_resolved', 'trusted');
     if (claimRef) {
-      await sendEmailBound(c.env, 'auth_recovery_resolved', { ...claimRef, attempt: 'claim.trusted' }, {
+      // D8536 part 4 (the owner's answer 2A): the claim link is in the email,
+      // the only place a locked-out person can read it. The bell is not
+      // mirrored: the person cannot sign in, and a row there would hold a
+      // usable link. Each issuance is its own attempt (the attestation count):
+      // a later attestation replaces the token, so its email must go too,
+      // while a retry of the same issuance reconciles.
+      await sendEmailBound(c.env, 'auth_recovery_claim', { ...claimRef, attempt: `claim.trusted.${atts.length}` }, {
         name: (target as any).name || (target as any).email,
         ticket_id: String(ticketId),
-      }, { userId: (target as any).id, ctaUrl: claimUrl });
+        claim_url: claimUrl,
+        expires_minutes: String(EMAIL_MAGIC_TTL_MIN),
+      }, { userId: (target as any).id, skipMirror: true });
     }
   }
 
@@ -1002,10 +1015,13 @@ recover.post('/admin/cosign', async (c) => {
       try {
         const claimRef = recoveryNoticeRef(ticketId, 'auth_recovery_resolved', 'admin');
         if (claimRef) {
-          await sendEmailBound(c.env, 'auth_recovery_resolved', { ...claimRef, attempt: 'claim.admin' }, {
+          // D8536 part 4 (2A): the link in the email, no bell row (as above).
+          await sendEmailBound(c.env, 'auth_recovery_claim', { ...claimRef, attempt: `claim.admin.${cosigners.length}` }, {
             name: (target as any).name || (target as any).email,
             ticket_id: String(ticketId),
-          }, { userId: (target as any).id, ctaUrl: claimUrl });
+            claim_url: claimUrl,
+            expires_minutes: String(EMAIL_MAGIC_TTL_MIN),
+          }, { userId: (target as any).id, skipMirror: true });
         }
       } catch (e) { console.error('[recover] admin cosign email failed', (e as Error)?.name || 'Error'); }
     }
@@ -1090,7 +1106,7 @@ recover.get('/trusted-contacts', async (c) => {
 recover.post('/trusted-contacts', async (c) => {
   const user = await requireAuth(c);
   const body = await readJson(c);
-  const email = String(body?.contact_email || '').toLowerCase().trim();
+  const email = normalizeEmail(body?.contact_email);
   const displayName = String(body?.display_name || '').slice(0, 200);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
     return c.json({ error: 'invalid_email' }, 400);
@@ -1102,7 +1118,7 @@ recover.post('/trusted-contacts', async (c) => {
   let contactStatus: 'active' | 'pending_invite' = 'pending_invite';
   try {
     const sql = getSQL(c.env);
-    const r = await sql`SELECT id FROM users WHERE email = ${email} AND is_active = 1`;
+    const r = await sql`SELECT id FROM users WHERE LOWER(email) = ${email} AND is_active = 1 ORDER BY id LIMIT 1`;
     await sql.end();
     if (r.length) { contactUserId = Number(r[0].id); contactStatus = 'active'; }
   } catch {}

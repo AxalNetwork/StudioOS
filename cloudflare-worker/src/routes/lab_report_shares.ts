@@ -16,6 +16,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
 import { mintShareToken, sha256Hex } from '../services/shareLink';
 import { verifyScoreHash } from '../services/scoreIntegrity';
+import { normalizeEmail } from '../util/accountEmail';
 import {
   LAB_REPORT_KIND,
   LAB_SHARE_SCOPE,
@@ -126,8 +127,8 @@ r.post('/', async (c) => {
     return refuse(c, 403, { code: 'not_report_owner', message: 'Only the person who owns this report can share it.' });
   }
 
-  const grantee = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND is_active = 1')
-    .bind(email)
+  const grantee = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND is_active = 1 ORDER BY id LIMIT 1')
+    .bind(normalizeEmail(email))
     .first<{ id: number }>();
   if (!grantee) {
     return refuse(c, 404, { code: 'grantee_not_found', message: 'No active account has that email.' });

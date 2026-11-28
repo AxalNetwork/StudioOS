@@ -27,6 +27,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireBranchTier } from '../util/branch';
 import { refuse } from '../util/refusal';
+import { normalizeEmail } from '../util/accountEmail';
 import { sha256Hex } from '../rpc/secret';
 import { mapError } from './_t13t14t15_helpers';
 
@@ -72,8 +73,8 @@ function displayName(email: string, name: string | null): string {
 
 async function userByEmail(env: Env, email: string) {
   return env.DB.prepare(
-    'SELECT id, role, is_active FROM users WHERE lower(trim(email)) = ?',
-  ).bind(email).first<{ id: number; role: string; is_active: number }>();
+    'SELECT id, role, is_active FROM users WHERE lower(trim(email)) = ? ORDER BY id LIMIT 1',
+  ).bind(normalizeEmail(email)).first<{ id: number; role: string; is_active: number }>();
 }
 
 /**
@@ -89,7 +90,7 @@ async function ensureAccount(env: Env, row: Claimed): Promise<{
   role_note: string | null;
 }> {
   const { role, note } = grantedRole(row.role);
-  const email = String(row.email);
+  const email = normalizeEmail(row.email);
   const name = displayName(email, row.name);
   const existing = await userByEmail(env, email);
   if (existing && Number(existing.is_active) !== 0) {

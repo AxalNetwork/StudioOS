@@ -64,6 +64,7 @@ import { clientIp } from '../util/clientIp';
 import { refuse } from '../util/refusal';
 import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
 import { putRecordOrThrow } from '../services/recordStore';
+import { normalizeEmail } from '../util/accountEmail';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -900,7 +901,7 @@ esign.post('/send', async (c) => {
   try {
     const acct = await c.env.DB.prepare(
       `SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1`
-    ).bind(recipientEmail).first<{ id: number }>();
+    ).bind(normalizeEmail(recipientEmail)).first<{ id: number }>();
     recipientUserId = acct?.id ?? null;
   } catch (e) {
     return refuse(c, 503, {
@@ -1509,8 +1510,8 @@ esign.post('/sign/:token', async (c) => {
   }
   if (!recipientUser && rec.recipient_email) {
     recipientUser = await c.env.DB.prepare(
-      `SELECT access_level, kyc_status FROM users WHERE lower(email) = lower(?)`
-    ).bind(rec.recipient_email).first().catch(() => null);
+      `SELECT access_level, kyc_status FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1`
+    ).bind(normalizeEmail(rec.recipient_email)).first().catch(() => null);
   }
   if (recipientUser && recipientUser.access_level === 'limited' && recipientUser.kyc_status !== 'approved') {
     return c.json({

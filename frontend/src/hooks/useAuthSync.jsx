@@ -58,7 +58,10 @@ export function AuthProvider({ children }) {
     if (typeof window === 'undefined') return false;
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.has('google') || params.has('google_signup') || params.get('magic') === 'ok';
+      // D4580 part 2 (#4580): Apple's callback (auth_apple.ts) lands the same way with `apple=ok`; without it here a
+      // fresh browser returning from Apple was sent to the sign-in page, signed in on the server but not in the tab.
+      return params.has('google') || params.has('google_signup') || params.get('apple') === 'ok' || params.has('apple_signup')
+        || params.get('magic') === 'ok';
     } catch { return false; }
   });
 

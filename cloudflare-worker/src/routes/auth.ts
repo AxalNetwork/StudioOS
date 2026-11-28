@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
 import { branchOf } from '../util/branch';
+import { normalizeEmail } from '../util/accountEmail';
 import { sendBound } from '../services/email/send';
 import { issuanceOf } from '../services/email/deliveryContract';
 import { insertCanaryRows } from '../services/magicLinkInsertCanary';
@@ -305,7 +306,9 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const { email, name, role, turnstileToken, ref_code, defer_email, product } = parsed.body;
+  const { name, role, turnstileToken, ref_code, defer_email, product } = parsed.body;
+  // D9043 — the address is stored and matched in one form (trimmed, lowercased).
+  const email = normalizeEmail(parsed.body.email);
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
@@ -336,7 +339,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   }
 
   const sql = getSQL(c.env);
-  const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+  const existing = await sql`SELECT * FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
 
   if (existing.length > 0) {
     const user = existing[0];
@@ -544,7 +547,7 @@ auth.post('/resend-verification', async (c) => {
   let users: any[] = [];
   try {
     const sql = getSQL(c.env);
-    users = await sql`SELECT * FROM users WHERE email = ${email}`;
+    users = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
     await sql.end();
   } catch (e: any) {
     console.error(`[AUTH] resend lookup failed for ${email}: ${e?.message || 'Unknown error'}`);
@@ -709,7 +712,7 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   if (!email || !token) return c.json({ error: 'Email and token required' }, 400);
 
   const sql = getSQL(c.env);
-  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  const users = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
   if (users.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
 
   const user = users[0];
@@ -803,7 +806,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
     recordSecurityEvent(c.env, { kind: 'signin', factor: 'totp', outcome: 'refused', detail, userId, email, ip: clientIp });
 
   const sql = getSQL(c.env);
-  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  const users = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
   if (users.length === 0) { await sql.end(); await refuse('unknown_account'); return c.json({ error: 'Invalid credentials' }, 401); }
 
   const user = users[0];
@@ -1246,7 +1249,7 @@ auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Pleas
   if (totpLoginGate) return totpLoginGate;
 
   const sql = getSQL(c.env);
-  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  const users = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
   await sql.end();
 
   // D200 — a refused verification is recorded; the answer is unchanged.
@@ -1286,7 +1289,7 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   if (startIpGate) return startIpGate;
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const email = String(parsed.body?.email || '').toLowerCase().trim();
+  const email = normalizeEmail(parsed.body?.email);
   if (!EMAIL_RE.test(email)) return c.json({ error: 'Please enter a valid email address' }, 400);
   const startEmailGate = rateGate(
     c, await checkRateLimit(c.env, `magic-start-email:${email}`, 3, 900),
@@ -1317,7 +1320,7 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   let name = email.split('@')[0];
   try {
     const sql = getSQL(c.env);
-    const rows = await sql`SELECT name FROM users WHERE email = ${email}`;
+    const rows = await sql`SELECT name FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
     await sql.end();
     if (rows.length && rows[0].name) name = rows[0].name;
   } catch {}
@@ -1396,13 +1399,13 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     return fail('invalid');
   }
   if (!claimed) { await magicRefuse('expired'); return fail('expired'); }
-  const email = String(claimed.email).toLowerCase().trim();
+  const email = normalizeEmail(claimed.email);
 
   const sql = getSQL(c.env);
   try {
     let user: any;
     let newSignup = false;
-    const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+    const existing = await sql`SELECT * FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
     if (existing.length) {
       user = existing[0];
       if (Number(user.is_active ?? 1) === 0) { await sql.end(); await magicRefuse('inactive', { email, userId: Number(user.id) }); return fail('inactive'); }

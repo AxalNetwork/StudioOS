@@ -35,6 +35,7 @@ import { companyScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { hasActivePairwiseNda } from '../services/trust';
 import { admittedCounts } from '../services/dataRoomAccess';
+import { normalizeEmail } from '../util/accountEmail';
 
 const grants = new Hono<{ Bindings: Env }>();
 
@@ -139,8 +140,8 @@ grants.post('/:projectUid', async (c) => {
   if (!email) return c.json({ detail: 'An email address is required' }, 400);
 
   const advisor = await c.env.DB.prepare(
-    'SELECT id, role FROM users WHERE LOWER(email) = ?',
-  ).bind(email).first<{ id: number; role: string }>();
+    'SELECT id, role FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1',
+  ).bind(normalizeEmail(email)).first<{ id: number; role: string }>();
   // Same shape as the data room: no invitation is sent, and the screen says so
   // rather than implying one was.
   if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
@@ -307,8 +308,8 @@ grants.post('/:projectUid/documents', async (c) => {
   if (!documentUid) return c.json({ detail: 'A document is required' }, 400);
 
   const advisor = await c.env.DB.prepare(
-    'SELECT id, role FROM users WHERE LOWER(email) = ?',
-  ).bind(email).first<{ id: number; role: string }>();
+    'SELECT id, role FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1',
+  ).bind(normalizeEmail(email)).first<{ id: number; role: string }>();
   if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
   Object.assign(advisor, { licences: await heldLicences(c.env.DB, advisor) });
   if (!isAdvisorNow(advisor)) {

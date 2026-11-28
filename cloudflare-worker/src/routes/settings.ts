@@ -58,6 +58,7 @@ import {
   updateProfileBackground,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
+import { normalizeEmail } from '../util/accountEmail';
 import { requestErasure, cancelErasure, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
 import { countOwnActiveSessions, listOwnSessions, revokeUserSession } from '../services/userSessions';
@@ -516,14 +517,15 @@ settings.post('/email-change/request', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
-  const newEmail = clampStr(body?.new_email, 254);
+  // D9043 — the new address is requested, checked and stored in its one normalised form.
+  const newEmail = normalizeEmail(clampStr(body?.new_email, 254));
   if (!newEmail || !isEmail(newEmail)) return c.json({ error: 'Valid new_email required' }, 400);
-  if (newEmail.toLowerCase() === user.email.toLowerCase()) {
+  if (newEmail === normalizeEmail(user.email)) {
     return c.json({ error: 'New email matches current email' }, 400);
   }
 
   const sql = getSQL(c.env);
-  const taken = await sql`SELECT 1 FROM users WHERE lower(email) = ${newEmail.toLowerCase()} AND id != ${user.id}`;
+  const taken = await sql`SELECT 1 FROM users WHERE lower(email) = ${newEmail} AND id != ${user.id}`;
   if (taken.length) { await sql.end(); return c.json({ error: 'That email is already in use' }, 409); }
 
   // Invalidate any outstanding pending request for this user.
@@ -593,17 +595,18 @@ settings.post('/email-change/confirm', async (c) => {
   if (new Date(rec.confirm_expires_at) < new Date()) { await sql.end(); return c.json({ error: 'Confirmation link expired' }, 400); }
 
   // Race-check: ensure the new email isn't taken in the interim.
-  const taken = await sql`SELECT 1 FROM users WHERE lower(email) = ${String(rec.new_email).toLowerCase()} AND id != ${rec.user_id}`;
+  const newEmail = normalizeEmail(rec.new_email);
+  const taken = await sql`SELECT 1 FROM users WHERE lower(email) = ${newEmail} AND id != ${rec.user_id}`;
   if (taken.length) { await sql.end(); return c.json({ error: 'That email was claimed by another account' }, 409); }
 
-  await sql`UPDATE users SET email = ${rec.new_email} WHERE id = ${rec.user_id}`;
+  await sql`UPDATE users SET email = ${newEmail} WHERE id = ${rec.user_id}`;
   await sql`UPDATE email_change_requests SET confirmed_at = datetime('now') WHERE id = ${rec.id}`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('email_changed',
                     ${`Email changed from ${rec.old_email} to ${rec.new_email} (revocable until ${rec.revoke_expires_at})`},
                     ${rec.new_email}, ${rec.user_id})`;
   await sql.end();
-  return c.json({ ok: true, email: rec.new_email, revoke_expires_at: rec.revoke_expires_at });
+  return c.json({ ok: true, email: newEmail, revoke_expires_at: rec.revoke_expires_at });
 });
 
 settings.post('/email-change/revoke', async (c) => {
@@ -620,8 +623,18 @@ settings.post('/email-change/revoke', async (c) => {
   if (new Date(rec.revoke_expires_at) < new Date()) { await sql.end(); return c.json({ error: 'Revocation window expired' }, 400); }
 
   // If the change had already landed, reverse it.
+  // D9043: the old address goes back in its normalised form. If another account already holds that form
+  // in any case (a pair from before D9043), the address goes back exactly as it was stored, so the revert neither
+  // fails on the UNIQUE index nor joins the two accounts; the pair is left for the backfill's report.
   if (rec.confirmed_at) {
-    await sql`UPDATE users SET email = ${rec.old_email} WHERE id = ${rec.user_id}`;
+    const oldEmail = normalizeEmail(rec.old_email);
+    const holder = await sql`SELECT id FROM users WHERE LOWER(email) = ${oldEmail} AND id != ${rec.user_id} LIMIT 1`;
+    if (holder.length) {
+      // account-email-exact: restores this account's own pre-D9043 address byte for byte (see above).
+      await sql`UPDATE users SET email = ${rec.old_email} WHERE id = ${rec.user_id}`;
+    } else {
+      await sql`UPDATE users SET email = ${oldEmail} WHERE id = ${rec.user_id}`;
+    }
   }
   await sql`UPDATE email_change_requests SET revoked_at = datetime('now') WHERE id = ${rec.id}`;
   // Bump min_iat so any tokens minted under the new email are forced out.

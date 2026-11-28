@@ -17,6 +17,7 @@
  */
 import type { Env } from '../types';
 import { notify } from './notify';
+import { normalizeEmail } from '../util/accountEmail';
 
 export const CAPTURE_SOURCES = ['chat', 'invitation', 'eadwyn'] as const;
 export type CaptureSource = typeof CAPTURE_SOURCES[number];
@@ -160,8 +161,8 @@ export async function tellMember(
   try {
     let userId = profile.user_id;
     if (userId == null) {
-      const u = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1')
-        .bind(profile.email).first<{ id: number }>();
+      const u = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1')
+        .bind(normalizeEmail(profile.email)).first<{ id: number }>();
       userId = u?.id ?? null;
     }
     if (userId != null) {

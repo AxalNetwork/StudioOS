@@ -38,6 +38,7 @@ import { roundExemptionOf } from '../services/decks/publish';
 import { refuse } from '../util/refusal';
 import { INVITE_ROLE_REASON, PROSPECT_INVITE_GAP_HOURS, canInviteProspect, inviteCutoff, prospectInviteStates } from '../services/prospectInvites';
 import { CapitalAccessError, capitalInvestor, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary } from '../services/capRelAccess';
+import { normalizeEmail } from '../util/accountEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 function mapError(c: Context<{ Bindings: Env }>, error: unknown) {
@@ -887,7 +888,7 @@ async function invitePipelineProspect(c: Context<{ Bindings: Env }>, user: User,
   }
   const email = recorded || typed;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return refuse(c, 400, { code: 'email_required', message: 'Type the investor’s email address.' });
-  const verified = await c.env.DB.prepare("SELECT 1 FROM users WHERE LOWER(email) = ? AND role = 'investor' AND is_active = 1 AND kyc_status = 'approved' LIMIT 1").bind(email).first();
+  const verified = await c.env.DB.prepare("SELECT 1 FROM users WHERE LOWER(email) = ? AND role = 'investor' AND is_active = 1 AND kyc_status = 'approved' LIMIT 1").bind(normalizeEmail(email)).first();
   if (verified) return refuse(c, 409, { code: 'already_on_axal', message: 'This investor is already verified on Axal. Choose them from your pipeline.' });
   const at = nowIso();
   const recent = await c.env.DB.prepare('SELECT invited_at FROM raise_prospect_invites WHERE prospect_id = ? AND email_sent = 1 AND datetime(invited_at) > datetime(?) ORDER BY invited_at DESC LIMIT 1')

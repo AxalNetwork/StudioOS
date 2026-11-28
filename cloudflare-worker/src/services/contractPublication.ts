@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { extractMergeFields } from './legalTemplateStore';
 import { restrictedSlugsJson, templateUseRefusal } from './templateSafety';
+import { normalizeEmail } from '../util/accountEmail';
 
 export class ContractPreparationError extends Error {
   code: string;
@@ -16,7 +17,7 @@ export class ContractPreparationError extends Error {
 export async function preparePublishedContract(env: Env, input: Record<string, unknown>, actorId: number, superAdmin: boolean) {
   const slug = input.template_slug;
   const version = input.template_version;
-  const email = typeof input.recipient_email === 'string' ? input.recipient_email.trim().toLowerCase() : '';
+  const email = typeof input.recipient_email === 'string' ? normalizeEmail(input.recipient_email) : '';
   const name = typeof input.recipient_name === 'string' ? input.recipient_name.trim() : '';
   if (typeof slug !== 'string' || slug.length > 200 || !Number.isSafeInteger(version)
       || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254 || !name || name.length > 200) {

@@ -27,6 +27,7 @@ import { holdsLicence } from './accountLicences';
  * (test/_d1_sqlite.mjs).
  */
 import type { Env, User } from '../types';
+import { normalizeEmail } from '../util/accountEmail';
 
 /** The Agreement page's clause keys (cofounderAgreementViewModel's CLAUSE_SPEC). */
 export const CLAUSE_KEYS = [
@@ -60,7 +61,7 @@ export async function recordParties(
     const email = typeof f.email === 'string' && f.email.trim() ? f.email.trim() : null;
     let userId: number | null = null;
     if (email) {
-      const u = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1').bind(email).first<{ id: number }>();
+      const u = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1').bind(normalizeEmail(email)).first<{ id: number }>();
       userId = u?.id ?? null;
     }
     rows.push({ index: i, name: String(f.name || '').trim() || `Founder ${i + 1}`, email, userId });
