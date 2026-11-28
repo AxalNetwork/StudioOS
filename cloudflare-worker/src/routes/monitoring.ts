@@ -42,13 +42,16 @@ monitoring.get('/metrics', async (c) => {
   const minutes = clampMinutes(c.req.query('minutes'));
   const since = new Date(Date.now() - minutes * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
-  // Bucket request rows into 1-minute buckets
+  // Bucket request rows into 1-minute buckets.
+  // D9202: 'request' rows are sampled (middleware/observability.ts) and each
+  // row's `value` is the number of requests it stands for, so counts are
+  // SUM(value) and averages are weighted by it. Pre-D9202 rows carry value 1.
   const rpm = await sql`
     SELECT strftime('%Y-%m-%d %H:%M:00', timestamp) AS bucket,
-           COUNT(*) AS count,
-           AVG(json_extract(labels, '$.latency_ms')) AS avg_latency,
-           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN 1 ELSE 0 END) AS errors_5xx,
-           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) = 429 THEN 1 ELSE 0 END) AS rate_limited
+           SUM(value) AS count,
+           SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency,
+           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN value ELSE 0 END) AS errors_5xx,
+           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) = 429 THEN value ELSE 0 END) AS rate_limited
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${since}
     GROUP BY bucket
@@ -56,7 +59,7 @@ monitoring.get('/metrics', async (c) => {
   `;
 
   const aiCalls = await sql`
-    SELECT strftime('%Y-%m-%d %H:%M:00', timestamp) AS bucket, COUNT(*) AS count
+    SELECT strftime('%Y-%m-%d %H:%M:00', timestamp) AS bucket, SUM(value) AS count
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${since}
       AND (json_extract(labels, '$.endpoint') LIKE '/api/scoring/%'
@@ -74,8 +77,8 @@ monitoring.get('/metrics', async (c) => {
 
   const topEndpoints = await sql`
     SELECT json_extract(labels, '$.endpoint') AS endpoint,
-           COUNT(*) AS hits,
-           AVG(json_extract(labels, '$.latency_ms')) AS avg_latency
+           SUM(value) AS hits,
+           SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${since}
     GROUP BY endpoint ORDER BY hits DESC LIMIT 10
@@ -84,10 +87,10 @@ monitoring.get('/metrics', async (c) => {
   // System-health rollup
   const lastHour = await sql`
     SELECT
-      COUNT(*) AS total,
-      SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN 1 ELSE 0 END) AS errors_5xx,
-      SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) = 429 THEN 1 ELSE 0 END) AS rate_limited,
-      AVG(json_extract(labels, '$.latency_ms')) AS avg_latency
+      COALESCE(SUM(value), 0) AS total,
+      SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN value ELSE 0 END) AS errors_5xx,
+      SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) = 429 THEN value ELSE 0 END) AS rate_limited,
+      SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${since}
   `;
@@ -178,17 +181,18 @@ async function anomalies(c: any, withAi: boolean) {
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
   const prevSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
+  // D9202: sampled rows — SUM(value) counts, value-weighted averages.
   const lastHour = await sql`
     SELECT json_extract(labels, '$.endpoint') AS endpoint,
-           COUNT(*) AS hits,
-           AVG(json_extract(labels, '$.latency_ms')) AS avg_latency,
-           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN 1 ELSE 0 END) AS errors
+           SUM(value) AS hits,
+           SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency,
+           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN value ELSE 0 END) AS errors
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${since}
     GROUP BY endpoint ORDER BY hits DESC LIMIT 10
   `;
   const last24 = await sql`
-    SELECT json_extract(labels, '$.endpoint') AS endpoint, COUNT(*) AS hits
+    SELECT json_extract(labels, '$.endpoint') AS endpoint, SUM(value) AS hits
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${prevSince}
     GROUP BY endpoint
@@ -281,7 +285,7 @@ monitoring.get('/throughput', async (c) => {
   }
   const sql = getSQL(c.env);
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const total = await sql`SELECT COUNT(*) AS c FROM system_metrics WHERE metric_name='request' AND timestamp >= ${since}`;
+  const total = await sql`SELECT COALESCE(SUM(value), 0) AS c FROM system_metrics WHERE metric_name='request' AND timestamp >= ${since}`;
   const spinouts = await sql`SELECT COUNT(*) AS c FROM activity_logs WHERE action LIKE 'spinout_%' AND created_at >= ${since}`;
   await sql.end();
   return c.json({

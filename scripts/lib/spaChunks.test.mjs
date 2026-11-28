@@ -92,6 +92,20 @@ test('#3590: HTTP 200 and the right JS/CSS MIME type are both required', () => {
   assert.deepEqual(cases.map(([status, ctype, ref]) => assetProblem({ status, ctype }, ref) !== null), cases.map(c => c[3]));
 });
 
+test('D9168 (#9168): with a Cache-Control given, a hashed asset must be immutable', () => {
+  // Mutation checked: the immutable test dropped → a max-age=0 asset passes.
+  const js = 'text/javascript';
+  assert.equal(assetProblem({ status: 200, ctype: js, cacheControl: 'public, max-age=31536000, immutable' }, '/assets/a.js'), null);
+  assert.equal(assetProblem({ status: 200, ctype: js, cacheControl: 'immutable' }, '/assets/a.js'), null);
+  assert.match(assetProblem({ status: 200, ctype: js, cacheControl: 'public, max-age=0, must-revalidate' }, '/assets/a.js'), /not immutable \(D9168\)/);
+  assert.match(assetProblem({ status: 200, ctype: js, cacheControl: '' }, '/assets/a.js'), /"\(none\)" is not immutable/);
+  assert.match(assetProblem({ status: 200, ctype: js, cacheControl: 'no-immutable-here' }, '/assets/a.js'), /not immutable/);
+  // Without it (the lazy-entry walk), only status and type count, as before.
+  assert.equal(assetProblem({ status: 200, ctype: js }, '/assets/a.js'), null);
+  // Status and type still come first.
+  assert.match(assetProblem({ status: 404, ctype: js, cacheControl: 'immutable' }, '/assets/a.js'), /HTTP 404/);
+});
+
 function run(script, cwd, env, args = []) {
   return spawnSync(process.execPath, [...args, join(ROOT, script)], {
     cwd, env: { ...process.env, ...env }, encoding: 'utf8', timeout: 20000,
@@ -147,7 +161,7 @@ const map=refs=>'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f='+JSON.
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(typeof input==='string'?input:input.url), p=u.pathname;
  appendFileSync(process.env.REQUEST_LOG, JSON.stringify([u.origin,p])+'\\n');
- const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
+ const js='application/javascript', imm='public, max-age=31536000, immutable', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
  if(p==='/api/auth/google/config') return Response.json({configured:false,popup:false,client_id:null});
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
  if(p==='/api/public/version') return Response.json({sha:'a'.repeat(40),version_id:null,built_at:null,missing:['version_id','built_at']});
@@ -158,7 +172,7 @@ globalThis.fetch=async(input,init={})=>{
    if(n===1) return new Response('',{status:404});
   }
   if(process.env.FAULT==='entry-mime' && p==='/assets/index-current.js') return new Response(map(['assets/lazy-current.js']),{headers:{'content-type':'text/html'}});
-  if(p==='/assets/nested-current.js') return new Response(map(['assets/nested-leaf.js']),{headers:{'content-type':js}});
+  if(p==='/assets/nested-current.js') return new Response(map(['assets/nested-leaf.js']),{headers:{'content-type':js,'cache-control':imm}});
   if(process.env.FAULT==='timeout' && u.host==='app.test' && p==='/assets/lazy-current.js') return new Promise((resolve,reject)=>{
    if(init.signal.aborted) reject(new Error('fixture aborted'));
    else init.signal.addEventListener('abort',()=>reject(new Error('fixture aborted')),{once:true});
@@ -170,9 +184,9 @@ globalThis.fetch=async(input,init={})=>{
   if(p==='/assets/index-current.js' || p==='/assets/index-previous.js') {
    const kind=p.includes('current')?'current':'previous';
    const refs=['many','many-retry'].includes(process.env.FAULT) && kind==='current'?Array.from({length:30},(_,i)=>'assets/missing-'+i+'.js'):['assets/lazy-'+kind+'.js','assets/lazy-'+kind+'.css','assets/shared.js'];
-   return new Response(process.env.FAULT==='map' && kind==='current'?'export const noMap=1;':map(refs),{headers:{'content-type':js}});
+   return new Response(process.env.FAULT==='map' && kind==='current'?'export const noMap=1;':map(refs),{headers:{'content-type':js,'cache-control':imm}});
   }
-  return new Response('fixture',{headers:{'content-type':p.endsWith('.css')?'text/css':js}});
+  return new Response('fixture',{headers:{'content-type':p.endsWith('.css')?'text/css':js,'cache-control':process.env.FAULT==='mutable-cache'?'public, max-age=0, must-revalidate':imm}});
  }
  const entry=process.env.STALE_SHELL==='1'?'previous':'current';
  // D4582: /login is the sign-in page: its own title and canonical in the document, and noindex in its header.
@@ -228,6 +242,13 @@ test('#3590: a missing JS on only the second host, wrong CSS MIME, lost old entr
     const result = smoke(fault);
     assert.deepEqual({ status: result.status, named: result.stderr.includes(needle) }, { status: 1, named: true });
   }
+});
+
+test('D9168 (#9168): a hashed file the shell references without immutable fails the live smoke, naming it', () => {
+  // Mutation checked: cacheControl no longer passed to assetProblem in check-spa-live.mjs → this smoke passes.
+  const result = smoke('mutable-cache');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /\/assets\/style\.css — Cache-Control "public, max-age=0, must-revalidate" is not immutable \(D9168\)/);
 });
 
 test('#3590: a stale live shell cannot hide the just-built entry', () => {

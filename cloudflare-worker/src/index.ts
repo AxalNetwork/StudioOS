@@ -508,15 +508,17 @@ import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
 import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, reportPrivateError, stepUpRefusalBody } from './util/authErrors';
-import { BRANCH_SUSPENDED } from './util/branch';
+import { BRANCH_SUSPENDED, authCookieName } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
+// D9169 (#9169): Server-Timing — bootstrap, rate-limit and auth phases on every /api response.
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
-import { rateLimitMiddleware } from './middleware/rateLimit';
+// D9169: the Server-Timing helpers come through this existing import, so the frozen hub gains no entry (D5615).
+import { rateLimitMiddleware, timePhase, withServerTiming } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
@@ -2000,6 +2002,56 @@ function requiresBlockingRoleSchemaBootstrap(pathname: string, method: string): 
   return !(method === 'GET' && isSafeAnonymousRead);
 }
 
+/**
+ * D9169 (#9169): whether a request carries anything that could sign it in.
+ * Only such a request pays the role-schema bootstrap; a CORS preflight and a
+ * request with no credential at all never reach a role-dependent read, so they
+ * were paying seconds of DDL and `UPDATE users` on a cold isolate for a 204,
+ * a 401 or a 404 they would have answered anyway. "Could sign it in" is wide
+ * on purpose, so every credentialed request bootstraps exactly as before: any
+ * `Authorization` header (not just `Bearer`), the session cookie by the name
+ * `getCurrentUser` reads (`authCookieName`, `studioos_auth` on HQ), a
+ * WebSocket subprotocol (`bearer.<jwt>`, routes/realtime.ts) and a `token`
+ * query parameter (WebSocket and signed-link fallbacks). A malformed
+ * `BRANCH_CODE` makes the cookie name unknowable, so it counts as credentialed.
+ * Sign-up paths that write the `exploring` role run their own
+ * `ensureExploringSchema` (routes/auth.ts, auth_google.ts, auth_apple.ts).
+ */
+function carriesCredential(request: Request, env: Env, url: URL): boolean {
+  if (request.method === 'OPTIONS') return false;
+  const headers = request.headers;
+  if (headers.has('Authorization') || headers.has('Sec-WebSocket-Protocol')) return true;
+  if (url.searchParams.has('token')) return true;
+  const cookieHeader = headers.get('Cookie');
+  if (!cookieHeader) return false;
+  let cookieName: string;
+  try { cookieName = authCookieName(env); } catch { return true; }
+  return cookieHeader.split(';').some((part) => {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    return eq > 0 && trimmed.slice(0, eq) === cookieName;
+  });
+}
+
+/**
+ * D9168 (#9168): the answer for a hashed `/assets/*` file. A hashed name never changes content, so a 200 or 304
+ * leaves as `public, max-age=31536000, immutable`. A miss, including the SPA fallback's index.html for a hash this
+ * deploy no longer holds (Task #37), is a plain 404 with `no-store`. Inline here: index.ts is a frozen hub (D5615).
+ */
+function serveHashedAsset(assetRes: Response): Response {
+  const ctype = assetRes.headers.get('content-type') || '';
+  if (/text\/html/i.test(ctype) || assetRes.status === 404) {
+    return new Response('Asset not found\n', {
+      status: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+    });
+  }
+  if (assetRes.status !== 200 && assetRes.status !== 304) return assetRes;
+  const headers = new Headers(assetRes.headers);
+  headers.set('cache-control', 'public, max-age=31536000, immutable');
+  return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
+}
+
 const studioos = {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     // Task #37 — hardened static-asset serving. wrangler.toml lists
@@ -2026,21 +2078,10 @@ const studioos = {
     // else. With MCP_SERVER_ENABLED off each of these paths answers 404 and
     // the provider is never built; every other path goes on exactly as before.
     if (isMcpPath(pathname)) return routeMcp(request, env, ctx);
-    if (request.method === 'GET' && env.ASSETS) {
-      if (pathname.startsWith('/assets/')) {
-        const assetRes = await env.ASSETS.fetch(request);
-        const ctype = assetRes.headers.get('content-type') || '';
-        if (/text\/html/i.test(ctype)) {
-          return new Response('Asset not found\n', {
-            status: 404,
-            headers: {
-              'content-type': 'text/plain; charset=utf-8',
-              'cache-control': 'no-store',
-            },
-          });
-        }
-        return assetRes;
-      }
+    // D9168 (#9168): a hashed file never changes, so a 200 or 304 is cached for a year as `immutable` and a page
+    // load stops revalidating ~70 preloaded chunks through the Worker. A miss stays `no-store`; HEAD is answered like GET.
+    if ((request.method === 'GET' || request.method === 'HEAD') && env.ASSETS) {
+      if (pathname.startsWith('/assets/')) return serveHashedAsset(await env.ASSETS.fetch(request));
     }
     // D1439 (#3914): a shared record link previews as itself. Before Hono, so
     // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
@@ -2086,24 +2127,32 @@ const studioos = {
     // Block role-dependent APIs on the migration safety net only. Health,
     // verified anonymous public reads, and telemetry endpoints are safe without
     // these schemas and must stay responsive during cold starts and D1 contention.
-    if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
-      try {
-        await ensureInvestorSchema(env);
-      } catch {
+    // D9169 (#9169): and only for a request that carries a credential.
+    if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB
+      && carriesCredential(request, env, new URL(request.url))) {
+      const schemaNotReady = await timePhase(request, 'bootstrap', async () => {
+        try {
+          await ensureInvestorSchema(env);
+        } catch {
+          return true;
+        }
+        if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
+          await ensureAdvisorSchema(env);
+        }
+        if (!exploringSchemaReady(env)) {
+          await ensureExploringSchema(env);
+        }
+        return false;
+      });
+      if (schemaNotReady) {
         console.error('[boot] investor_schema_not_ready');
-        return Response.json(
+        return withServerTiming(Response.json(
           { ok: false, error: { code: 503, type: 'investor_schema_not_ready', message: 'Service temporarily unavailable' } },
           { status: 503 },
-        );
-      }
-      if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
-        await ensureAdvisorSchema(env);
-      }
-      if (!exploringSchemaReady(env)) {
-        await ensureExploringSchema(env);
+        ), request);
       }
     }
-    return withThrownResponses(() => app.fetch(request, env, ctx));
+    return withServerTiming(await withThrownResponses(() => app.fetch(request, env, ctx)), request);
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     // The insert probe has its own atomic per-slot claim and is independent of

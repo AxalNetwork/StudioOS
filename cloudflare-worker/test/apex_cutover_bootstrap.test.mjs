@@ -56,8 +56,9 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
   );
   assert.match(
     source,
-    /if \(requiresBlockingRoleSchemaBootstrap\(pathname, request\.method\) && env\.DB\)/,
-    'only role-dependent API requests may block on the role-schema safety net',
+    // D9169: and only one that carries a credential (unauth_fast_path_9169 drives it).
+    /if \(requiresBlockingRoleSchemaBootstrap\(pathname, request\.method\) && env\.DB\s*&& carriesCredential\(request, env, new URL\(request\.url\)\)\)/,
+    'only role-dependent, credentialed API requests may block on the role-schema safety net',
   );
 });
 

@@ -100,6 +100,11 @@ export async function harness() {
     JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: memKV(), TOKENS: memKV(),
   };
   const worker = (await import('../src/index.ts')).default as any;
+  // D9202: the request metric is sampled and a read is logged once a minute.
+  // Pin the draw to "not sampled" and forget the minute before each request,
+  // so every request is measured the same way: the first read of its minute.
+  const telemetry = await import('../src/middleware/observability.ts');
+  telemetry.setRequestMetricDrawForTests(() => 0.99);
   const tokens = new Map<number, string>();
   const tokenOf = async (id: number) => {
     if (!tokens.has(id)) tokens.set(id, await new SignJWT({ user_id: id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET)));
@@ -112,6 +117,7 @@ export async function harness() {
     // A timing loop sends hundreds of requests a minute for one account; the rate limiter rightly answers 429.
     // `freshLimits` gives each request an empty limiter store, so a sample measures the flow, not the refusal.
     if (opts.freshLimits) env.RATE_LIMITS = memKV();
+    telemetry.resetActivityLogDedupe();
     const pending: Promise<unknown>[] = [];
     const ctx: any = { waitUntil: (p: Promise<unknown>) => { pending.push(p); }, passThroughOnException() {} };
     const headers: Record<string, string> = { ...(flow.headers ?? {}), ...(flow.who ? { Authorization: `Bearer ${await tokenOf(flow.who)}` } : {}) };
@@ -134,7 +140,7 @@ export async function harness() {
 
   const real = globalThis.fetch;
   globalThis.fetch = (async () => { throw new Error('no network in the perf harness'); }) as any;
-  const close = () => { globalThis.fetch = real; db.close(); rmSync(scratch, { recursive: true, force: true }); };
+  const close = () => { globalThis.fetch = real; telemetry.setRequestMetricDrawForTests(); db.close(); rmSync(scratch, { recursive: true, force: true }); };
   return { request, close, db };
 }
 

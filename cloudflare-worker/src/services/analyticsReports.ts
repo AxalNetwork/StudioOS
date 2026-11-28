@@ -212,6 +212,35 @@ async function loadOverviewFromSnapshots(
   } as OverviewReport;
 }
 
+/**
+ * D9202 — latencies from sampled `system_metrics` 'request' rows, each with
+ * the number of requests it stands for (`value`, 1 on a row kept whole or
+ * written before sampling), sorted ascending. A row with no weight counts 1.
+ */
+export function weightedLatencies(rs: SqlRow[]): Array<{ l: number; w: number }> {
+  return rs
+    .map(r => ({ l: num(r.l), w: r.w == null ? 1 : num(r.w) }))
+    .filter(x => x.l > 0 && x.w > 0)
+    .sort((a, b) => a.l - b.l);
+}
+
+/**
+ * The p-quantile of weighted latencies: the first value whose running weight
+ * passes p × the total. With every weight 1 it is exactly the unweighted
+ * `arr[floor(n × p)]` the reports used before D9202.
+ */
+export function weightedPercentile(arr: Array<{ l: number; w: number }>, p: number): number {
+  if (arr.length === 0) return 0;
+  const total = arr.reduce((a, x) => a + x.w, 0);
+  const target = total * p;
+  let run = 0;
+  for (const x of arr) {
+    run += x.w;
+    if (run > target) return Math.round(x.l);
+  }
+  return Math.round(arr[arr.length - 1].l);
+}
+
 export async function loadOverview(
   env: Env,
   range: DateRange,
@@ -257,27 +286,31 @@ export async function loadOverview(
       AND mi.period_end >= ${range.fromIso}
       AND mi.period_end <= ${range.toIso}
   `);
+  // D9202: 'request' rows are sampled (middleware/observability.ts); each
+  // row's `value` is the number of requests it stands for, so counts are
+  // SUM(value), averages and percentiles are weighted by it. Pre-D9202 rows
+  // carry value 1 and read exactly as before.
   const reqRollup = rows<SqlRow>(await sql`
-    SELECT COUNT(*) AS total,
-           AVG(json_extract(labels, '$.latency_ms')) AS avg_latency,
-           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN 1 ELSE 0 END) AS errors_5xx
+    SELECT COALESCE(SUM(value), 0) AS total,
+           SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency,
+           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN value ELSE 0 END) AS errors_5xx
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
   `);
   const topPagesRaw = rows<SqlRow>(await sql`
-    SELECT json_extract(labels, '$.endpoint') AS endpoint, COUNT(*) AS hits
+    SELECT json_extract(labels, '$.endpoint') AS endpoint, SUM(value) AS hits
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
     GROUP BY endpoint ORDER BY hits DESC LIMIT 10
   `);
   const latSample = rows<SqlRow>(await sql`
-    SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l
+    SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l, value AS w
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
     ORDER BY id DESC LIMIT 5000
   `);
-  const lats = latSample.map(r => num(r.l)).filter(n => n > 0).sort((a, b) => a - b);
-  const pct = (arr: number[], p: number) => arr.length === 0 ? 0 : Math.round(arr[Math.min(arr.length - 1, Math.floor(arr.length * p))]);
+  const lats = weightedLatencies(latSample);
+  const pct = weightedPercentile;
   const dauRaw = rows<SqlRow>(await sql`
     SELECT substr(created_at, 1, 10) AS day, COUNT(DISTINCT user_id) AS active
     FROM activity_logs
@@ -1230,9 +1263,9 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
   const aeByRoute = await loadTechnicalFromAnalyticsEngine(env, range);
   const byRoute = aeByRoute ? null : rows<SqlRow>(await sql`
     SELECT json_extract(labels, '$.endpoint') AS endpoint,
-           COUNT(*) AS hits,
-           AVG(json_extract(labels, '$.latency_ms')) AS avg_latency,
-           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN 1 ELSE 0 END) AS errors_5xx
+           SUM(value) AS hits,
+           SUM(json_extract(labels, '$.latency_ms') * value) / NULLIF(SUM(value), 0) AS avg_latency,
+           SUM(CASE WHEN CAST(json_extract(labels, '$.status') AS INTEGER) >= 500 THEN value ELSE 0 END) AS errors_5xx
     FROM system_metrics
     WHERE metric_name = 'request' AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
     GROUP BY endpoint ORDER BY hits DESC LIMIT 25
@@ -1247,14 +1280,14 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
     for (const r of (byRoute as SqlRow[])) {
       const ep = str(r.endpoint);
       const lats = rows<SqlRow>(await sql`
-        SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l
+        SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l, value AS w
         FROM system_metrics
         WHERE metric_name = 'request' AND json_extract(labels, '$.endpoint') = ${ep}
           AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
         ORDER BY id DESC LIMIT 500
       `);
-      const arr = lats.map(x => num(x.l)).filter(n => n > 0).sort((a, b) => a - b);
-      const p = (q: number) => arr.length === 0 ? 0 : Math.round(arr[Math.min(arr.length - 1, Math.floor(arr.length * q))]);
+      const arr = weightedLatencies(lats);
+      const p = (q: number) => weightedPercentile(arr, q);
       const hits = num(r.hits);
       const errs = num(r.errors_5xx);
       enriched.push({

@@ -69,9 +69,17 @@ export function entriesFromLedger({ ledger, generation = 0, readAsset }) {
   return { entries, reason: null };
 }
 
-export function assetProblem({ status, ctype }, ref) {
+/**
+ * A hashed asset is healthy at 200 with a JS/CSS type. When `cacheControl` is given (the live smoke passes it),
+ * it must also be `immutable` (D9168, #9168): a hashed name never changes, so anything shorter makes every page
+ * load revalidate its preloaded chunks through the Worker.
+ */
+export function assetProblem({ status, ctype, cacheControl }, ref) {
   if (status !== 200) return `HTTP ${status} (expected 200)`;
   const mime = String(ctype ?? '').split(';', 1)[0].trim().toLowerCase();
   const good = ref.endsWith('.css') ? mime === 'text/css' : /^(?:text|application)\/(?:javascript|ecmascript|x-javascript)$/.test(mime);
-  return good ? null : `unexpected Content-Type "${mime || '(none)'}" (expected ${ref.endsWith('.css') ? 'text/css' : 'a JS type'})`;
+  if (!good) return `unexpected Content-Type "${mime || '(none)'}" (expected ${ref.endsWith('.css') ? 'text/css' : 'a JS type'})`;
+  if (cacheControl !== undefined && !/(?:^|[\s,])immutable(?:$|[\s,])/i.test(String(cacheControl)))
+    return `Cache-Control "${cacheControl || '(none)'}" is not immutable (D9168)`;
+  return null;
 }
