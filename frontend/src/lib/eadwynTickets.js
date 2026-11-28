@@ -220,10 +220,14 @@ export function taskLine(body, max = 140) {
 /** "Start" puts the task to Eadwyn: the chat's "help me with" opens an explanation. */
 export const startPrompt = (task) => `Help me with ${String(task?.title || '').trim()}`;
 
-/** The note under "Suggest a task", with the reward when the rule pays one. */
+/**
+ * The line under "Suggest a community task" (D9284), with the reward when the
+ * rule pays one. It names the system that holds the record: a Help Center
+ * ticket, which Axal reviews before anything joins Community tasks.
+ */
 export function suggestNote(rewardsRead) {
   const r = taskReward(rewardsRead);
-  const base = '“Suggest a task” opens the ticket form with Type set to Task.';
+  const base = 'Opens a Help Center ticket with Type set to Task. Axal reviews it; an approved one joins Community tasks.';
   return r.state === 'on' ? `${base} An approved suggestion earns ${r.credits} credits.` : base;
 }
 

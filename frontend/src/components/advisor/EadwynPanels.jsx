@@ -179,7 +179,7 @@ export function phoneTicket(t, now = new Date()) {
   };
 }
 
-function PhoneTasksView({ list, mine, next, tasks, onSuggest, onStart, onRetry, onOlder, now }) {
+function PhoneTasksView({ list, mine, next, tasks, onSuggest, onStart, onRetry, onOlder, now, suggestLine, assignHref }) {
   return (
     <div className="flex flex-col pb-2" data-testid="eadwyn-tasks-panel">
       <PhoneGroup label="Community tasks" testId="eadwyn-phone-community">
@@ -215,14 +215,71 @@ function PhoneTasksView({ list, mine, next, tasks, onSuggest, onStart, onRetry, 
           )}
         </PhoneGroup>
       )}
-      <button
-        type="button"
-        onClick={onSuggest}
-        className="mt-5 flex min-h-[52px] items-center justify-center rounded-[14px] border border-[#e6dcff] bg-[#f6f2ff] text-[15px] font-bold text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
-        data-testid="eadwyn-suggest-task"
-      >
-        Suggest a task
-      </button>
+      <div className="mt-5 flex flex-col gap-3" data-testid="eadwyn-task-actions">
+        <PanelAction phone label={SUGGEST_LABEL} onClick={onSuggest} note={suggestLine} testId="eadwyn-suggest-task" noteTestId="eadwyn-suggest-note" />
+        {assignHref && <PanelAction phone label={ASSIGN_LABEL} to={assignHref} note={ASSIGN_NOTE} testId="eadwyn-assign-work" noteTestId="eadwyn-assign-note" />}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// D9284 (#9284) — the panel's three named actions
+// ---------------------------------------------------------------------------
+
+/*
+ * Three different things, each with its own outcome and its own line saying
+ * what happens next:
+ *
+ *   Suggest a community task  the ticket form on Type = Task, as before (D606):
+ *                             a Help Center ticket that Axal reviews; only an
+ *                             approved one joins Community tasks and pays its
+ *                             reward. It never becomes project work.
+ *   Assign project work       Work's assignment for the open company, the path
+ *                             #8767 restores (`/account/companies/:uid/work`,
+ *                             forwarded to Team › Tasks). That path is in open
+ *                             PR #8968, not on main, so the button is HIDDEN
+ *                             until ASSIGN_WORK_PATH_LIVE is flipped, never
+ *                             drawn as a link that 404s.
+ *   Open a support ticket     the Help Center's own ticket form, on no type.
+ *                             Nothing from the conversation is copied in.
+ */
+export const SUGGEST_LABEL = 'Suggest a community task';
+export const ASSIGN_LABEL = 'Assign project work';
+export const TICKET_LABEL = 'Open a support ticket';
+export const ASSIGN_NOTE = 'Opens Work on the company’s Team › Tasks, where the work gets an owner, a status and a next action.';
+export const TICKET_NOTE = 'Opens the Help Center ticket form. Nothing from this conversation is copied into it.';
+export const SUPPORT_TICKET_PATH = '/help/tickets?new=1';
+
+/** Flip to true once #8767's `/account/companies/:uid/work` route is on main (PR #8968). */
+export const ASSIGN_WORK_PATH_LIVE = false;
+
+/**
+ * Where "Assign project work" goes for `scope` ({ companyUid, projectId? }),
+ * or null, and so no button, while the path is not live or there is no
+ * company to assign in.
+ */
+export function assignWorkHref(scope, live = ASSIGN_WORK_PATH_LIVE) {
+  if (!live || !scope?.companyUid) return null;
+  const q = new URLSearchParams({ tab: 'tasks' });
+  if (scope.projectId != null && scope.projectId !== '') q.set('project', String(scope.projectId));
+  return `/account/companies/${encodeURIComponent(scope.companyUid)}/work?${q}`;
+}
+
+/** One named action: the button (or link), and one line under it saying what happens next. */
+function PanelAction({ label, note, onClick, to, testId, noteTestId, phone = false }) {
+  const cls = phone
+    ? 'flex min-h-[52px] items-center justify-center rounded-[14px] border border-[#e6dcff] bg-[#f6f2ff] text-[15px] font-bold text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
+    : 'w-fit rounded-[9px] bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-axal-violet-deep';
+  const noteCls = phone
+    ? 'text-[12px] leading-snug text-[#615c6e] dark:text-gray-400'
+    : 'text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400';
+  return (
+    <div className="flex flex-col gap-1">
+      {to
+        ? <Link to={to} className={cls} data-testid={testId}>{label}</Link>
+        : <button type="button" onClick={onClick} className={cls} data-testid={testId}>{label}</button>}
+      <p className={noteCls} data-testid={noteTestId}>{note}</p>
     </div>
   );
 }
@@ -232,21 +289,21 @@ function PhoneTasksView({ list, mine, next, tasks, onSuggest, onStart, onRetry, 
 // ---------------------------------------------------------------------------
 
 /** The Tasks panel as it renders from its reads: pure, so each state is testable. */
-export function TasksPanelView({ list, rewards, older = [], olderNext = null, onSuggest, onStart, onRetry, onOlder, variant, now }) {
+export function TasksPanelView({ list, rewards, older = [], olderNext = null, onSuggest, onStart, onRetry, onOlder, variant, now, assignHref = null }) {
   const tasks = list.status === 'ready' ? (list.data?.tasks || []) : [];
   const mine = list.status === 'ready' ? [...(list.data?.my_suggestions || []), ...older] : [];
   const next = older.length ? olderNext : (list.data?.my_suggestions_next ?? null);
+  const suggestLine = suggestNote(rewards);
   if (variant === 'phone') {
-    return <PhoneTasksView list={list} mine={mine} next={next} tasks={tasks} onSuggest={onSuggest} onStart={onStart} onRetry={onRetry} onOlder={onOlder} now={now || new Date()} />;
+    return <PhoneTasksView list={list} mine={mine} next={next} tasks={tasks} onSuggest={onSuggest} onStart={onStart} onRetry={onRetry} onOlder={onOlder} now={now || new Date()} suggestLine={suggestLine} assignHref={assignHref} />;
   }
   return (
     <div className="flex flex-col gap-3.5 px-4 py-3.5" data-testid="eadwyn-tasks-panel">
-      <div className="flex items-center justify-between gap-2">
-        <span className={SECTION}>Community tasks</span>
-        <button type="button" onClick={onSuggest} className="rounded-[9px] bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-axal-violet-deep" data-testid="eadwyn-suggest-task">
-          Suggest a task
-        </button>
+      <div className="flex flex-col gap-2.5" data-testid="eadwyn-task-actions">
+        <PanelAction label={SUGGEST_LABEL} onClick={onSuggest} note={suggestLine} testId="eadwyn-suggest-task" noteTestId="eadwyn-suggest-note" />
+        {assignHref && <PanelAction label={ASSIGN_LABEL} to={assignHref} note={ASSIGN_NOTE} testId="eadwyn-assign-work" noteTestId="eadwyn-assign-note" />}
       </div>
+      <span className={SECTION}>Community tasks</span>
 
       {list.status === 'loading' && <p className="text-[12.5px] text-axal-muted dark:text-gray-400">Reading the task list…</p>}
       {list.status === 'unreadable' && (
@@ -294,13 +351,12 @@ export function TasksPanelView({ list, rewards, older = [], olderNext = null, on
           )}
         </>
       )}
-
-      <p className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="eadwyn-suggest-note">{suggestNote(rewards)}</p>
     </div>
   );
 }
 
-export function TasksPanel({ onSuggest, onStart, variant }) {
+/** `workScope` ({ companyUid, projectId? }) is where Assign project work assigns; with none, or before #8767, it is hidden. */
+export function TasksPanel({ onSuggest, onStart, variant, workScope = null }) {
   const [list, reload] = useRead(() => communityTasksApi.list());
   const [rewards] = useRead(() => communityTasksApi.rewards());
   const [older, setOlder] = useState({ rows: [], next: null });
@@ -322,6 +378,7 @@ export function TasksPanel({ onSuggest, onStart, variant }) {
       onRetry={reload}
       onOlder={onOlder}
       variant={variant}
+      assignHref={assignWorkHref(workScope)}
     />
   );
 }
@@ -365,6 +422,9 @@ export function TicketsPanelView({ tickets, balance, rewards, onRetry, variant, 
             <Link to="/help/tickets" className="flex min-h-[44px] items-center text-[13px] font-semibold text-violet-700 dark:text-violet-300" data-testid="eadwyn-all-tickets">All tickets →</Link>
           )}
         </PhoneGroup>
+        <div className="mt-5">
+          <PanelAction phone label={TICKET_LABEL} to={SUPPORT_TICKET_PATH} note={TICKET_NOTE} testId="eadwyn-open-ticket" noteTestId="eadwyn-open-ticket-note" />
+        </div>
       </div>
     );
   }
@@ -418,6 +478,7 @@ export function TicketsPanelView({ tickets, balance, rewards, onRetry, variant, 
           All tickets →
         </Link>
       )}
+      <PanelAction label={TICKET_LABEL} to={SUPPORT_TICKET_PATH} note={TICKET_NOTE} testId="eadwyn-open-ticket" noteTestId="eadwyn-open-ticket-note" />
       {rates && <p className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="eadwyn-bounty-rates">{rates}</p>}
     </div>
   );

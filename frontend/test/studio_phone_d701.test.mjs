@@ -456,7 +456,7 @@ test('16. Tasks: the focus chips, the buckets drawn the canvas\'s way, and the s
   } };
   const tasks = inRouter(h(TasksPanelView, { list, rewards: { status: 'ready', data: {} }, onSuggest() {}, onStart() {}, variant: 'phone', now: NOW }));
   const tt = textOf(tasks);
-  for (const want of ['Community tasks', 'Map your first ten customers', 'Start →', 'My suggestions', 'Pending review', 'Approved', '+10 credits', 'no credits paid', 'Declined · Already on the roadmap.', 'Declined', 'Suggest a task']) assert.ok(tt.includes(want), want);
+  for (const want of ['Community tasks', 'Map your first ten customers', 'Start →', 'My suggestions', 'Pending review', 'Approved', '+10 credits', 'no credits paid', 'Declined · Already on the roadmap.', 'Declined', 'Suggest a community task']) assert.ok(tt.includes(want), want);
   assert.match(tt, /Sent \d{1,2} Oct/);
   assert.match(tt, /Approved \d{1,2} Oct/);
   assert.equal((tt.match(/\+10 credits/g) || []).length, 1, '+10 credits only for the paid approval');
@@ -465,7 +465,7 @@ test('16. Tasks: the focus chips, the buckets drawn the canvas\'s way, and the s
   for (const status of ['loading', 'unreadable']) {
     const other = textOf(inRouter(h(TasksPanelView, { list: { status }, rewards: { status }, onSuggest() {}, onStart() {}, onRetry() {}, variant: 'phone', now: NOW })));
     assert.doesNotMatch(other, /No tasks yet/, status);
-    assert.ok(other.includes('Suggest a task'), status);
+    assert.ok(other.includes('Suggest a community task'), status);
   }
 });
 
