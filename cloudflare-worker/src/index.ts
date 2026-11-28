@@ -2493,6 +2493,23 @@ const studioos = {
             taskFailed('reporting daily', e instanceof Error ? e.message : 'error');
           }
         }
+        // D8993 (#8993) — the daily portfolio check, after Reporting's step: a missed report or a
+        // founder-reported runway under six months raises a holder's Needs-attention notice, once per
+        // piece of evidence. Every tier: a branch's holders are its own. A source it could not read
+        // raised nothing and fails the task, so the row reads `partial`.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 45) {
+          try {
+            const { runPortfolioAttentionCheck } = await import('./services/portfolioAttentionCheck');
+            const r = await runPortfolioAttentionCheck(env, now.getTime());
+            const line = `portfolio attention check holders=${r.holders} missed_report=${r.missed_report} short_runway=${r.short_runway} unreadable=${r.unreadable.length}`;
+            cronSummary.push(line);
+            if (r.unreadable.length) taskFailed('portfolio attention check', 'portfolio_attention_unreadable');
+            else if (r.missed_report || r.short_runway) cronTasks.done('portfolio attention check', line);
+            else cronTasks.skipped('portfolio attention check', 'nothing to raise');
+          } catch (e) {
+            taskFailed('portfolio attention check', e instanceof Error ? e.name : 'error');
+          }
+        }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
           try {
             const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');

@@ -300,6 +300,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['pitch_deck_proposals', 'p', 'cleanup'],
   ['pitch_decks', 'p', 'cleanup'],
   ['portfolio_attention_alerts', 'p', 'refuses'],
+  ['portfolio_attention_checks', 'p', 'refuses'],
   ['portfolio_distributions', 'p', 'refuses'],
   ['portfolio_health_snapshots', 'p', 'left'],
   ['portfolio_mark_requests', 'p', 'refuses'],
