@@ -43,12 +43,14 @@ export function featureCreateStatements(env: Env, f: {
 export function mustHaveCreateStatements(env: Env, m: {
   projectId: number; userId: number; title: string; hypothesisId: number | null;
   status: string; owner: number | null; due: string | null; links: Link[];
+  /** D8775 (#8775): the reviewer, and the agent that builds it; the route has checked both. */
+  reviewer?: number | null; agent?: number | null;
 }): Prepared[] {
   return [
     // Migration 441's triggers date a must-have that starts, or moves to, Done.
-    env.DB.prepare(`INSERT INTO mvp_features (project_id, title, hypothesis_id, is_must_have, delivery_status, owner_user_id, due_date, added_value, effort, sort_order, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?, ?, 'High', 'M', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now')) RETURNING id`)
-      .bind(m.projectId, m.title, m.hypothesisId, m.status, m.owner, m.due, m.projectId, m.userId),
+    env.DB.prepare(`INSERT INTO mvp_features (project_id, title, hypothesis_id, is_must_have, delivery_status, owner_user_id, due_date, reviewer_user_id, builder_agent_id, added_value, effort, sort_order, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, 'High', 'M', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now')) RETURNING id`)
+      .bind(m.projectId, m.title, m.hypothesisId, m.status, m.owner, m.due, m.reviewer ?? null, m.agent ?? null, m.projectId, m.userId),
     ...[...new Map(m.links.map(l => [l.url, l])).values()].map(l => env.DB.prepare(
       `INSERT INTO mvp_feature_links (feature_id, kind, url, external_ref, created_by) VALUES ((SELECT MAX(id) FROM mvp_features WHERE project_id = ?), ?, ?, ?, ?)`,
     ).bind(m.projectId, l.kind, l.url, l.external_ref, m.userId)),

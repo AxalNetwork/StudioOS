@@ -1880,7 +1880,9 @@ const NOTHING = { value: '', label: 'Nothing' };
 const NONE_CHIP = { value: '', label: 'None' };
 const LEVEL = [{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }];
 // A two-part owner box (decision 2): a member the route accepts, then a date.
-const ownerPart = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [], optionsFrom: 'owners', empty: 'No member to choose yet.' };
+// D8775 (#8775, BLV04): an empty list says why, and the Worker's read adds where to add a teammate.
+const NO_OWNER = 'No one can own it yet: an owner is on this project’s team or in its company. Save it without one and add an owner later.';
+const ownerPart = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [], optionsFrom: 'owners', empty: NO_OWNER };
 const buildHypothesis = { kind: 'CH', name: 'hypothesis_id', k: 'Tests hypothesis', opts: [NONE_YET], def: 0, optionsFrom: 'hypotheses' };
 
 /** A Build `form-options` field's choices, as `{ value, label }`. */
@@ -1888,7 +1890,12 @@ const readChips = (read, name) => chipList(read?.[name]?.options);
 const buildOptions = (slug, fill) => (w, projectId) => w.formOptions('build', projectId, slug).then((read) => fill(read || {}));
 /** The venture's records first, then the canvas's "None yet" last, the first chosen (CO:311-313). */
 const thenNone = (read, name, none = NONE_YET) => ({ options: [...readChips(read, name), none], def: 0 });
-const ownersOf = (read) => ({ options: readChips(read, 'owner_user_id') });
+/** The team's people; with none, the read's note (its link to the project's team) is kept. */
+const ownersOf = (read) => {
+  const note = read?.owner_user_id?.note;
+  const link = note && typeof note === 'object' && typeof note.href === 'string' ? { note: { text: '', href: note.href, link: String(note.link || 'Add a teammate') } } : {};
+  return { options: readChips(read, 'owner_user_id'), ...link };
+};
 
 const featureFields = [
   { kind: 'T', name: 'title', k: 'Feature', ph: 'What it lets the customer do', required: true, max: 200 },
@@ -1928,20 +1935,30 @@ const mustHaveBody = (v) => {
   const owner = idOrNull(v.owner_user_id);
   return { title: str(v.title), hypothesis_id: idOrNull(v.hypothesis_id), state: v.state || null, ...(owner == null ? {} : { owner_user_id: owner }), due_date: str(v.due_date) };
 };
+// D8775 (#8775, BLV02B): a feature from Solution design becomes the must-have on its own row, so its
+// title, pain theme, hypothesis and success bar are carried; "A new one" keeps today's form.
+const NEW_MUST = { value: '', label: 'A new one' };
+const fromFeature = (v) => !!idOrNull(v.feature_id);
+const ALSO_ROADMAP = [{ value: '', label: 'Not now' }, { value: 'now', label: 'Now' }, { value: 'next', label: 'Next' }, { value: 'later', label: 'Later' }];
 const buildMustHave = {
   key: 'must-have', cta: 'Add must-have', button: 'Add must-have',
   title: 'Add must-have',
   sub: 'What has to work before the MVP ships.',
   foot: 'Counts toward the burn-up to the ship date.',
   fields: [
-    ...mustHaveFields,
+    { kind: 'CH', name: 'feature_id', k: 'From Solution design', opts: [NEW_MUST], def: 0, optionsFrom: 'features',
+      note: (v) => (fromFeature(v) ? 'Its title, pain theme, hypothesis and success bar come with it. Nothing is retyped.' : null) },
+    ...mustHaveFields.map((f) => (f.name === 'title' || f.name === 'hypothesis_id' ? { ...f, when: (v) => !fromFeature(v) } : f)),
+    { kind: 'CH', name: 'roadmap', k: 'Also on the roadmap', opts: ALSO_ROADMAP, def: 0, when: fromFeature },
     // Each "Linked" check reveals its URL box (decision 2): an attached https link, not a sync.
     { kind: 'CK', name: 'linked', k: 'Linked', opts: LINKS },
     { kind: 'T', name: 'figma_url', k: 'Figma file URL', ph: 'https://www.figma.com/…', max: 1000, when: { name: 'linked', value: 'figma' } },
     { kind: 'T', name: 'github_url', k: 'GitHub issue URL', ph: 'https://github.com/…/issues/…', max: 1000, when: { name: 'linked', value: 'github' } },
   ],
-  toBody: (v) => ({ ...mustHaveBody(v), links: LINKS.filter((l) => checked(v.linked, l.value)).map((l) => str(v[`${l.value}_url`])).filter(Boolean) }),
-  loadOptions: buildOptions('prototype-mvp', (read) => ({ hypothesis_id: thenNone(read, 'hypothesis_id'), owner_user_id: ownersOf(read) })),
+  toBody: (v) => ({ ...mustHaveBody(v), links: LINKS.filter((l) => checked(v.linked, l.value)).map((l) => str(v[`${l.value}_url`])).filter(Boolean),
+    ...(fromFeature(v) ? { feature_id: idOrNull(v.feature_id), ...(v.roadmap ? { roadmap: v.roadmap } : {}) } : {}) }),
+  loadOptions: buildOptions('prototype-mvp', (read) => ({ hypothesis_id: thenNone(read, 'hypothesis_id'), owner_user_id: ownersOf(read),
+    feature_id: { options: [NEW_MUST, ...readChips(read, 'feature_id')], def: 0 } })),
   submit: (w, projectId, v) => w.build.addMustHave(projectId, buildMustHave.toBody(v)),
 };
 
