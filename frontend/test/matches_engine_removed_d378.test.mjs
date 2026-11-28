@@ -55,13 +55,13 @@ test('no nav, launcher, persona or tab entry points at /matches', () => {
   }
 });
 
-// D6257 (#6257): the investor's is the page's own request sheet now (a
-// handler), the founder's is still a stated gap; neither is ever a link.
-test('"Request an intro" is never a link: a stated gap on the founder desk, the page\'s sheet on the investor\'s', () => {
-  for (const [f, shape] of [['frontend/src/workspaces/investorZoneActions.js', /kind: 'handler', handler: 'requestIntroduction'/], ['frontend/src/workspaces/founderZoneActions.js', /unbuilt: '/]]) {
+// D6257 (#6257): the investor's is the page's own request sheet now (a handler). D9068 (#9068): the founder's opens
+// the request through Axal. Neither ever points at /matches again.
+test('"Request an intro" never points at /matches: the page\'s sheet on the investor\'s desk, the request through Axal on the founder\'s', () => {
+  for (const [f, shape] of [['frontend/src/workspaces/investorZoneActions.js', /kind: 'handler', handler: 'requestIntroduction'/], ['frontend/src/workspaces/founderZoneActions.js', /to: '\/network\/introductions\/requests\/new'/]]) {
     const line = codeOnly(read(f)).split('\n').find((l) => l.includes("label: 'Request an intro'"));
     assert.ok(line, `${f} lost the canvas label`);
     assert.match(line, shape, `${f}'s Request an intro changed shape`);
-    assert.doesNotMatch(line, /\bto: /, `${f}'s Request an intro links somewhere`);
+    assert.doesNotMatch(line, /matches/, `${f}'s Request an intro points at /matches`);
   }
 });

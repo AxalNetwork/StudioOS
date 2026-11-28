@@ -1,7 +1,11 @@
-/** D7673 (#7673): introduction requests to people in the shared Network directory, for every member role, coordinated by an Axal operator. */
+/**
+ * D7673 (#7673): introduction requests to people in the shared Network directory, for every member role, coordinated by an Axal operator.
+ * D9067 (#9067): the operator side is gated on a Super Admin's named grant (`operator`, `reviewer`), not on being an HQ admin.
+ */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireHqAdmin } from '../auth';
+import { requireAuth, requireHqAdmin, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
+import { ensureAdminAuditLogTable } from './admin';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import {
@@ -9,6 +13,8 @@ import {
   assignRequest,
   createProvisionalTarget,
   createRequest,
+  grantStaff,
+  listStaffGrants,
   listForRequester,
   operatorMove,
   operatorQueue,
@@ -22,7 +28,10 @@ import {
   requestForRequester,
   requireRequestOwner,
   reviewReadiness,
+  revokeStaff,
   setRecipient,
+  staffKindsOf,
+  type StaffKind,
   submitRequest,
   updateDraft,
   withdrawRequest,
@@ -58,73 +67,131 @@ async function writer(c: C) {
   return user;
 }
 
-// ── Operator (HQ admin) — registered first so no requester path takes /operator/… ────────────────────────────────
+
+/**
+ * D9067: an HQ admin who holds one of `kinds`, a grant a Super Admin made (D7678, D7677 Q3). Being an HQ admin, or a
+ * Super Admin, is not enough on its own. A write also refuses a support session, which may read with the grant.
+ */
+const STAFF_REFUSAL: Record<string, [string, string]> = {
+  operator: ['operator_grant_required', 'Introduction requests are worked by an operator a Super Admin has named. Ask a Super Admin for the operator grant.'],
+  reviewer: ['reviewer_entitlement_required', 'Readiness is decided by a Network reviewer. Ask a Super Admin for the reviewer entitlement.'],
+  either: ['network_staff_required', 'The introduction desk is open to named operators and Network reviewers. Ask a Super Admin for a grant.'],
+};
+async function staff(c: C, kinds: readonly StaffKind[], write: boolean) {
+  const user = await requireHqAdmin(c);
+  if (write && (user as any).support_session) throw new IntroRefusal(403, 'support_session_read_only', 'A support session can read requests but not change them.');
+  const held = await staffKindsOf(c.env.DB, user.id);
+  if (!kinds.some((k) => held.has(k))) {
+    const [code, sentence] = STAFF_REFUSAL[kinds.length === 1 ? kinds[0] : 'either'];
+    throw new IntroRefusal(403, code, sentence);
+  }
+  return user;
+}
+const OPERATOR_OR_REVIEWER = ['operator', 'reviewer'] as const;
+
+/** A member reference from the path. */
+function userIdParam(c: C) {
+  const userId = Number(c.req.param('userId'));
+  if (!Number.isSafeInteger(userId) || userId < 1) throw new IntroRefusal(400, 'user_invalid', 'That is not a member reference.');
+  return userId;
+}
+
+// ── Operator side (named grants, D9067) — registered first so no requester path takes /operator/… ──────────────
 
 router.get('/operator/queue', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, OPERATOR_OR_REVIEWER, false);
     const q = c.req.query();
     return c.json(await operatorQueue(c.env.DB, { state: q.state, next_actor: q.next_actor, mine: q.mine === '1' ? op.id : null, cursor: q.cursor, limit: q.limit }));
   }),
 );
 router.get('/operator/readiness', (c) =>
   answer(c, async () => {
-    await requireHqAdmin(c);
+    await staff(c, ['reviewer'], false);
     return c.json(await readinessQueue(c.env.DB));
   }),
 );
 router.post('/operator/readiness/:userId/:key', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
-    const userId = Number(c.req.param('userId'));
-    if (!Number.isSafeInteger(userId) || userId < 1) throw new IntroRefusal(400, 'user_invalid', 'That is not a member reference.');
+    const op = await staff(c, ['reviewer'], true);
+    const userId = userIdParam(c);
     await reviewReadiness(c.env.DB, op.id, userId, c.req.param('key'), (await body(c)).decision);
     return c.json({ ok: true });
   }),
 );
 router.get('/operator/provisional-targets', (c) =>
   answer(c, async () => {
-    await requireHqAdmin(c);
+    await staff(c, OPERATOR_OR_REVIEWER, false);
     return c.json(await provisionalQueue(c.env.DB, { status: c.req.query('status') }));
   }),
 );
 router.get('/operator/requests/:uid', (c) =>
   answer(c, async () => {
-    await requireHqAdmin(c);
+    await staff(c, OPERATOR_OR_REVIEWER, false);
     return c.json({ request: await requestForOperator(c.env.DB, c.req.param('uid')) });
   }),
 );
 router.post('/operator/requests/:uid/assign', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, ['operator'], true);
     return c.json({ request: await assignRequest(c.env.DB, op.id, c.req.param('uid'), await body(c)) });
   }),
 );
 router.post('/operator/requests/:uid/move', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, ['operator'], true);
     return c.json({ request: await operatorMove(c.env.DB, op.id, c.req.param('uid'), await body(c)) });
   }),
 );
 router.post('/operator/requests/:uid/recipient', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, ['operator'], true);
     return c.json({ request: await setRecipient(c.env.DB, op.id, c.req.param('uid'), await body(c)) });
   }),
 );
 // Records contact the operator made. No transport is passed: this route never sends a message itself.
 router.post('/operator/requests/:uid/contact-attempts', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, ['operator'], true);
     const out = await recordContactAttempt(c.env.DB, op.id, c.req.param('uid'), await body(c));
     return c.json(out, out.replayed ? 200 : 201);
   }),
 );
 router.post('/operator/contact-attempts/:attemptUid/reconcile', (c) =>
   answer(c, async () => {
-    const op = await requireHqAdmin(c);
+    const op = await staff(c, ['operator'], true);
     await reconcileAttempt(c.env.DB, op.id, c.req.param('attemptUid'), await body(c));
     return c.json({ ok: true });
+  }),
+);
+
+// ── Grants (Super Admin, D9067) ─────────────────────────────────────────────────────────────────────────────────
+// Reading the list needs the elevation; granting and revoking pass the write bar every Super Admin write uses
+// (a TOTP-minted session, a recent step-up, then the elevation). Each change lands with its admin_audit_log row.
+
+router.get('/operator/grants', (c) =>
+  answer(c, async () => {
+    await requireSuperAdmin(c);
+    return c.json(await listStaffGrants(c.env.DB));
+  }),
+);
+router.post('/operator/grants/:userId', (c) =>
+  answer(c, async () => {
+    const actor = await requireSuperAdminWriteBar(c);
+    const userId = userIdParam(c);
+    const input = await body(c);
+    await ensureAdminAuditLogTable(c.env);
+    const out = await grantStaff(c.env, actor.id, userId, input);
+    return c.json(out, out.already ? 200 : 201);
+  }),
+);
+router.delete('/operator/grants/:userId/:kind', (c) =>
+  answer(c, async () => {
+    const actor = await requireSuperAdminWriteBar(c);
+    const userId = userIdParam(c);
+    const input = await body(c);
+    await ensureAdminAuditLogTable(c.env);
+    return c.json(await revokeStaff(c.env, actor.id, userId, c.req.param('kind'), input));
   }),
 );
 
@@ -152,7 +219,7 @@ router.get('/', (c) =>
   answer(c, async () => {
     const user = await requireAuth(c);
     const q = c.req.query();
-    return c.json(await listForRequester(c.env.DB, user.id, { state: q.state, cursor: q.cursor, limit: q.limit }));
+    return c.json(await listForRequester(c.env.DB, user.id, { state: q.state, next_actor: q.next_actor, cursor: q.cursor, limit: q.limit }));
   }),
 );
 router.post('/', (c) =>

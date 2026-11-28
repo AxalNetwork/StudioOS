@@ -10,6 +10,13 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { LensLink } from '../../workspaces/lens';
 import FounderInvestorAsks from './FounderInvestorAsks';
+import NetworkIntroOffer from '../relationships/NetworkIntroOffer';
+
+/**
+ * #9106: what the founder sees once an offer is sent. The two propositions are addressed to the two ties, not to
+ * the founder (services/networkIntroOffers.ts), so this ledger does not gain a row and the notice does not say it will.
+ */
+export const OFFERED_NOTICE = 'Introduction offered. Each person chooses whether to accept.';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -66,6 +73,8 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
   const [filter, setFilter] = useState('all');
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const load = async () => {
     setStatus('loading'); setError('');
@@ -108,8 +117,10 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
       className="mt-3"
       role={role}
       filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
-      actions={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Counterpart', 'Counterpart company', 'Counterpart role', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, stateLabel(r)] } })}
+      actions={founderZoneActions('network/introductions', { query, handlers: { offerIntroduction: { onClick: () => { setNotice(''); setOfferOpen(true); }, title: 'Offer an introduction between two of your accepted ties.' } }, view: { scope: null, header: ['Counterpart', 'Counterpart company', 'Counterpart role', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, stateLabel(r)] } })}
     />
+    {notice && <p role="status" className="mt-2 text-sm text-gray-700 dark:text-gray-300" data-testid="status-network-intro-offered">{notice}</p>}
+    {offerOpen && <NetworkIntroOffer onClose={() => setOfferOpen(false)} onOffered={() => { setOfferOpen(false); setNotice(OFFERED_NOTICE); }} />}
     {status === 'error' && <div className="fn-rel-alert" data-testid="status-network-introductions-error"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <IntroductionSkeleton />}
     {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>State is stored on each record; which side asked is not</small></div></div>
@@ -135,7 +146,7 @@ function IntroductionRail({ rows, landed, stalled, error }) {
     workspace="Network"
     className="fn-rel-rail"
     stance="Introduction ledger"
-    note="This view does not request, offer, message or draft introductions. It accepts or declines an investor's ask only when you click."
+    note="This view does not request, message or draft introductions. It offers one between two of your accepted ties, and accepts or declines an investor's ask, only when you click."
     coverage={[error ? 'Source unavailable' : `${rows.length} tracked introduction${rows.length === 1 ? '' : 's'}`]}
     coverageNote={error ? 'The secure introductions source could not be read.' : `${landed} accepted or connected · ${stalled} explicitly stalled.`}
     unavailable={[['Double-opt-in draft', 'No AI writing or send action is enabled.'], ['Downstream outcome', 'The ledger does not record calls, hires, or referrals.']]}
