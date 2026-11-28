@@ -4,9 +4,9 @@ import { lovableApi } from '../../../lib/api/lovable';
 import { lovableAppLinksApi } from '../../../lib/api/lovableAppLinks';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import {
-  ALIAS_EDITED, ALIAS_NOTE, ANNOUNCE_OK, BRING_BACK, CHECKS, CHECK_HINT, CHECK_OK, DRAFTED_FROM, DRAFTED_LINE, ENTRY_LABEL, MAX, MEMBER_CHECK, NOT_COVERED,
+  ALIAS_EDITED, ALIAS_NOTE, ANNOUNCE_OK, BRING_BACK, CHECKS, CHECK_HINT, CHECK_OK, DRAFTED_FROM, DRAFTED_LINE, ENTRY_LABEL, LINE_MARK, MAX, MEMBER_CHECK, NOT_COVERED,
   OPENED_LINE, OPENS_LINE, PREPARE_SUB, REVIEW, STEPS, SUPPORT_NOTE, VENTURE_NOTE,
-  changedLines, checkTime, countText, dialogHead, exactCount, lineDiff, linesLabel, namesVenture, openedDay, showsEntry, testsRows,
+  changedLines, checkTime, countText, dialogHead, exactCount, lineDiff, linesLabel, namesVenture, openedDay, reviewLines, showsEntry, testsRows,
 } from './lovableModel';
 
 /**
@@ -435,8 +435,22 @@ export function BuildInLovableDialog({ cycle, projectId, record, onClose, onOpen
               <dt className="font-semibold text-axal-muted dark:text-gray-400">Exactly this text</dt>
               <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="lovable-review-count">{exactCount(text)}{at ? ` · checked ${at}, unchanged since` : ''}</dd>
             </dl>
-            <pre className="m-0 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[10px] border border-axal-hairline bg-axal-ground p-3 font-mono text-[12.5px] leading-[1.5] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-              role="region" aria-label="The exact text that will be sent" tabIndex={0} data-testid="lovable-review-text">{text}</pre>
+            {/* D8773 part 3 (BLP06): the exact text, numbered by line in an aria-hidden gutter, each line edited or added
+                since the draft marked with its glyph and its word. The lines joined by newlines are the text, byte for byte. */}
+            <div className="m-0 max-h-[320px] overflow-auto rounded-[10px] border border-axal-hairline bg-axal-ground py-2 font-mono text-[12.5px] leading-[1.5] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              role="region" aria-label="The exact text that will be sent" tabIndex={0} data-testid="lovable-review-text">
+              {reviewLines(base, text).map((l) => (
+                <div key={l.n} className={`flex gap-2 pr-2 ${l.mark ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`} data-testid="lovable-review-row" data-mark={l.mark || undefined}>
+                  <span aria-hidden="true" className="w-8 shrink-0 select-none text-right text-axal-muted dark:text-gray-500" data-testid="lovable-review-n">{l.n}</span>
+                  <span className="min-h-[1.5em] min-w-0 flex-1 whitespace-pre-wrap break-words" data-testid="lovable-review-line">{l.text}</span>
+                  {l.mark && (
+                    <span className="shrink-0 select-none text-[11px] font-semibold text-amber-800 dark:text-amber-300" data-testid="lovable-review-mark">
+                      <span aria-hidden="true">{LINE_MARK[l.mark].glyph} </span>{LINE_MARK[l.mark].word}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
             <dl className="m-0 grid grid-cols-1 gap-x-3 gap-y-1.5 text-[13px] sm:grid-cols-[150px_1fr]">
               <dt className="font-semibold text-axal-muted dark:text-gray-400">Nothing else goes</dt><dd className="m-0 text-axal-ink dark:text-gray-100">{REVIEW.nothingElse}</dd>
               <dt className="font-semibold text-axal-muted dark:text-gray-400">Axal VC records</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="lovable-review-records">{REVIEW.records}</dd>

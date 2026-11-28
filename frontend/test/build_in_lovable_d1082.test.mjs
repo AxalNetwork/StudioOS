@@ -19,7 +19,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { BuildInLovable, BuildInLovableDialog } from '../src/pages/cycles/lovable/BuildInLovable.jsx';
 import {
   ANNOUNCE_OK, BRING_BACK, CHECKS, CHECK_OK, DRAFTED_LINE, ENTRY_LABEL, LEFT_OUT, MEMBER_CHECK, NOT_COVERED, OPENS_LINE, REVIEW, SEND_CHECKS, SEND_CHECK_OK, SEND_NOT_COVERED,
-  changedLines, checkTime, countText, dialogHead, exactCount, lineDiff, linesLabel, namesVenture, openedDay, prototypeLovable, showsEntry, testsRows,
+  changedLines, checkTime, countText, dialogHead, exactCount, lineDiff, linesLabel, namesVenture, openedDay, prototypeLovable, reviewLines, showsEntry, testsRows,
 } from '../src/pages/cycles/lovable/lovableModel.js';
 import { RecordSection } from '../src/pages/cycles/RecordView.jsx';
 import { lovableApi } from '../src/lib/api/lovable.js';
@@ -47,6 +47,9 @@ function fakeApi(answers = {}) {
 const TESTS = { code: 'H2', claim: 'Small clinics will join a waitlist for same-day invoice reconciliation.', title: 'Landing page test', target: '40 sign-ups' };
 const DRAFT = { record: RECORD, prompt: PROMPT, prompt_chars: PROMPT.length, max: 4000, left_out: LEFT_OUT, check: OK, last_opened_at: null, tests: TESTS };
 
+/** Review's exact text: its lines joined by newlines (the gutter and marks are not the text). */
+const reviewText = (v) => v.all('lovable-review-line').map((n) => v.textOf(n)).join('\n');
+
 async function mount(node) {
   const restore = installDocument();
   const container = document.createElement('div');
@@ -60,6 +63,7 @@ async function mount(node) {
   await settle();
   return {
     byId, settle, has: (id) => !!byId(id), text: (id) => text(id ? byId(id) : container), props: (id) => props(byId(id)),
+    all: (id) => walk(container).filter((n) => props(n)['data-testid'] === id), textOf: text,
     async click(id) { const p = props(byId(id)); assert.ok(p.onClick, `no ${id}`); await act(async () => { await p.onClick({ preventDefault() {} }); }); await settle(); },
     async type(id, value) { const p = props(byId(id)); await act(async () => { p.onChange({ target: { value } }); }); },
     async close() { await act(async () => root.unmount()); restore(); },
@@ -457,7 +461,14 @@ test('D8773 changed prompt: Edited · 2 lines, Compare with the draft, a new che
     await v.click('lovable-compare');
     assert.match(v.text('lovable-diff'), /Now, line 10: - Harvest log: Record a pick for a block in two taps\.Draft, line 10: - Harvest log: Record a pick in under a minute\.Now, line 13: Use a calm green palette\./);
     await v.click('lovable-review-go');
-    assert.equal(v.text('lovable-review-text'), text, 'Review shows the edited text byte for byte');
+    assert.equal(v.all('lovable-review-line').length, 14);
+    assert.equal(reviewText(v), text, 'Review shows the edited text byte for byte');
+    // D8773 part 3 (BLP06): numbered lines; the edited line 10 and the added line 13 carry their glyph and word.
+    // Mutation checked: every add marked `add` → line 10 reads "+ Added"; marks dropped → no row carries one.
+    const marked = v.all('lovable-review-row').map((n, i) => [i + 1, Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.['data-mark']]).filter(([, m]) => m);
+    assert.deepEqual(marked, [[10, 'chg'], [13, 'add']]);
+    assert.deepEqual(v.all('lovable-review-mark').map((n) => v.textOf(n)), ['~ Edited', '+ Added']);
+    assert.equal(v.all('lovable-review-n').map((n) => v.textOf(n)).join(','), Array.from({ length: 14 }, (_, i) => String(i + 1)).join(','));
     assert.equal(v.text('lovable-review-count'), `${text.length.toLocaleString('en-US')} characters · 14 lines · checked 14:33 UTC, unchanged since`);
     await v.click('lovable-back');
     await v.click('lovable-restore');
@@ -477,7 +488,8 @@ test('D8773 Copy and Open: the same text under the same disclosure; Copy records
     assert.equal(v.props('lovable-dialog')['data-step'], 'review');
     assert.equal(v.text('lovable-review-destination'), 'lovable.dev, in a new tab, with your own Lovable account.');
     assert.match(v.text('lovable-review-facts'), /How it travels.*after the “#”.*Axal VC never sends it to Lovable/);
-    assert.equal(v.text('lovable-review-text'), ATLAS);
+    assert.equal(reviewText(v), ATLAS);
+    assert.deepEqual(v.all('lovable-review-mark'), [], 'the unedited draft has no marks');
     assert.equal(v.text('lovable-review-records'), REVIEW.records);
     assert.equal(v.text('lovable-review-copy'), REVIEW.copyInstead);
     await v.click('lovable-copy');
@@ -511,4 +523,16 @@ test('D8773 a refusal names its kind and line in an alert; a support session is 
     assert.ok(!sv.has('lovable-review-go') && !sv.has('lovable-copy') && !sv.has('lovable-open'), 'Review, Copy and Open are absent, not dimmed');
     assert.equal(sv.props('lovable-prompt').readOnly, true);
   } finally { await sv.close(); }
+});
+
+test('D8773 part 3 reviewLines: each line numbered, edited and added lines marked against the draft, the text kept whole', () => {
+  // Mutation checked: paired edits read as added → line 2 is `add`; one run for the whole text → X reads as edited.
+  const draft = 'one\ntwo\nthree\nfour';
+  const now = 'one\nTWO\nthree\nnew\n';
+  const rows = reviewLines(draft, now);
+  assert.deepEqual(rows.map((r) => [r.n, r.mark]), [[1, null], [2, 'chg'], [3, null], [4, 'chg'], [5, 'add']]);
+  assert.equal(rows.map((r) => r.text).join('\n'), now, 'the lines are the text, byte for byte');
+  assert.deepEqual(reviewLines('a\nb\nc', 'a\nc').map((r) => r.mark), [null, null], 'a removed line marks nothing that stays');
+  assert.deepEqual(reviewLines('a\nb\nc', 'a\nX\nb').map((r) => r.mark), [null, 'add', null], 'a line removed further down does not make an earlier added line an edit');
+  assert.deepEqual(reviewLines(draft, draft).map((r) => r.mark), [null, null, null, null]);
 });

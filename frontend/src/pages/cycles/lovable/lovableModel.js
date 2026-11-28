@@ -102,6 +102,34 @@ export function lineDiff(before, after) {
   return ops;
 }
 
+/**
+ * D8773 part 3 (BLP05, BLP06): each line of the text as Review numbers it, with its mark against the draft:
+ * `chg` (a draft line edited, "~"), `add` (a line the draft did not have, "+") or null. Within one run of
+ * changes, as many added lines as were removed count as edited; the rest are added. The words go with the
+ * glyph, so a mark is never colour or a symbol alone.
+ */
+export const LINE_MARK = Object.freeze({ chg: { glyph: '~', word: 'Edited' }, add: { glyph: '+', word: 'Added' } });
+export function reviewLines(before, after) {
+  const text = String(after ?? '');
+  const lines = text.split('\n').map((line, i) => ({ n: i + 1, text: line, mark: null }));
+  if (String(before ?? '') === text) return lines;
+  const ops = lineDiff(before, after);
+  let run = [];
+  const flush = () => {
+    const dels = run.filter((o) => o.op === 'del').length;
+    let paired = 0;
+    for (const o of run) {
+      if (o.op !== 'add') continue;
+      lines[o.n - 1].mark = paired < dels ? 'chg' : 'add';
+      paired += 1;
+    }
+    run = [];
+  };
+  for (const o of ops) { if (o.op === 'same') flush(); else run.push(o); }
+  flush();
+  return lines;
+}
+
 /** "Edited · n lines": an edited line counts once (one removed, one added), an added or removed line once. */
 export function changedLines(before, after) {
   if (String(before ?? '') === String(after ?? '')) return 0;
