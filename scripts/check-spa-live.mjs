@@ -438,6 +438,7 @@ async function fetchAssetMeta(url) {
     return {
       status: res.status,
       ctype: res.headers.get('content-type') || '',
+      cacheControl: res.headers.get('cache-control') || '',
       server: res.headers.get('server') || '',
       githubReqId: res.headers.get('x-github-request-id') || '',
     };
@@ -456,8 +457,9 @@ async function checkAsset(base, ref, quiet = false, attempts = RETRIES) {
   let lastErr = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const { status, ctype } = await fetchAssetMeta(url);
-      const problem = assetProblem({ status, ctype }, ref);
+      const { status, ctype, cacheControl } = await fetchAssetMeta(url);
+      // D9168: every hashed file the shell references, the entry module first, leaves as immutable.
+      const problem = assetProblem({ status, ctype, cacheControl }, ref);
       if (!problem) return null;
       lastErr = problem;
     } catch (err) {
