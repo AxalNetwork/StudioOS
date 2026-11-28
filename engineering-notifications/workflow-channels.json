@@ -112,6 +112,11 @@
       "channel": "#axalvc-actions-codeql"
     },
     {
+      "id": null,
+      "path": ".github/workflows/coordinator-lifecycle-report.yml",
+      "channel": "#axalvc-actions-coordinator-lifecycle-report"
+    },
+    {
       "id": 366466560,
       "path": ".github/workflows/copilot-setup-steps.yml",
       "channel": "#axalvc-actions-copilot-setup-steps"
