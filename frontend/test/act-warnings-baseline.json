@@ -1,0 +1,23 @@
+{
+  "total": 66,
+  "files": {
+    "frontend/test/admin_page_refusals_d940.test.mjs": 12,
+    "frontend/test/call_invite_6052.test.mjs": 4,
+    "frontend/test/connector_page_connect_d753.test.mjs": 4,
+    "frontend/test/cycle_new_venture_d688.test.mjs": 3,
+    "frontend/test/fund_zone_drafts_6242.test.mjs": 1,
+    "frontend/test/intro_delivery_4604.test.mjs": 4,
+    "frontend/test/licence_package_card_5026.test.mjs": 3,
+    "frontend/test/mvp_table_6031.test.mjs": 1,
+    "frontend/test/network_relationships_fixes_4740.test.mjs": 10,
+    "frontend/test/offers_proof_fit_4842.test.mjs": 1,
+    "frontend/test/phone_cycle_module_pages_d703.test.mjs": 4,
+    "frontend/test/pitch_review_tile_4271.test.mjs": 5,
+    "frontend/test/pmf_part_d1141.test.mjs": 3,
+    "frontend/test/pricing_back_interval_8717.test.mjs": 2,
+    "frontend/test/record_mode_d696.test.mjs": 3,
+    "frontend/test/research_companies_export_7813.test.mjs": 1,
+    "frontend/test/studio_dashboard_mount_4622.test.mjs": 4,
+    "frontend/test/studio_phone_d701.test.mjs": 1
+  }
+}

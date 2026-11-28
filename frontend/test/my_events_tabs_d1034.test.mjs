@@ -10,7 +10,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Routes, Route } from 'react-router-dom';
+import { act } from 'react';
 import { h, mountForm, propsOf, sourceModule, textOf } from './_form_d695.mjs';
+import { readCounter, waitForAct } from './_waitUntil.mjs';
 import {
   dayLabel, discoverMonths, discoverRow, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, needsYouRows,
   pageOf, pastAll, pastChart, pastView, pastYears, registerDialog, tabCountsFull, typeChips,
@@ -235,16 +237,29 @@ function stub(source) {
     .replace(/import EventQRCode[^;]+;/, 'const EventQRCode = ({ value }) => <canvas data-ticket-code={value} />;')
     .replace(/import \{ usePhoneWidth \} from [^;]+;/, 'const usePhoneWidth = () => false;');
 }
-async function mount(url, source = page) {
+// D9211 (#9211): every stubbed read is counted while it is out, and the page is settled when none
+// is (`held` are the reads a test means never to answer). Each press and pick runs inside act, and
+// the wait repeats act-wrapped turns until the reads it started have answered: no count of ticks.
+function countReads() {
+  const reads = readCounter();
+  for (const api of [globalThis[key].api, globalThis[key].publicApi]) {
+    for (const [name, fn] of Object.entries(api)) if (typeof fn === 'function') api[name] = reads.wrap(fn);
+  }
+  return reads;
+}
+async function mount(url, { source = page, held = 0 } = {}) {
+  const reads = countReads();
   const Page = (await sourceModule(stub(source), pagePath)).default;
   const ui = await mountForm(h(Routes, { location: url }, h(Route, { path: '/my/events/*', element: h(Page) }), h(Route, { path: '/my/events', element: h(Page) })), { modal: true });
-  for (let i = 0; i < 4; i++) await ui.flush();
+  const settle = () => waitForAct(() => reads.out <= held, { label: `${url}: its reads to answer`, describe: () => `${reads.out} read(s) out; ${ui.text().slice(0, 300)}` });
+  await settle();
   const ids = () => ui.nodes().map((n) => propsOf(n)['data-testid']).filter(Boolean);
   const one = (id) => ui.nodes().find((n) => propsOf(n)['data-testid'] === id);
   const all = (id) => ui.nodes().filter((n) => propsOf(n)['data-testid'] === id);
-  const press = async (id, i = 0) => { const n = all(id)[i]; assert.ok(n, `pressable: ${id}`); await ui.render; await propsOf(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); for (let k = 0; k < 3; k++) await ui.flush(); };
-  const pick = async (id, value) => { const n = one(id); assert.ok(n, `select: ${id}`); await propsOf(n).onChange({ target: { value } }); for (let k = 0; k < 3; k++) await ui.flush(); };
-  return { ...ui, ids, one, all, press, pick, count: (id) => all(id).length, textIn: (id) => textOf(one(id)) };
+  const press = async (id, i = 0) => { const n = all(id)[i]; assert.ok(n, `pressable: ${id}`); await act(async () => { await propsOf(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); };
+  const pick = async (id, value) => { const n = one(id); assert.ok(n, `select: ${id}`); await act(async () => { await propsOf(n).onChange({ target: { value } }); }); await settle(); };
+  const tap = async (node) => { await act(async () => { await propsOf(node).onClick(); }); await settle(); };
+  return { ...ui, settle, tap, ids, one, all, press, pick, count: (id) => all(id).length, textIn: (id) => textOf(one(id)) };
 }
 
 test('mounted Upcoming: Needs you with Pay now and an invitation answered through its dialog', async () => {
@@ -273,10 +288,10 @@ test('mounted Upcoming: the mini calendar dots the days, a day click filters Goi
     assert.equal(ui.count('my-events-going-row'), 2, 'the next event is drawn above; Going holds the rest');
     const day4 = ui.nodes().find((n) => propsOf(n).role === 'gridcell' && /going to 1/.test(propsOf(n)['aria-label'] || '') && propsOf(n)['aria-label'].startsWith(String(new Date(soon(4)).getUTCDate())));
     assert.ok(day4, 'the day with Operators Social');
-    await propsOf(day4).onClick(); await ui.flush();
+    await ui.tap(day4);
     assert.equal(ui.count('my-events-going-row'), 2, 'that day holds both places');
     const day6 = ui.nodes().find((n) => propsOf(n).role === 'gridcell' && propsOf(n)['aria-label']?.startsWith(`${new Date(soon(6)).getUTCDate()} `));
-    await propsOf(day6).onClick(); await ui.flush();
+    await ui.tap(day6);
     assert.ok(ui.one('my-events-going-day-none'), 'a day with only a hosted event leaves Going empty, and says so');
     await ui.press('my-events-calendar-clear');
     assert.equal(ui.count('my-events-going-row'), 2);
@@ -436,7 +451,7 @@ test('the states: Past alone unreadable is a dash on its tab (MEV16a); the whole
   const e = await mount('/my/events/past');
   try { assert.ok(e.one('my-events-past-none'), 'MEV14c'); } finally { await e.unmount(); }
   prepare({ list: () => new Promise(() => {}) });
-  const f = await mount('/my/events');
+  const f = await mount('/my/events', { held: 1 });
   try {
     assert.ok(f.one('my-events-loading'), 'MEV15');
     assert.ok(f.count('my-events-skeleton') >= 4);

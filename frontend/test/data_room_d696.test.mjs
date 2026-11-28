@@ -12,6 +12,7 @@
  *
  * Run with:  node --import ./frontend/test/_deck-loader.mjs --test frontend/test/data_room_d696.test.mjs
  */
+import './_cycleSteps.mjs'; // D9211 (#9211): CycleRoute's lazy steps, loaded before it mounts, as data_room_files_d1106 does
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -19,6 +20,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { waitForAct } from './_waitUntil.mjs';
 import { fixture } from './_record_d696.mjs';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -53,23 +55,26 @@ async function mounted(url, reads) {
     removeItem: (k) => { store.delete(k); }, key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; },
   };
   const requests = [];
-  globalThis.fetch = async (u) => { requests.push(String(u)); return response(reads(String(u))); };
+  let inflight = 0; // D9211: reads sent and not yet answered
+  globalThis.fetch = async (u) => { requests.push(String(u)); inflight += 1; try { return response(reads(String(u))); } finally { inflight -= 1; } };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   const out = {};
   function Capture() { out.navigate = useNavigate(); return null; }
-  const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(Capture), h(Routes, null,
     // The module arm of App's /raise/data-room, and the generic record route.
     h(Route, { path: '/raise/data-room', element: h(CycleRoute, { cycle: 'raise', slug: 'data-room' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   )))));
-  await settle();
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const by = (testid) => walk(container).filter((n) => props(n)['data-testid'] === testid);
+  // D9211 (#9211): settled when every read has answered and no lazy step still draws its skeleton,
+  // inside act. CycleRoute's steps load lazily, and under load a chunk outlasts any fixed number of ticks.
+  const settle = () => waitForAct(() => inflight === 0 && !by('cycle-step-loading').length, { label: `${url} to settle`, describe: () => `${inflight} read(s) out; ${text(container).slice(0, 300)}` });
+  await settle();
   const links = (testid) => by(testid).map((n) => ({ href: props(n).href ?? props(n).to, text: text(n) }));
   return {
     requests, links, by, text, settle,

@@ -13,6 +13,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { waitForAct } from './_waitUntil.mjs'; // D9211: settle on what the page shows, never on a count of ticks
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 import {
@@ -165,11 +166,21 @@ function handlerFor(room = ROOM, fail = {}) {
 
 function Where({ onAt }) { const l = useLocation(); onAt(l.pathname + l.search); return null; }
 
-async function mounted(url, { handle = handlerFor() } = {}) {
+// D9211 (#9211): `ready` is what the page must show before the first assertion; the Files
+// pages wait for their folder tree. `fixedFlush` is the old settle (8 setTimeout rounds), kept
+// only for the test below that shows it asserting before a slow read has answered.
+const filesReady = (url) => (url.includes('/data-room/files') ? (v) => v.has('dataroom-tree') : () => true);
+
+async function mounted(url, { handle = handlerFor(), ready = filesReady(url), fixedFlush = false, timeoutMs = 5000 } = {}) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia, now: Date.now };
   const calls = [];
-  globalThis.fetch = async (u, options = {}) => { calls.push({ url: String(u), method: options.method || 'GET', body: options.body }); return handle(String(u), options); };
+  let inflight = 0; // reads the page has sent and not yet had answered
+  globalThis.fetch = async (u, options = {}) => {
+    calls.push({ url: String(u), method: options.method || 'GET', body: options.body });
+    inflight += 1;
+    try { return await handle(String(u), options); } finally { inflight -= 1; }
+  };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   Date.now = () => NOW;
   const create = document.createElement.bind(document);
@@ -184,15 +195,17 @@ async function mounted(url, { handle = handlerFor() } = {}) {
     h(Route, { path: '/raise/:slug/new', element: h(CycleRoute, { cycle: 'raise', adding: true }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   ), h(Where, { onAt: (x) => { where = x; } }))));
-  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const find = (id) => { const n = nodes().find((x) => props(x)['data-testid'] === id); assert.ok(n, `no ${id}`); return n; };
-  return {
-    calls, where: () => where, flush,
-    has: (id) => nodes().some((x) => props(x)['data-testid'] === id),
+  const has = (id) => nodes().some((x) => props(x)['data-testid'] === id);
+  // Settled: every read answered and no lazy step still drawing its skeleton.
+  const settled = () => inflight === 0 && !has('cycle-step-loading');
+  const describe = () => `${inflight} read(s) unanswered; ${text(container).slice(0, 300)}`;
+  const flush = () => waitForAct(settled, { label: `${url} to settle`, describe });
+  const view = {
+    calls, where: () => where, flush, has,
     of: (id) => text(find(id)),
     prop: (id, k) => props(find(id))[k],
     async click(id) { await act(async () => { props(find(id)).onClick(); }); await flush(); },
@@ -200,7 +213,44 @@ async function mounted(url, { handle = handlerFor() } = {}) {
     writes: () => calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.url.replace(/^.*?\/api\//, '/api/'), c.body && typeof c.body === 'string' ? JSON.parse(c.body) : c.body]),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, { fetch: previous.fetch, matchMedia: previous.matchMedia }); Date.now = previous.now; restore(); },
   };
+  if (fixedFlush) await act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  else {
+    try { await waitForAct(() => settled() && ready(view), { label: `${url} to draw`, describe, timeoutMs }); }
+    catch (error) { await view.close(); throw error; }
+  }
+  return view;
 }
+
+// D9211 (#9211): the room read answers late, as a loaded machine makes it. A gate holds it
+// until the test opens it, so neither half depends on how fast this machine runs.
+function slowRoom() {
+  let open;
+  const gate = new Promise((resolve) => { open = resolve; });
+  const base = handlerFor();
+  const handle = (url, opts = {}) => ((opts.method || 'GET') === 'GET' && /\/data-room\/p3uid(\?|$)/.test(url) ? gate.then(() => base(url, opts)) : base(url, opts));
+  return { handle, open: () => open() };
+}
+
+test('a slow room read: the fixed flush asserts before the tree is drawn; the mount waits for it', async () => {
+  // Mutation checked: mounted() settling with the 8 fixed rounds again → the second mount has no tree;
+  // waitForAct returning before ready holds → the same; the gate never opened → it times out naming the read.
+  const slow = slowRoom();
+  const fixed = await mounted('/raise/data-room/files?project_id=3', { handle: slow.handle, fixedFlush: true });
+  try {
+    assert.equal(fixed.has('dataroom-tree'), false, 'the old settle stops while the room read is still out');
+    slow.open();
+    await fixed.flush();
+    assert.ok(fixed.has('dataroom-tree') && fixed.has('dataroom-files-table'), 'once it answers, the wait sees the tree');
+  } finally { await fixed.close(); }
+  const late = slowRoom();
+  const timer = setTimeout(late.open, 50);
+  try {
+    const v = await mounted('/raise/data-room/files?project_id=3', { handle: late.handle });
+    try { assert.ok(v.has('dataroom-tree') && v.has('dataroom-files-table'), 'the mount returned only once the tree was drawn'); }
+    finally { await v.close(); }
+  } finally { clearTimeout(timer); }
+  await assert.rejects(mounted('/raise/data-room/files?project_id=3', { handle: slowRoom().handle, timeoutMs: 200 }), /Timed out waiting for \/raise\/data-room\/files\?project_id=3 to draw: 1 read\(s\) unanswered/);
+});
 
 test('Files: the bulk bar opens a dialog naming who gains, and only then patches each file', async () => {
   // Mutation checked: patching on Set gate before the dialog → a PATCH before the confirm; the patch body dropping the tier.

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
+import { readCounter, waitForAct } from './_waitUntil.mjs';
 import OnboardingInvestorPage from '../src/pages/OnboardingInvestorPage.jsx';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { api } from '../src/lib/api.js';
@@ -21,11 +22,14 @@ async function fixture({ step = 7, data = answers, readFails = false, saveFails 
   api.saveInvestorProfile = async () => ({});
   api.getCorporateProfile = async () => ({ entity_name: 'Synthetic stored entity', entity_type: 'ag', tax_id_number: 'DO NOT COPY' });
   api.updateCorporateProfile = async v => { entities.push(v); return v; };
+  // D9211 (#9211): each stubbed answer is counted until it lands; settle waits, inside act, for none to be out.
+  const pending = readCounter();
+  for (const key of keys) api[key] = pending.wrap(api[key]);
   const m = await mountContracts(React.createElement(AuthProvider, null, React.createElement(OnboardingInvestorPage)), '/onboarding/investor', { id: 6131, role: 'investor' });
-  const settle = async () => { for (let i = 0; i < 6; i++) await m.flush(); };
+  const settle = () => waitForAct(() => pending.out === 0, { label: 'the onboarding reads to answer', describe: () => `${pending.out} read(s) out; ${m.text().slice(0, 300)}` });
   await settle();
   const props = n => m.props(n);
-  const edit = async label => { const node = m.nodes().find(n => props(n)?.['aria-label'] === `Edit ${label}`); assert.ok(node, label); props(node).onClick(); await settle(); };
+  const edit = async label => { const node = m.nodes().find(n => props(n)?.['aria-label'] === `Edit ${label}`); assert.ok(node, label); await act(async () => { props(node).onClick(); }); await settle(); };
   const close = async () => { await m.unmount(); Object.assign(api, original); };
   return { ...m, state, progress, entities, settle, edit, close, completes: () => completes, reads: () => reads };
 }
@@ -103,7 +107,7 @@ test('sector search retains selections and regions remain required on the combin
   const m = await fixture({ step: 3, data: { ...answers, geos: [] } });
   try {
     const search = m.nodes().find(n => m.props(n)?.type === 'search');
-    assert.ok(search); m.props(search).onChange({ target: { value: 'not a sector' } }); await m.settle();
+    assert.ok(search); await act(async () => { m.props(search).onChange({ target: { value: 'not a sector' } }); }); await m.settle();
     assert.match(m.text(), /1 picked/);
     await m.click('Continue'); await m.settle();
     assert.match(m.text(), /Select at least one region/); assert.equal(m.progress.length, 0);
@@ -153,7 +157,7 @@ test('exclusions cannot add a thesis sector, and legacy overlapping exclusions c
   const m = await fixture({ step: 4 });
   try {
     const sector = m.nodes().find(n => n.tagName === 'BUTTON' && m.props(n)?.disabled && m.props(n)?.children?.[0] === 'General Tech');
-    assert.ok(sector); m.props(sector).onClick(); await m.settle();
+    assert.ok(sector); await act(async () => { m.props(sector).onClick(); }); await m.settle();
     await m.click('Continue'); await m.settle(); assert.deepEqual(m.progress.at(-1).data.anti_thesis_sectors, answers.anti_thesis_sectors);
   } finally { await m.close(); }
 });
@@ -166,8 +170,8 @@ test('two immediate finish presses produce one progress write and one completion
   try {
     const button = m.nodes().find(n => n.tagName === 'BUTTON' && m.props(n)?.children?.includes?.('Finish profile'));
     assert.ok(button); const press = m.props(button).onClick;
-    press(); press(); await m.settle(); assert.equal(writes, 1);
-    release({}); await m.settle(); assert.equal(m.completes(), 1);
+    await act(async () => { press(); press(); }); await m.settle(); assert.equal(writes, 1);
+    await act(async () => { release({}); }); await m.settle(); assert.equal(m.completes(), 1);
   } finally { globalThis.dispatchEvent = oldDispatch; await m.close(); }
 });
 
@@ -185,7 +189,7 @@ test('sector search resets between questions while saved selections remain intac
   const m = await fixture({ step: 3 });
   try {
     const search = m.nodes().find(n => m.props(n)?.type === 'search');
-    m.props(search).onChange({ target: { value: 'General Tech' } }); await m.settle();
+    await act(async () => { m.props(search).onChange({ target: { value: 'General Tech' } }); }); await m.settle();
     await m.click('Continue'); await m.settle();
     const exclusionsSearch = m.nodes().find(n => m.props(n)?.type === 'search');
     assert.equal(m.props(exclusionsSearch).value, '');

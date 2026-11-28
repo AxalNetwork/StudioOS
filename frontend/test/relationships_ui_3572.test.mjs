@@ -4,8 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
+import { readCounter, waitForAct } from './_waitUntil.mjs';
 import { relationshipsApi } from '../src/lib/api/relationships.js';
 import { mailApi } from '../src/lib/api/mail.js';
 import WhoKnowsStrip from '../src/pages/relationships/WhoKnowsStrip.jsx';
@@ -53,20 +54,24 @@ test('the ask needs a reason; the log reads Not recorded until an outcome is; fo
   assert.deepEqual([shareState({ shared: false }), shareState({ shared: true }), shareState({ shared: false }, true)], ['Off', 'On', 'Turned off just now']);
 });
 
-/** Stubs on the shared clients; every call is kept. */
+/** Stubs on the shared clients; every call is kept, and counted while its answer is out (D9211). */
+let reads = readCounter();
 function stubs(answers) {
   const calls = [];
+  reads = readCounter();
   const saved = { r: { ...relationshipsApi }, m: { ...mailApi } };
   for (const [k, fn] of Object.entries(answers)) {
     const [group, name] = k.split('.');
     const target = group === 'mail' ? mailApi : relationshipsApi;
-    target[name] = async (...a) => { calls.push([k, ...a]); return fn(...a); };
+    target[name] = reads.wrap(async (...a) => { calls.push([k, ...a]); return fn(...a); });
   }
   return { calls, restore: () => { Object.assign(relationshipsApi, saved.r); Object.assign(mailApi, saved.m); } };
 }
 const by = (m, id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
-const press = async (m, id, arg) => { const n = by(m, id); assert.ok(n, `missing ${id}`); m.props(n).onClick?.(arg); await m.flush(); await m.flush(); };
-const type = async (m, id, value) => { const n = by(m, id); assert.ok(n, `missing ${id}`); m.props(n).onChange({ target: { value } }); await m.flush(); };
+// D9211 (#9211): settled once every stubbed answer has landed, inside act; a press or a keystroke runs inside act too.
+const settle = (m) => waitForAct(() => reads.out === 0, { label: 'the stubbed reads to answer', describe: () => `${reads.out} read(s) out; ${m.text().slice(0, 300)}` });
+const press = async (m, id, arg) => { const n = by(m, id); assert.ok(n, `missing ${id}`); await act(async () => { m.props(n).onClick?.(arg); }); await settle(m); };
+const type = async (m, id, value) => { const n = by(m, id); assert.ok(n, `missing ${id}`); await act(async () => { m.props(n).onChange({ target: { value } }); }); await settle(m); };
 
 test('the strip: up to three teammates who shared, no count of anyone else; the ask needs a reason and sends to the teammate only', async () => {
   // Mutation checked: Send enabled with no reason → the blank send is made; the context sent as the reason → the body check fails.
@@ -76,7 +81,7 @@ test('the strip: up to three teammates who shared, no count of anyone else; the 
   });
   const m = await mountContracts(h(WhoKnowsStrip, { query: { company: 'Bluefern Capital' }, subject: 'someone at Bluefern Capital', testId: 'wk' }), '/raise/capital-relationships');
   try {
-    await m.flush();
+    await settle(m);
     const text = m.text();
     assert.match(text, /Teammates who chose to share that they know someone at Bluefern Capital\./);
     assert.ok(by(m, 'wk-row-0') && by(m, 'wk-row-2') && !by(m, 'wk-row-3'), 'three rows');
@@ -100,10 +105,10 @@ test('the strip: up to three teammates who shared, no count of anyone else; the 
 test('the strip\'s empty and unreadable states say so, and name nobody', async () => {
   let s = stubs({ 'r.whoKnows': async () => ({ people: [] }) });
   let m = await mountContracts(h(WhoKnowsStrip, { query: { company: 'Halyard' }, subject: 'someone at Halyard', testId: 'wk' }));
-  try { await m.flush(); assert.equal(m.text().includes(STRIP_EMPTY), true); } finally { s.restore(); await m.unmount(); }
+  try { await settle(m); assert.equal(m.text().includes(STRIP_EMPTY), true); } finally { s.restore(); await m.unmount(); }
   s = stubs({ 'r.whoKnows': async () => { throw new Error('down'); } });
   m = await mountContracts(h(WhoKnowsStrip, { query: { company: 'Halyard' }, subject: 'someone at Halyard', testId: 'wk' }));
-  try { await m.flush(); assert.equal(m.text().includes(STRIP_UNREAD), true); } finally { s.restore(); await m.unmount(); }
+  try { await settle(m); assert.equal(m.text().includes(STRIP_UNREAD), true); } finally { s.restore(); await m.unmount(); }
 });
 
 test('the sharing setting: off by default, on in one press, off only after the confirmation, then "Turned off just now"', async () => {
@@ -115,7 +120,7 @@ test('the sharing setting: off by default, on in one press, off only after the c
   });
   const m = await mountContracts(h(SharingCard, { testId: 'sh' }));
   try {
-    await m.flush();
+    await settle(m);
     assert.match(m.text(), /Let my team see who I know/);
     assert.match(m.text(), /Their email and phone/);
     assert.equal(m.props(by(m, 'sh-switch-v:1'))['aria-checked'], false);
@@ -147,7 +152,7 @@ test('Network › Introductions: Accept, Not now with a note, the log\'s Not rec
   });
   const m = await mountContracts(h(IntroductionsDesk, { testId: 'in' }), '/network/introductions');
   try {
-    await m.flush(); await m.flush();
+    await settle(m);
     assert.match(m.text(), /Omar Reyes asks you to introduce them to Alex Example · Bluefern Capital/);
     assert.match(m.text(), /“Bluefern leads at seed\.”/);
     assert.equal(m.props(by(m, 'in-outcome-r1')).children, NOT_RECORDED);
@@ -157,7 +162,7 @@ test('Network › Introductions: Accept, Not now with a note, the log\'s Not rec
     assert.deepEqual(s.calls.filter((c) => c[0] === 'r.decideIntro').map((c) => c.slice(1)), [['r1', 'declined', 'Not investing this quarter.']]);
     received = [{ ...ASK, uid: 'r2', status: 'pending' }];
     const filter = by(m, 'in-filter-team');
-    m.props(filter).onChange({ target: { value: 'v:1' } }); await m.flush(); await m.flush();
+    await act(async () => { m.props(filter).onChange({ target: { value: 'v:1' } }); }); await settle(m);
     assert.deepEqual(s.calls.filter((c) => c[0] === 'r.introRequests').at(-1)[1], { team: 'v:1', status: undefined });
     await press(m, 'in-accept-r2');
     assert.deepEqual(s.calls.filter((c) => c[0] === 'r.decideIntro').at(-1).slice(1), ['r2', 'accepted']);
@@ -175,11 +180,11 @@ test('Write the intro: the Email composer from the member\'s own mailbox, and th
   });
   const m = await mountContracts(h(IntroductionsDesk, { testId: 'in' }), '/network/introductions');
   try {
-    await m.flush(); await m.flush();
+    await settle(m);
     assert.match(m.text(), /Follow-ups due · 1/);
     assert.match(m.text(), /Axal sends nothing itself/);
     await press(m, 'in-write-r1');
-    await m.flush();
+    await settle(m);
     assert.equal(m.props(by(m, 'record-compose-subject')).value, 'Intro: Alex (Bluefern Capital) ↔ Omar');
     assert.equal(Boolean(by(m, 'record-compose-trigger')), false, 'no Eadwyn trigger until 8b');
     await type(m, 'record-compose-to', 'alex@example.invalid');

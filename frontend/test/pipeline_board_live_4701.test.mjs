@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
+import { readCounter, waitForAct } from './_waitUntil.mjs';
 import { api } from '../src/lib/api.js';
 import PipelinePage from '../src/pages/PipelinePage.jsx';
 
@@ -16,9 +17,12 @@ const h = React.createElement;
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const deferred = () => { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
+// D9211 (#9211): each stubbed read is counted while it is out, so a wait can ask for "every read
+// answered" (less the ones a test holds open) instead of trusting one tick to be enough.
+let reads = readCounter();
 function stub(methods) {
   const saved = {};
-  for (const [k, v] of Object.entries(methods)) { saved[k] = api[k]; api[k] = v; }
+  for (const [k, v] of Object.entries(methods)) { saved[k] = api[k]; api[k] = reads.wrap(v); }
   return () => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete api[k]; else api[k] = v; } };
 }
 
@@ -67,6 +71,7 @@ function boardOf(m) {
 const byTestId = (m, id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
 
 async function mountBoard(methods) {
+  reads = readCounter();
   const restoreApi = stub({
     getCurrentUser: async () => ({ id: 1, role: 'admin' }),
     getVotes: async () => { throw new Error('no votes'); },
@@ -75,6 +80,8 @@ async function mountBoard(methods) {
   });
   const restoreWs = installSocket();
   const m = await mountContracts(h(PipelinePage, { embedded: true }));
+  // Settled: no more than `held` stubbed reads still out, after at least one act-wrapped turn.
+  m.flush = (held = 0) => waitForAct(() => reads.out <= held, { label: 'the board\'s reads to answer', describe: () => `${reads.out} read(s) out; ${textOf(m.nodes()[0])}`.slice(0, 400) });
   await m.flush();
   return { m, restore: () => { restoreWs(); restoreApi(); } };
 }
@@ -103,8 +110,7 @@ test('a refresh that fails keeps the cards and says so; a board that answered no
     pipelineActive: async () => { reads += 1; if (reads > 1) throw new Error('x'); return [deal(1, 'Alpha', 'idea')]; },
   });
   try {
-    FakeWS.all[0].open();
-    FakeWS.all[0].say({ type: 'stage_advanced', deal_id: 1 });
+    await act(async () => { FakeWS.all[0].open(); FakeWS.all[0].say({ type: 'stage_advanced', deal_id: 1 }); });
     await m.flush();
     assert.equal(reads, 2);
     assert.ok(boardOf(m).hasCard('Alpha'), 'a failed refresh blanked the board');
@@ -141,17 +147,17 @@ test('an event that lands during a local move is applied when the move settles, 
   });
   try {
     assert.equal(reads, 1);
-    FakeWS.all[0].open();
+    await act(async () => { FakeWS.all[0].open(); });
     const b = boardOf(m);
     await act(async () => { b.drag('Alpha', 1); });
     // Someone else moves Beta while Alpha's write is in flight.
     serverBeta = 'traction_review';
     await act(async () => { FakeWS.all[0].say({ type: 'stage_advanced', deal_id: 2 }); });
-    await m.flush();
+    await m.flush(1); // the move's own write is held open
     assert.equal(reads, 1, 'a re-read ran in the middle of a local move');
     serverAlpha = 'mvp_dev'; // the server took our move
     await act(async () => { advance.resolve({}); });
-    await m.flush(); await m.flush();
+    await m.flush();
     assert.equal(reads, 2, 'the event that arrived during the move was dropped');
     const after = boardOf(m);
     assert.equal(after.columnOf('Alpha'), 1, 'our confirmed move was undone');
@@ -166,11 +172,11 @@ test('a socket that drops and comes back re-reads the board', async () => {
     pipelineActive: async () => { reads += 1; return [deal(1, 'Alpha', stage)]; },
   });
   try {
-    FakeWS.all[0].open();
+    await act(async () => { FakeWS.all[0].open(); });
     await m.flush();
     assert.equal(reads, 1, 'the first connection must not re-read');
     stage = 'decision_gate'; // moved while the socket was down
-    FakeWS.all[0].drop();
+    await act(async () => { FakeWS.all[0].drop(); });
     await until(() => FakeWS.all.length === 2);
     await act(async () => { FakeWS.all[1].open(); });
     await m.flush();
@@ -193,7 +199,7 @@ test('a pushed vote tally updates the card and keeps the viewer\'s own vote', as
     await m.flush();
     assert.match(m.text(), /1 voter\b/);
     assert.ok(m.nodes().some((n) => m.props(n)?.title === 'Hold (your vote)'));
-    FakeWS.all[0].open();
+    await act(async () => { FakeWS.all[0].open(); });
     // The broadcast is the public aggregate: no my_vote.
     await act(async () => { FakeWS.all[0].say({ type: 'vote_updated', deal_id: 1, tally: tally(4, false), ts: 10 }); });
     await m.flush();
