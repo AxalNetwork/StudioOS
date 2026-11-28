@@ -185,10 +185,10 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    // Was 'the request flow lives on a surface a founder cannot open', then a gap once the AI Matches page went.
     // D9068 (#9068): the request through Axal (D7678's request sheet), on /api/intro-requests.
     { label: 'Request an intro', to: '/network/introductions/requests/new' },
-    { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
+    // #9106: D6637's accepted-ties sheet. Offering stays secondary alongside the request entry.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // BOTH NOTES WERE TOO WEAK, and the filter half of this row is what showed
