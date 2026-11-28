@@ -1624,16 +1624,18 @@ export async function buildGoogleOAuthStartResponse(
   meetTranscriptsPreserved = false,
   stateMarker = '',
   workspaceFiles = false,
-): Promise<{ status: 200 | 500; body: any }> {
+): Promise<{ status: 200 | 500 | 503; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
+    // D9192: not configured is 503 with our sentence; the setting names are
+    // for the operator's log, never the response.
+    console.warn('[CAL:oauth_config_missing]', 'google', missing.join(','));
     return {
-      status: 500,
+      status: 503,
       body: {
         error: {
           code: 'oauth_config_missing',
-          message: `Google Calendar OAuth is not fully configured on the server. Missing: ${missing.join(', ')}.`,
-          missing,
+          message: "Connecting Google Calendar isn't set up on Axal yet.",
         },
       },
     };
@@ -1669,16 +1671,18 @@ export async function buildMicrosoftOAuthStartResponse(
   env: Env,
   userId: number,
   tag = '',
-): Promise<{ status: 200 | 500; body: any }> {
+): Promise<{ status: 200 | 500 | 503; body: any }> {
   const missing = preflightOAuthSecrets(env, 'microsoft');
   if (missing.length > 0) {
+    // D9192: not configured is 503 with our sentence; the setting names are
+    // for the operator's log, never the response.
+    console.warn('[CAL:oauth_config_missing]', 'microsoft', missing.join(','));
     return {
-      status: 500,
+      status: 503,
       body: {
         error: {
           code: 'oauth_config_missing',
-          message: `Outlook Calendar OAuth is not fully configured on the server. Missing: ${missing.join(', ')}.`,
-          missing,
+          message: "Connecting Outlook Calendar isn't set up on Axal yet.",
         },
       },
     };

@@ -9,6 +9,7 @@ import { assistOff, quoteRun, run } from '../services/aiRouter';
 import { QUOTE_TTL_MS, quoteHolds, quoteUidOf, type QuotePlan } from '../services/decks/areas';
 import { runHash } from '../services/decks/runQuotes';
 import { refuse } from '../util/refusal';
+import { authRefusal } from '../util/authErrors';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 
@@ -16,7 +17,7 @@ export const EVENT_REC_PAGE = 'Member · My events';
 export const EVENT_REC_AI = { quote: quoteRun, run };
 const router = new Hono<{ Bindings: Env }>();
 async function scope(c: any, write = false) {
-  let user; try { user = await requireAuth(c); } catch { return c.json({ error: 'unauthorized' },401); }
+  let user; try { user = await requireAuth(c); } catch (err) { return authRefusal(c, err); }
   const support = !!(await selectJwt(c))?.payload.impersonated_by;
   if (write && support) return c.json({ error: 'support_session', detail: 'Read only during a support session.' },403);
   return { user,support };
