@@ -163,6 +163,32 @@ does.
   status. The bot reports what happened; it never decides what the founder
   sees.
 
+## Rebuilds and the apt snapshot (#9209)
+
+Every input to the image is pinned: the base image by digest, Python packages
+by hash (`zoom/requirements.txt`), Playwright and Chromium by the lockfile, and
+apt packages by one Debian snapshot. The `base` stage replaces the image's apt
+source with `snapshot.debian.org` at `ARG DEBIAN_SNAPSHOT` and installs
+Playwright's system packages with `playwright install-deps chromium` from that
+source (never `install --with-deps`). The build writes `dpkg-query -W` to
+`/usr/share/meeting-bot/apt-packages.txt`, so two builds can be compared:
+`docker run --rm --entrypoint cat <image> /usr/share/meeting-bot/apt-packages.txt`.
+`test/apt_pinning.test.ts` fails if an apt install runs before the snapshot
+source is set, or if `--with-deps` comes back.
+
+The date is the one the base digest was built from: the `@<epoch>` in the
+first history entry of the base image's config (`# debian.sh ... 'bookworm'
+'@<epoch>'`), written as `date -u -d @<epoch> +%Y%m%dT%H%M%SZ`.
+
+**Moving it** (with a new base digest, or for a security update):
+
+1. Update the `FROM` digest if the base moves, and read its epoch as above.
+2. Set `ARG DEBIAN_SNAPSHOT` to that timestamp (or a later one for a security
+   fix; it must exist on `snapshot.debian.org`).
+3. Let the Meeting bot image workflow build it, and diff
+   `apt-packages.txt` from the old and new images; the diff is the change the
+   PR ships.
+
 ## Zoom adapter boundary (B4, #2582)
 
 `src/zoomAdapter.ts` implements `MeetingAdapter` with an injected

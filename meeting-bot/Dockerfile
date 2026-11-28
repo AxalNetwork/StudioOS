@@ -2,10 +2,29 @@
 FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS base
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/runtime-node
 WORKDIR /app
+# #9209: apt reads one fixed Debian snapshot, the one the base digest above was built from
+# (its debuerreotype epoch), so two builds of one commit install the same packages. Every
+# apt install, Playwright's system dependencies included, comes from this source. The
+# installed list is written to /usr/share/meeting-bot/apt-packages.txt so rebuilds can be
+# compared. Moving the date: README § Rebuilds and the apt snapshot.
+ARG DEBIAN_SNAPSHOT=20261104T212339Z
+RUN printf '%s\n' \
+      'Types: deb' "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
+      'Suites: bookworm bookworm-updates' 'Components: main' \
+      'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' '' \
+      'Types: deb' "URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}" \
+      'Suites: bookworm-security' 'Components: main' \
+      'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+      > /etc/apt/sources.list.d/debian.sources \
+    && rm -f /etc/apt/sources.list \
+    && printf '%s\n' 'Acquire::Check-Valid-Until "false";' 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/99snapshot
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
-    && npx --no-install playwright install --with-deps chromium \
-    && apt-get update && apt-get install -y --no-install-recommends python3 python3-venv python3-gi pulseaudio xvfb libglib2.0-0 \
+    && apt-get update \
+    && npx --no-install playwright install-deps chromium \
+    && npx --no-install playwright install chromium \
+    && apt-get install -y --no-install-recommends python3 python3-venv python3-gi pulseaudio xvfb libglib2.0-0 \
+    && mkdir -p /usr/share/meeting-bot && dpkg-query -W > /usr/share/meeting-bot/apt-packages.txt \
     && rm -rf /var/lib/apt/lists/* /root/.npm \
     && chmod -R a+rX /ms-playwright
 COPY zoom/requirements.txt ./zoom/requirements.txt
