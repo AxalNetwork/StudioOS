@@ -465,7 +465,11 @@ export function message(kind, action, facts = {}) {
   if (kind === 'ops-schedules') {
     const reasons = Array.isArray(facts.opsReasons) && facts.opsReasons.length ? facts.opsReasons.join(', ') : 'unavailable';
     const age = Number.isSafeInteger(facts.ageHours) ? ` The newest successful D1 backup is ${facts.ageHours} h old (objective: 24 h).` : '';
-    return `:rotating_light: *Scheduled production operations are not running* (${reasons}).${age}${run}${issue}\nA run waiting on approval holds the backup or the probe until someone approves it in the environment. See D8754 and documentation/operations/D1_RECOVERY.md.`;
+    // D9050: the last commit the deploy workflow published, and how long ago its run started.
+    const release = /^[a-f0-9]{40}$/.test(facts.releaseSha || '')
+      ? ` Production last published ${facts.releaseSha.slice(0, 12)}${Number.isSafeInteger(facts.releaseAgeHours) ? `, ${facts.releaseAgeHours} h ago` : ''} (bound: 24 h while main moves).`
+      : Array.isArray(facts.opsReasons) && facts.opsReasons.includes('release_stale') ? ' No listed deploy run published production.' : '';
+    return `:rotating_light: *Scheduled production operations are not running* (${reasons}).${age}${release}${run}${issue}\nA run waiting on approval holds the backup, the probe or the deploy until someone approves it in the environment. See D8754, D9050 and documentation/operations/D1_RECOVERY.md.`;
   }
   if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
   if (kind === 'future-clock') {
