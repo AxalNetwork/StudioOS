@@ -64,6 +64,7 @@ function fakes({ pr = pull(), queue = false, runs = [] } = {}) {
       throw new Error(`unexpected read ${path}`);
     },
     async graph(_query, variables) {
+      if (/stackEntry/.test(_query)) return { nameWithOwner: REPO, pullRequest: { number: variables.number, headRefOid: pr.head.sha, isDraft: pr.draft, isInMergeQueue: false, autoMergeRequest: null, stack: null, stackEntry: null } };
       assert.equal(variables.n, 77);
       if (queue instanceof Error) throw queue;
       return { pullRequest: { isInMergeQueue: queue } };
