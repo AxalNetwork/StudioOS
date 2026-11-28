@@ -204,8 +204,13 @@ const FEATURE_CATALOG: FeatureEntry[] = [
     url: '/advisors', label: 'Advisor Matching', roles: ['founder', 'admin', 'partner'] },
   { keywords: ['discovery', 'interviews'],
     url: '/validate/customer-research', label: 'Customer research', roles: ['founder', 'admin'] },
-  { keywords: ['roadmap', 'okr', 'okrs'],
-    url: '/build/roadmap', label: 'Roadmap & OKRs', roles: ['founder', 'admin'] },
+  // D8776 (#8776): each roadmap link is named after the page it opens. Quarters, OKRs, dependencies and
+  // scenarios open "Quarters, dependencies and scenarios" (By quarter); a plain "roadmap" opens Product
+  // roadmap, the Now / Next / Later board. The first match wins, so the narrower entry comes first.
+  { keywords: ['okr', 'okrs', 'quarterly', 'quarters', 'dependencies', 'scenarios'],
+    url: '/build/roadmap?view=quarters', label: 'Quarters, dependencies and scenarios', roles: ['founder', 'admin'] },
+  { keywords: ['product roadmap', 'now next later', 'roadmap'],
+    url: '/build/product-roadmap', label: 'Product roadmap', roles: ['founder', 'admin'] },
   { keywords: ['financial model', 'financials', 'model builder'],
     url: '/raise/use-of-funds/runway/forecast', label: 'Forecast · Use of funds › Runway', roles: ['founder', 'admin'] },
   { keywords: ['portfolio', 'portfolio health'],

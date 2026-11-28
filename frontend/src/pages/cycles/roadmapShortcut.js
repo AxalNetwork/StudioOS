@@ -135,16 +135,38 @@ export function boardHref(projectId, view, column) {
 }
 
 /**
- * Step 4 (BLR04): where the landing's Back goes. From one item, that item's sheet, named. From the board, the
- * address the board handed over in history state, if it is Product roadmap's own path; else Product roadmap
- * for the venture. A path from anywhere else is never followed.
+ * BLR05B: the checklist rows on Home that still open this page (`routes/progress.ts`' lifecycle checklist,
+ * `services/onboardingChecklist.ts`' "Add 3 quarterly OKRs"). Their links say `?from=home&step=<key>`, so the
+ * page can name where it was opened from and send Back there. Only these keys are named; any other `step` is
+ * read as Home with no row, and any other `from` as no origin at all (the link's words are never echoed).
  */
-export function landingBack({ projectId, item = null, from = null } = {}) {
+export const CHECKLIST_STEPS = Object.freeze({
+  roadmap_set: 'Set a 90-day roadmap',
+  mvp_shipped: 'Ship your MVP',
+  launch_checklist: 'Complete your launch checklist',
+  okrs: 'Add 3 quarterly OKRs',
+});
+
+/** `?from=` / `?step=` as an origin the page can name, or null (the landing then reads as opened from Product roadmap). */
+export function linkOrigin(from, step) {
+  if (from !== 'home') return null;
+  const row = Object.prototype.hasOwnProperty.call(CHECKLIST_STEPS, step) ? CHECKLIST_STEPS[step] : null;
+  return { href: '/studio', back: 'Back to Home', context: row ? `Home · checklist “${row}”` : 'Home' };
+}
+
+/**
+ * Step 4 (BLR04): where the landing's Back goes. From one item, that item's sheet, named. From the board, the
+ * address the board handed over in history state, if it is Product roadmap's own path. From a Home checklist
+ * row (BLR05B, `origin` from `linkOrigin`), Home. Else Product roadmap for the venture. A path from anywhere
+ * else is never followed.
+ */
+export function landingBack({ projectId, item = null, from = null, origin = null } = {}) {
   if (item?.id != null) {
     const href = itemSheetHref(projectId, item.id);
     if (href) return { href, label: `Back to ${item.objective || 'the item'}`, focus: null };
   }
   const own = typeof from === 'string' && /^\/build\/product-roadmap(?:\?[A-Za-z0-9_=&%.-]*)?$/.test(from) ? from : null;
+  if (!own && origin?.href === '/studio') return { href: '/studio', label: origin.back, focus: null };
   return { href: own ?? withVenture('/build/product-roadmap', projectId), label: 'Back to Product roadmap', focus: 'door' };
 }
 

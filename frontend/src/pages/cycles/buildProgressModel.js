@@ -401,6 +401,38 @@ export function waitingLinks(links, plan) {
 }
 export const BACK_IN_FOOT = 'Nothing is linked until you press Link.';
 
+/**
+ * D9102 (#9102): a GitHub item that came back with no plan marker, from
+ * `GET /plan/fed`, as VB9's fourth row: "Pull request #15 ‘Fix exports’ · no
+ * plan marker." It already landed as its own item, so it is offered only
+ * "Link to a plan item…", never "Not this one".
+ */
+export function unmarkedRows(read) {
+  return (Array.isArray(read?.items) ? read.items : []).map((i) => {
+    const what = i.fed_kind === 'pull_request' ? 'Pull request' : i.fed_kind === 'issue' ? 'Issue' : 'An item';
+    const num = /#(\d+)$/.exec(String(i.fed || ''))?.[1];
+    return { fed: String(i.fed), source: 'Connector · GitHub', line: `${what}${num ? ` #${num}` : ''}${i.title ? ` ‘${i.title}’` : ''} · no plan marker.` };
+  });
+}
+/** The picker's choices: the accepted, landed items (the `sendable` rule), grouped by module, nothing chosen. */
+export function pickGroups(plan) {
+  const groups = [];
+  for (const i of sendable(plan)) {
+    let g = groups.find((x) => x.module === i.module);
+    if (!g) groups.push(g = { module: i.module, label: moduleName(i.module), items: [] });
+    g.items.push({ uid: i.uid, title: i.title, kindWord: KIND_WORD[i.kind] || 'Item' });
+  }
+  return groups;
+}
+export const linkedLine = (pick) => `Linked to ${String(pick?.kindWord || 'item').toLowerCase()} ${pick?.title || 'a plan item'}.`;
+/** A failed unmarked read, as `Unreadable` says it: never "none arrived". */
+export const UNMARKED_WHAT = 'GitHub items without a marker';
+export const UNMARKED_CLAIM = 'This is not a claim that none arrived.';
+export const UNMARKED_UNREAD = `${UNMARKED_WHAT} could not be read. ${UNMARKED_CLAIM}`;
+export const NO_PICKABLE = 'No accepted plan items yet. Accept one on the plan first.';
+/** The drawer's foot when the read holds more than it returned. */
+export const unmarkedMore = (read) => (Number(read?.total) > (read?.items?.length || 0) ? `Showing the newest ${read.items.length} of ${Number(read.total)}.` : null);
+
 // ─────────────────────────────────────────────── The evidence trail (VB11)
 
 /**
