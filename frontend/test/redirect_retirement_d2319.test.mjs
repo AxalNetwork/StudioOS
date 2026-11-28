@@ -21,7 +21,8 @@ const lit = (v) => JSON.stringify(v).replace(/[<>\u2028\u2029]/g, (c) => `\\u${c
 const read = (p) => readFileSync(p, 'utf8');
 const decision = read('documentation/architecture/decisions/D2319.md');
 const retired = [...decision.split('<!-- retired-paths:begin -->')[1].split('<!-- retired-paths:end -->')[0].matchAll(/^- `([^`]+)`$/gm)].map((m) => m[1]);
-const routes = read('frontend/src/App.jsx') + read('frontend/src/routes/hqDecks.jsx');
+// D8767 (#8767): routes/team.jsx mounts the company Work board's old address as a redirect.
+const routes = read('frontend/src/App.jsx') + read('frontend/src/routes/hqDecks.jsx') + read('frontend/src/routes/team.jsx');
 
 function checkRetired(routeSource, listed) {
   assert.ok(retired.includes('/messages') && retired.includes('/admin/ai/deck-grid'));
@@ -32,7 +33,7 @@ function checkRetired(routeSource, listed) {
 }
 
 function checkProtected(routeSource, listed) {
-  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard", "/grow/partner-network", "/grow/team-expansion"];
+  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard", "/grow/partner-network", "/grow/team-expansion", "/account/companies/:uid/work"];
   for (const path of retained) {
     assert.ok(listed.some((r) => r.path === path), path);
     assert.ok(routeSource.includes(`<Route path="${path}"`), path);

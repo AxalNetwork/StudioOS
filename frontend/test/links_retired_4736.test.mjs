@@ -13,6 +13,7 @@ const LIVE = [
   /\/account\/companies\/\$\{[^}]+\}\/settings\/projects\/\$\{[^}]+\}\/team\b/,
   /request\('\/account\/companies'\)/, // GET /api/account/companies, an API path
   /path="\/account\/companies\/:uid\/settings\/(team|team\/skills\/:skillUid\/base|compliance|projects\/:id\/team)"/, // the mounts themselves (#5964: Compare with Axal sits under Team)
+  /path="\/account\/companies\/:uid\/work"/, // D8767 Q1 A (#8767): the old company Work address, mounted only to forward to Team › Tasks
   /from '[^']*'|import\('[^']*'\)/, // a source path, not an address
 ];
 const SCOPE_PREFIX = /\/account\/companies\/\$\{[^}]+\}\/settings(\/projects\/\$\{[^}]+\})?`/; // settingsScope.js only

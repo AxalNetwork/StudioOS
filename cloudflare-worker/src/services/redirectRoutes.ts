@@ -99,6 +99,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/notifications/*', keep: true },
   { path: '/help/:id', keep: true }, // sent Slack CTAs carry `/help/<id>` (tickets.ts)
   { path: '/tickets/:id', keep: true },
+  // D8767 Q1 A (#8767): the company Work board's old address forwards to Team › Tasks, keeping `?task=`; counted like the others.
+  { path: '/account/companies/:uid/work' },
   { path: '/support', keep: true },
   { path: '/plans-and-pricing', keep: true },
   { path: '/raise/capital/cap-table' }, // D1029: → /raise/cap-table?moved=cap-table

@@ -75,7 +75,7 @@ function freshDb() {
   // #5669: the membership decision uses the existing production CHECK.
   db.exec(tableFromBaseline(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611071200_program_grant_revisions.sql'), 'utf8'), 'decision_guard'));
   db.exec(`
-    CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT, is_active INTEGER DEFAULT 1,
+    CREATE TABLE users (id INTEGER PRIMARY KEY, uid TEXT, role TEXT, is_active INTEGER DEFAULT 1,
       jwt_min_iat INTEGER, founder_id INTEGER, partner_id INTEGER, name TEXT, email TEXT);
     CREATE TABLE company_profiles (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL,
