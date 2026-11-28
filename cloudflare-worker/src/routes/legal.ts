@@ -11,6 +11,7 @@ import { getActiveTemplateBody, getTemplate } from '../services/legalTemplateSto
 import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
 import { catalogueHandoffSteps, catalogueJurisdictions } from '../services/formationCatalogueReaders';
+import { orderQuoteRefusal } from '../services/incorporationQuote';
 import { stripeCall } from './billing';
 import { ensurePaymentsCustomer } from './payments';
 import { findCatalogPriceById, getCatalog, priceForPlanMetadata } from '../services/catalog';
@@ -485,6 +486,12 @@ legal.post('/incorporate/checkout', async (c) => {
     }
   }
 
+  // D6707: the charge must equal the quote's lines collected by Axal with the
+  // order, and a partner line may be collected by Axal only where the form
+  // allows it. Checked before any write and before Stripe is called.
+  const quoteRefusal = await orderQuoteRefusal(c.env, j.id, priceId ? await resolveIncorporationPrice(c.env, j.id) : null);
+  if (quoteRefusal) return refuse(c, quoteRefusal.status, { code: quoteRefusal.code, message: quoteRefusal.message });
+
   // No resolvable SKU. In a keyless dev env we simulate via dev-complete so the
   // UI flow stays testable; in production (or whenever a Stripe key is present)
   // we FAIL LOUDLY instead of granting a free incorporation.
@@ -689,6 +696,12 @@ legal.post('/incorporation/order', async (c) => {
 
   const resolved = await resolveIncorporationPrice(c.env, j.id);
   const raOffer = await resolveRegisteredAgentOffer(c.env);
+
+  // D6707: the charge must equal the quote's lines collected by Axal with the
+  // order, and a partner line may be collected by Axal only where the form
+  // allows it. Checked before any write and before Stripe is called.
+  const quoteRefusal = await orderQuoteRefusal(c.env, j.id, resolved);
+  if (quoteRefusal) return refuse(c, quoteRefusal.status, { code: quoteRefusal.code, message: quoteRefusal.message });
 
   const buildOrderArgs = (amount_cents: number, currency: string) => ({
     user_id: user.id,

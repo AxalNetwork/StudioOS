@@ -1,0 +1,396 @@
+{
+  "us_de_ccorp": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "us_de_ccorp",
+      "label": "Delaware C-Corp",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "usd",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "Delaware Division of Corporations, fee schedule",
+          "source_url": "https://corp.delaware.gov/fee/",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": 50000,
+          "currency": "usd",
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-02"
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": 50000,
+        "currency": "usd",
+        "complete": false,
+        "unknown": [
+          "State filing fee"
+        ]
+      }
+    }
+  },
+  "us_wy_ccorp": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "us_wy_ccorp",
+      "label": "Wyoming C-Corp",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "usd",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "Wyoming Secretary of State, business fees",
+          "source_url": "https://sos.wyo.gov/Business/Docs/BusinessFees.pdf",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": null,
+          "currency": null,
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": null
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": null,
+        "currency": "usd",
+        "complete": false,
+        "unknown": [
+          "State filing fee",
+          "Axal VC service fee"
+        ]
+      }
+    }
+  },
+  "us_de_llc": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "us_de_llc",
+      "label": "Delaware LLC",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "usd",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "Delaware Division of Corporations, fee schedule",
+          "source_url": "https://corp.delaware.gov/fee/",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": null,
+          "currency": null,
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": null
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": null,
+        "currency": "usd",
+        "complete": false,
+        "unknown": [
+          "State filing fee",
+          "Axal VC service fee"
+        ]
+      }
+    }
+  },
+  "uk_ltd": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "uk_ltd",
+      "label": "UK Private Limited (Ltd)",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "gbp",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "Companies House, fees",
+          "source_url": "https://www.gov.uk/government/publications/companies-house-fees",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": 40000,
+          "currency": "usd",
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-03"
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": 40000,
+        "currency": "usd",
+        "complete": false,
+        "unknown": [
+          "State filing fee"
+        ]
+      }
+    }
+  },
+  "sg_pte": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "sg_pte",
+      "label": "Singapore Pte Ltd",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "sgd",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "ACRA, fees for company incorporation",
+          "source_url": "https://www.acra.gov.sg/",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": null,
+          "currency": null,
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": null
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": null,
+        "currency": "sgd",
+        "complete": false,
+        "unknown": [
+          "State filing fee",
+          "Axal VC service fee"
+        ]
+      }
+    }
+  },
+  "ee_oy": {
+    "status": 200,
+    "body": {
+      "jurisdiction_id": "ee_oy",
+      "label": "Estonia OÜ (e-Residency)",
+      "lines": [
+        {
+          "key": "state_filing_fee",
+          "label": "State filing fee",
+          "amount_cents": null,
+          "currency": "eur",
+          "interval": null,
+          "optional": false,
+          "paid": "at_filing",
+          "source": "Estonian e-Business Register, state fees",
+          "source_url": "https://www.rik.ee/en/e-business-register",
+          "checked_on": null
+        },
+        {
+          "key": "service_fee",
+          "label": "Axal VC service fee",
+          "amount_cents": null,
+          "currency": null,
+          "interval": null,
+          "optional": false,
+          "paid": "with_order",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": null
+        },
+        {
+          "key": "registered_agent",
+          "label": "Synthetic registered agent",
+          "amount_cents": 24900,
+          "currency": "usd",
+          "interval": "year",
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-11-01"
+        },
+        {
+          "key": "add_on:prod_ein",
+          "label": "Synthetic EIN filing",
+          "amount_cents": 9900,
+          "currency": "usd",
+          "interval": null,
+          "optional": true,
+          "paid": "after_you_pay",
+          "source": "Stripe catalog (Axal VC)",
+          "source_url": null,
+          "checked_on": "2026-10-30"
+        }
+      ],
+      "total": {
+        "amount_cents": null,
+        "currency": "eur",
+        "complete": false,
+        "unknown": [
+          "State filing fee",
+          "Axal VC service fee"
+        ]
+      }
+    }
+  }
+}
