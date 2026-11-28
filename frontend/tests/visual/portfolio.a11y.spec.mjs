@@ -18,7 +18,7 @@
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { ASK_ANSWER, DETAIL, STORED_MARK, install } from './_portfolio.mjs';
+import { ASK_ANSWER, DETAIL, OWED, STORED_MARK, SUPPORT, install } from './_portfolio.mjs';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const BOARDS = [
@@ -180,11 +180,11 @@ test.describe('read recovery and dialogs', () => {
 const CO = '/portfolio/companies/northwind';
 const CO_NAME = 'Northwind Labs with a long registered company name';
 const CO_TABS = [
-  { id: 'overview', path: CO, label: 'Overview', title: `${CO_NAME} · Portfolio · Axal VC` },
-  { id: 'financials', path: `${CO}/financials`, label: 'Financials', title: `${CO_NAME} · Financials · Portfolio · Axal VC` },
-  { id: 'reports', path: `${CO}/reports`, label: 'Reports', title: `${CO_NAME} · Reports · Portfolio · Axal VC` },
-  { id: 'support', path: `${CO}/support`, label: 'Support', title: `${CO_NAME} · Support · Portfolio · Axal VC` },
-  { id: 'activity', path: `${CO}/activity`, label: 'Activity', title: `${CO_NAME} · Activity · Portfolio · Axal VC` },
+  { id: 'overview', path: CO, label: 'Overview', title: 'Company · Portfolio · Axal VC' }, // D8681: the tab names the screen, never the company
+  { id: 'financials', path: `${CO}/financials`, label: 'Financials', title: 'Financials · Company · Portfolio · Axal VC' },
+  { id: 'reports', path: `${CO}/reports`, label: 'Reports', title: 'Reports · Company · Portfolio · Axal VC' },
+  { id: 'support', path: `${CO}/support`, label: 'Support', title: 'Support · Company · Portfolio · Axal VC' },
+  { id: 'activity', path: `${CO}/activity`, label: 'Activity', title: 'Activity · Company · Portfolio · Axal VC' },
 ];
 const json = (body, status = 200) => [body, status];
 
@@ -373,7 +373,8 @@ test.describe('part 3: support journeys on Value-add', () => {
     expect(await blocking(page)).toEqual([]);
     const said = await announced(page, 'someone else changed this entry', () => page.getByTestId('button-va-confirm-nw-intro').click());
     expect(said, 'the conflict').toMatchObject({ regions: 1, before: true });
-    expect(await active(page), 'focus fell to the page when the confirmation closed').not.toBe('BODY');
+    // Focus is placed once the ledger has been read again (part 3, fix 3), so wait for that read rather than racing it (D4818-p4).
+    await expect.poll(() => active(page), { message: 'focus fell to the page when the confirmation closed' }).not.toBe('BODY');
   });
 
   test('Withdraw cancelled gives focus back; an entry\'s history opens with its state on the control', async ({ page, request }) => {
@@ -541,5 +542,347 @@ test.describe('part 3: reduced motion', () => {
     await expect(page.locator('.pf-frame .pf-skeleton').first()).toBeVisible();
     expect((await moving()).length, 'without the preference the skeleton does move, so the measure sees motion').toBeGreaterThan(0);
     await expect(page.locator('.pf-frame h1')).toHaveText(reduced);
+  });
+});
+
+/* ------------------------------------------------------------------ part 4 (D4818-p4) */
+
+/** A held answer: `hold` is an `over` that waits until `release()`, then lets the fixture answer (or answers `body()`). */
+function gate(body) {
+  let open;
+  const opened = new Promise((r) => { open = r; });
+  const calls = [];
+  return {
+    calls,
+    hold: async (q, req) => { calls.push(req.method()); await opened; return body ? body() : undefined; },
+    release: () => open(),
+  };
+}
+/** Client-side navigation, as a link or Back makes it: the SPA stays loaded, so a late answer can still land. */
+const go = (page, path) => page.evaluate((p) => { window.history.pushState({}, '', p); window.dispatchEvent(new PopStateEvent('popstate')); }, path);
+const frameText = (page) => page.evaluate(() => [...document.querySelectorAll('.pf-shell, [role="dialog"]')].map((n) => n.textContent).join(' '));
+
+test.describe('part 4: late answers across a company or account switch', () => {
+  test('company workspace: Northwind\'s late reads do not paint over Lumen once the address has changed', async ({ page, request }) => {
+    const late = gate();
+    await open(page, request, CO, { idle: false, over: {
+      '/api/reporting/companies/northwind': late.hold,
+      '/api/portfolio/health/northwind': late.hold,
+      '/api/portfolio-notes/companies/northwind': late.hold,
+    } });
+    await expect.poll(() => late.calls.length, 'Northwind\'s reads are in flight').toBeGreaterThanOrEqual(2);
+    await go(page, '/portfolio/companies/lumen');
+    await expect(page.locator('.pf-frame h1')).toHaveText('Lumen Robotics');
+    late.release();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.pf-frame h1')).toHaveText('Lumen Robotics');
+    await expect(page).toHaveTitle('Lumen Robotics · Portfolio · Axal VC');
+    await expect(page.getByRole('navigation', { name: 'Lumen Robotics sections' })).toBeVisible();
+    expect(await frameText(page), 'a Northwind answer painted into Lumen').not.toContain('Northwind');
+    await go(page, '/portfolio/companies/lumen/reports');
+    await expect(page.getByTestId('report-obligation-none')).toBeVisible();
+    expect(await frameText(page)).not.toContain('Northwind');
+  });
+
+  test('Positions: a mark history that answers after another company\'s was opened stays out of it', async ({ page, request }) => {
+    const late = gate();
+    await open(page, request, '/portfolio/positions', { over: { '/api/positions/northwind': late.hold } });
+    await page.getByTestId('button-mark-history-2').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByTestId('button-mark-history-1').click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet).toContainText('Series A');
+    late.release();
+    await page.waitForTimeout(500);
+    await expect(sheet).toContainText('Lumen Robotics');
+    expect(await sheet.textContent(), 'Northwind\'s marks drawn in Lumen\'s sheet').not.toMatch(/Northwind|\$2,400,000|31 Mar 2026/);
+  });
+
+  test('money sheet (admin): a company read that answers late does not swap the sheet, and the mark is written to the company reviewed', async ({ page, request }) => {
+    const late = gate();
+    const log = [];
+    let reads = 0;
+    await open(page, request, '/portfolio/positions', { as: 'admin', frame: null, log, over: {
+      // Northwind's first read is late; every later one answers at once.
+      '/api/positions/northwind': (q, req) => ((reads += 1) === 1 ? late.hold(q, req) : undefined),
+      '/api/positions/lumen/marks': () => json({ ...STORED_MARK, uid: 'mk-lu1', project_id: 1 }, 201),
+      '/api/positions/northwind/marks': () => json(STORED_MARK, 201),
+    } });
+    const view = page.getByRole('button', { name: 'View dilution' });
+    await view.nth(0).click();
+    await expect.poll(() => late.calls.length).toBe(1);
+    await view.nth(1).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet).toHaveAccessibleName('Lumen Robotics');
+    await page.getByTestId('button-mark-open').click();
+    await page.getByTestId('input-mark-as_of_date').fill('2026-10-31');
+    await page.getByTestId('input-mark-fmv').fill('5,400,000');
+    late.release();
+    await page.waitForTimeout(500);
+    await expect(sheet, 'the late Northwind read replaced the open sheet').toHaveAccessibleName('Lumen Robotics');
+    await expect(page.getByTestId('input-mark-fmv'), 'the draft was lost').toHaveValue('5,400,000');
+    await page.getByTestId('form-mark').evaluate((f) => f.requestSubmit());
+    await expect(page.getByTestId('write-flow-company')).toContainText('Lumen Robotics');
+    await page.getByTestId('write-flow-continue').click();
+    await expect(page.getByTestId('write-flow-confirm')).toHaveText('Record $5,400,000 mark for Lumen Robotics');
+    await page.getByTestId('write-flow-confirm').click();
+    await expect(page.getByTestId('write-flow-receipt')).toContainText('mk-lu1');
+    expect(log.filter((l) => l.startsWith('POST')), 'the mark went to another company').toEqual(['POST /api/positions/lumen/marks']);
+  });
+
+  test('account switch: the administrator\'s own late book does not reach the Investor preview they switch to', async ({ page, request }) => {
+    const late = gate();
+    const log = [];
+    await open(page, request, '/portfolio/positions', { as: 'admin', frame: null, idle: false, log, over: { '/api/positions': late.hold } });
+    await expect.poll(() => late.calls.length).toBeGreaterThanOrEqual(1);
+    await page.getByTestId('preview-shell-trigger').click();
+    await page.locator('[data-preview-shell="investor"]').click();
+    await go(page, '/portfolio/positions');
+    await expect(page.getByTestId('portfolio-preview-banner')).toHaveCount(1);
+    const before = log.length;
+    late.release();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId('portfolio-preview-banner')).toHaveCount(1);
+    await expect(page.getByText('Private in preview').first()).toBeVisible();
+    const text = await page.evaluate(() => document.body.textContent);
+    for (const name of ['Northwind', 'Lumen']) expect(text.includes(name), `${name} reached the preview`).toBe(false);
+    expect(log.slice(before), 'the preview made a private read').toEqual([]);
+  });
+});
+
+/** The support ledger after one move: the entry's new state and date, and the revision it carries now. */
+function ledgerAfter(uid, change) {
+  return { ...SUPPORT, entries: SUPPORT.entries.map((e) => (e.uid === uid ? { ...e, ...change, revision: e.revision + 1, updated_at: '2026-11-05T09:00:00Z' } : e)) };
+}
+
+test.describe('part 4: Deliver and Withdraw that save', () => {
+  for (const m of [
+    { uid: 'nw-intro', move: 'deliver', state: 'delivered', company: CO_NAME, said: 'is marked delivered', change: { state: 'delivered', delivered_at: '2026-11-05' } },
+    { uid: 'lu-review', move: 'withdraw', state: 'withdrawn', company: 'Lumen Robotics', said: 'is withdrawn', change: { state: 'withdrawn', withdrawn_at: '2026-11-05' } },
+  ]) {
+    test(`${m.move}: pending while it saves, then the ledger read again shows it, the outcome named and announced, focus kept`, async ({ page, request }) => {
+      const log = [];
+      const bodies = [];
+      let saved = false;
+      const patch = gate(() => { saved = true; return json({ item: { uid: m.uid, state: m.state } }); });
+      await open(page, request, '/portfolio/value-add', { log, over: {
+        '/api/portfolio-support': (q, req) => (req.method() === 'GET' ? json(saved ? ledgerAfter(m.uid, m.change) : SUPPORT) : undefined),
+        [`/api/portfolio-support/${m.uid}`]: (q, req) => { if (req.method() !== 'PATCH') return undefined; bodies.push(req.postDataJSON()); return patch.hold(q, req); },
+      } });
+      await page.getByTestId(`button-va-${m.move}-${m.uid}`).focus();
+      await page.keyboard.press('Enter');
+      const confirm = page.getByTestId(`button-va-confirm-${m.uid}`);
+      await confirm.focus();
+      const said = await announced(page, m.said, async () => {
+        await page.keyboard.press('Enter');
+        // Pending: the confirm says so and cannot be pressed twice; nothing claims it saved yet.
+        await expect(confirm).toHaveText('Saving…');
+        await expect(confirm).toBeDisabled();
+        expect(await frameText(page)).not.toContain(m.said);
+        patch.release();
+      });
+      expect(said, 'the saved move').toMatchObject({ regions: 1, before: true });
+      await expect(page.getByTestId('status-va-support-saved')).toContainText(m.company);
+      await expect(page.getByTestId(`row-va-commitment-${m.uid}`)).toHaveAttribute('data-state', m.state);
+      await expect(page.getByTestId(`va-confirm-${m.uid}`)).toHaveCount(0);
+      await expect.poll(() => active(page), { message: 'focus fell to the page after the save' }).not.toBe('BODY');
+      expect(bodies).toEqual([{ state: m.state, project_uid: expect.any(String), expected_revision: 1 }]);
+      expect(log.filter((l) => l.startsWith('PATCH'))).toHaveLength(1);
+      expect(await blocking(page)).toEqual([]);
+    });
+  }
+});
+
+test.describe('part 4: reporting delivery unknown', () => {
+  for (const v of [
+    { name: 'a gateway timeout', answer: (route) => route.fulfill({ status: 504, contentType: 'text/plain', body: 'Gateway Timeout' }) },
+    { name: 'a dropped connection', answer: (route) => route.abort('connectionreset') },
+  ]) {
+    test(`Ask with ${v.name}: says it may or may not be recorded, offers no second send, and the re-read settles it`, async ({ page, request }) => {
+      const log = [];
+      let asked = false;
+      await open(page, request, `${CO}/reports`, { log, over: {
+        // After the lost answer, the company read is what says whether the ask landed: here it did.
+        '/api/reporting/companies/northwind': (q, req) => (req.method() === 'GET' && asked
+          ? json({ ...OWED, company: { ...OWED.company, periods: OWED.company.periods.map((p) => (p.uid === 'pm9' ? { ...p, asked: true, asked_at: '2026-11-05 09:15:00' } : p)) } })
+          : undefined),
+      } });
+      await page.route('**/api/reporting/periods/pm9/ask', (route) => { asked = true; log.push('POST /api/reporting/periods/pm9/ask'); return v.answer(route); });
+      await page.getByTestId('report-obligation-ask').click();
+      const sheet = page.getByRole('dialog');
+      await page.getByTestId('report-review-confirm').click();
+      const notice = page.getByTestId('report-review-unknown');
+      await expect(notice, 'no answer was read as a refusal').toBeVisible();
+      await expect(notice).toHaveAttribute('role', 'alert');
+      await expect(notice).toContainText('may or may not');
+      await expect(notice).toContainText(CO_NAME);
+      expect(await sheet.textContent(), 'an unknown outcome claimed as not sent').not.toContain('Not sent');
+      expect(await sheet.textContent(), 'delivery claimed').not.toMatch(/was sent|has been sent|delivered|emailed/i);
+      await expect(page.getByTestId('report-review-confirm'), 'the same send offered again').toHaveCount(0);
+      expect(await page.evaluate(() => !!document.activeElement.closest('[role="dialog"]')), 'focus left the sheet').toBe(true);
+      expect(await blocking(page)).toEqual([]);
+      await page.getByTestId('report-review-check').click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByTestId('report-obligation-record')).toContainText('You asked on');
+      await expect(page.getByTestId('report-obligation-ask')).toHaveCount(0);
+      await expect(page.getByTestId('report-obligation')).toBeFocused();
+      expect(log.filter((l) => l.startsWith('POST'))).toEqual(['POST /api/reporting/periods/pm9/ask']);
+    });
+  }
+
+  test('Ask pending: while it waits the confirm says so and cannot be pressed twice, and the Receipt never claims the email arrived', async ({ page, request }) => {
+    const log = [];
+    const post = gate(() => json(ASK_ANSWER));
+    await open(page, request, `${CO}/reports`, { log, over: { '/api/reporting/periods/pm9/ask': post.hold } });
+    await page.getByTestId('report-obligation-ask').click();
+    const confirm = page.getByTestId('report-review-confirm');
+    await confirm.click();
+    await expect(confirm).toHaveText('Asking…');
+    await expect(confirm).toBeDisabled();
+    await expect(page.getByTestId('report-review-cancel')).toBeDisabled();
+    post.release();
+    await expect(page.getByTestId('report-receipt-status')).toBeVisible();
+    await expect(page.getByTestId('report-receipt-facts')).toContainText('Delivery is not confirmed here');
+    expect(await page.getByRole('dialog').textContent()).not.toMatch(/was emailed|email was sent|delivered to/i);
+    expect(log.filter((l) => l.startsWith('POST'))).toHaveLength(1);
+  });
+});
+
+/**
+ * Computed contrast (WCAG 1.4.3 and 1.4.11), from the browser's own computed
+ * colours: every visible element in the Portfolio frame that carries its own
+ * text, its colour against the background behind it, composited up the DOM
+ * (each translucent layer over the next, the element's and its ancestors'
+ * opacity applied to the text). Ratios use WCAG's relative luminance:
+ * (L1 + 0.05) / (L2 + 0.05). Text needs 4.5:1, or 3:1 when large (24px, or
+ * 18.66px bold). Disabled controls are exempt (1.4.3). A background drawn by
+ * an image or gradient is not measured: those elements are counted and named,
+ * not passed.
+ */
+const contrastOf = (page, scope) => page.evaluate((sel) => {
+  const cv = document.createElement('canvas');
+  cv.width = 1; cv.height = 1;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  // The canvas resolves any CSS colour syntax (rgb, hex, oklch, color-mix) to sRGB.
+  const rgba = (c) => {
+    cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+    const d = cx.getImageData(0, 0, 1, 1).data;
+    return [d[0], d[1], d[2], d[3] / 255];
+  };
+  const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1);
+  const lum = (c) => {
+    const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  /** The opaque colour behind `el`, or null when an image or gradient is in the way. */
+  const behind = (el) => {
+    const layers = [];
+    for (let n = el; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.backgroundImage && s.backgroundImage !== 'none') return null;
+      const c = rgba(s.backgroundColor);
+      if (c[3] > 0) layers.push(c);
+      if (c[3] >= 1) break;
+    }
+    let base = [255, 255, 255, 1];
+    for (let i = layers.length - 1; i >= 0; i -= 1) base = layers[i][3] >= 1 ? layers[i] : over(layers[i], base);
+    return base;
+  };
+  const opacity = (el) => { let o = 1; for (let n = el; n; n = n.parentElement) o *= Number(getComputedStyle(n).opacity) || 0; return o; };
+  const name = (el) => `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map((c) => `.${c}`).join('')} "${el.textContent.trim().replace(/\s+/g, ' ').slice(0, 32)}"`;
+  const out = { measured: 0, min: Infinity, failures: [], unmeasured: [], kinds: {} };
+  const KINDS = { heading: 'h1, h2, h3', nav: 'nav a', table: 'th, td', button: 'button, .pf-btn', chip: '.pf-chip, .pf-pill', quiet: '.pf-muted, .pf-sm, .pf-foot, .pf-note, small', state: '.pf-not-recorded, .pf-unreadable' };
+  for (const el of document.querySelectorAll(`${sel} *`)) {
+    if (![...el.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) continue;
+    const s = getComputedStyle(el);
+    const box = el.getBoundingClientRect();
+    if (s.visibility !== 'visible' || s.display === 'none' || box.width <= 1 || box.height <= 1 || el.closest('[aria-hidden="true"]')) continue;
+    if (el.closest('button:disabled, [aria-disabled="true"], fieldset:disabled')) continue;
+    const bg = behind(el);
+    if (!bg) { out.unmeasured.push(name(el)); continue; }
+    const fg = rgba(s.color);
+    fg[3] *= opacity(el);
+    const r = ratio(over(fg, bg), bg);
+    const px = parseFloat(s.fontSize);
+    const large = px >= 24 || (px >= 18.66 && Number(s.fontWeight) >= 700);
+    const need = large ? 3 : 4.5;
+    out.measured += 1;
+    out.min = Math.min(out.min, r);
+    for (const [k, q] of Object.entries(KINDS)) if (el.matches(q) || el.closest(q)) out.kinds[k] = (out.kinds[k] || 0) + 1;
+    if (r + 0.005 < need) out.failures.push(`${name(el)} ${r.toFixed(2)}:1 < ${need}:1 (${s.color} on rgb(${bg.slice(0, 3).join(',')}))`);
+  }
+  return out;
+}, scope);
+
+/** The focus indicator of `locator`, reached from the keyboard: its colour against what is behind it (1.4.11, 3:1). */
+const ringOf = (locator) => locator.evaluate((el) => {
+  const cv = document.createElement('canvas');
+  cv.width = 1; cv.height = 1;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  const rgba = (c) => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+  const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1);
+  const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const s = getComputedStyle(el);
+  const ring = s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 ? s.outlineColor : (/(rgba?\([^)]*\)|oklch\([^)]*\)|#[0-9a-f]{3,8})/i.exec(s.boxShadow) || [])[1];
+  if (!ring) return { ring: null, ratio: 0 };
+  // The ring is drawn just outside the control, over its parent's background.
+  const layers = [];
+  for (let n = el.parentElement; n; n = n.parentElement) {
+    const b = getComputedStyle(n);
+    if (b.backgroundImage && b.backgroundImage !== 'none') return { ring, ratio: null };
+    const c = rgba(b.backgroundColor);
+    if (c[3] > 0) layers.push(c);
+    if (c[3] >= 1) break;
+  }
+  let bg = [255, 255, 255, 1];
+  for (let i = layers.length - 1; i >= 0; i -= 1) bg = layers[i][3] >= 1 ? layers[i] : over(layers[i], bg);
+  return { ring, ratio: ratio(over(rgba(ring), bg), bg) };
+});
+
+test.describe('part 4: computed contrast, light and dark', () => {
+  const PAGES = [...BOARDS.map((b) => b.path), CO, `${CO}/reports`, `${CO}/financials`];
+  for (const theme of ['light', 'dark']) {
+    for (const path of PAGES) {
+      test(`${path} in ${theme}: every measured text reaches 4.5:1 (3:1 large), and the focus ring 3:1`, async ({ page, request }) => {
+        await open(page, request, path, { theme });
+        if (theme === 'dark') await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+        const r = await contrastOf(page, '.pf-shell');
+        test.info().annotations.push({ type: 'contrast', description: `${theme} ${path}: ${r.measured} measured, lowest ${r.min.toFixed(2)}:1, ${r.unmeasured.length} over an image or gradient${r.unmeasured.length ? ` (${r.unmeasured.join('; ')})` : ''}` });
+        expect(r.failures, `${theme} ${path}`).toEqual([]);
+        expect(r.measured, 'too little was measured to mean anything').toBeGreaterThan(20);
+        // The key kinds of text the boards carry were each measured, not skipped.
+        for (const k of ['heading', 'nav', 'button', 'quiet']) expect(r.kinds[k] || 0, `${k} text was not measured`).toBeGreaterThan(0);
+        await page.keyboard.press('Tab');
+        const nav = page.locator('.pf-frame a[href="/portfolio/positions"], .pf-frame a[href$="/financials"]').first();
+        await nav.focus();
+        const ring = await ringOf(nav);
+        expect(ring.ring, 'no focus ring').toBeTruthy();
+        expect(ring.ratio ?? 0, `focus ring ${ring.ring}`).toBeGreaterThanOrEqual(3);
+      });
+    }
+  }
+
+  test('a sheet and an in-place confirmation, light and dark', async ({ page, request }) => {
+    for (const theme of ['light', 'dark']) {
+      await open(page, request, '/portfolio/positions', { theme });
+      await page.getByTestId('button-mark-history-2').click();
+      await expect(page.getByRole('dialog')).toContainText('Priced round');
+      let r = await contrastOf(page, '[role="dialog"]');
+      expect(r.failures, `${theme} mark history sheet`).toEqual([]);
+      expect(r.measured).toBeGreaterThan(10);
+      await page.keyboard.press('Escape');
+      await page.goto('/portfolio/value-add');
+      await page.getByTestId('button-va-deliver-nw-intro').click();
+      await expect(page.getByTestId('va-confirm-nw-intro')).toBeVisible();
+      r = await contrastOf(page, '[data-testid="va-confirm-nw-intro"]');
+      expect(r.failures, `${theme} Mark delivered confirmation`).toEqual([]);
+      expect(r.measured).toBeGreaterThan(1);
+    }
   });
 });

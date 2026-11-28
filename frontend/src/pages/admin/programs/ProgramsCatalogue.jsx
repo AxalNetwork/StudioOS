@@ -408,6 +408,7 @@ function CatalogueBody() {
             ), door: <Link to="/admin/programs/influencer" className={OPEN} aria-label="Open Influencers">Open</Link> })
         );
       }
+      // D5894 (#5894): the door opens the program's shell for both; its figures and its HQ page stay the Super Admin's.
       case 'product-testing': {
         const f = figureOf(p, 'programs');
         return (
@@ -415,7 +416,7 @@ function CatalogueBody() {
               <CardFigure s={f} what="The testing programs" onRetry={retry} testId="programs-card-product-testing-figure">
                 {f.state === 'ready' ? <span className={FIGURE}>{testingLine(f.data)}</span> : null}
               </CardFigure>
-            ) : null, door: superAdmin ? <Link to="/admin/platform/product-testing/programs" className={OPEN} aria-label="Open Product testing campaigns" data-testid="programs-open-testing-campaigns">Open</Link> : null, foot: superAdmin ? null : PRODUCT_TESTING_FOOT })
+            ) : null, door: <Link to="/admin/programs/product-testing" className={OPEN} aria-label="Open Product testing" data-testid="programs-card-product-testing-open">Open</Link>, foot: superAdmin ? null : PRODUCT_TESTING_FOOT })
         );
       }
       default:

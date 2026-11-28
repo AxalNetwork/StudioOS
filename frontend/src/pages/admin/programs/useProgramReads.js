@@ -4,6 +4,7 @@ import { adminProgramsApi } from '../../../lib/api/adminPrograms';
 import { insightsApi } from '../../../lib/api/insights';
 import { learningApi } from '../../../lib/api/learning';
 import { programsApi } from '../../../lib/api/programs';
+import { adminTestingApi } from '../../../lib/api/productTesting';
 import { investorCohortsApi } from '../../../lib/api/investorCohorts';
 import { referralPartnersApi } from '../../../lib/api/referralPartners';
 import { reportError } from '../../../lib/log';
@@ -207,6 +208,16 @@ export function usePerksReads(tab) {
   // D5313: Participation counts the same claims Overview does, in the same window.
   const claims = useRead('perks:claims', 'claims', tick, tab === 'overview' || tab === 'participation', () => api.adminPerkClaims(12));
   return { inReview, perks, claims, reload };
+}
+
+/**
+ * D5894 (#5894): Product testing's Participation, R11 (`GET /api/admin/testing/programmes`, every programme with its
+ * applications not withdrawn). The Worker answers it to a Super Admin only, so it is read only for one.
+ */
+export function useTestingReads(enabled) {
+  const [tick, reload] = useTick();
+  const programmes = useRead('product-testing:programmes', 'programmes', tick, enabled, () => adminTestingApi.programmes().then(items('The testing programs')));
+  return { programmes, reload };
 }
 
 /** D4810: a learners page on People; the page size and the cap are the Worker's. */

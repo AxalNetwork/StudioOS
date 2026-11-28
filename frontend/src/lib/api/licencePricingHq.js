@@ -12,6 +12,9 @@
 //        → { today, within_days, horizon, items, total, due, without_open_review, no_decision, sweep }
 //   GET /api/admin/licence-pricing/signals?needs=<signal,…>&licence=<uid,…>
 //        → { today, needs, items: [{ licence_uid, signals, reasons, … }], total, counts, signals }
+//   GET /api/admin/licence-pricing/consistency (D7714; read by the D7715 flags)
+//        → { checked: { countries, fields, … }, findings: [{ country_code, field, kind, differences, profile, history,
+//            expected, snapshots }], total, counts, stored: false }
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -29,4 +32,5 @@ export const licencePricingHqApi = {
   modelVersions: () => request('/admin/licence-pricing/model-versions'),
   reviewQueue: (params = {}) => request(`/admin/licence-pricing/review-queue${qs(params)}`),
   signals: (params = {}) => request(`/admin/licence-pricing/signals${qs(params)}`),
+  consistency: () => request('/admin/licence-pricing/consistency'),
 };

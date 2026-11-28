@@ -12,6 +12,7 @@ import {
 } from '../../lib/licencePage';
 import { summaryLine } from '../../lib/studioPrograms';
 import { LicenceStateBanner } from './LicenceFrame';
+import PackageCard from './licence/PackageCard';
 
 /**
  * D800 (#2233) — the Licences page's Summary (canvas board L1).
@@ -291,6 +292,8 @@ export default function LicenceSummary({ licence, terms, termsReason, user, stat
     <div className="space-y-3" data-testid="licence-summary">
       <LicenceStateBanner banner={banner}>{state === 'suspended' ? suspended : null}</LicenceStateBanner>
       <SummaryCards licence={licence} terms={terms} requests={requests.value || null} />
+      {/* D5026 part 2 (#5026, board L35): the Axal VC package HQ accepted for this licence, read only. */}
+      <PackageCard />
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="space-y-3">
           <NeedsYou needs={needs} />

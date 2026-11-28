@@ -4,6 +4,7 @@ import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import {
   Unrecorded, Pill, Field, SaveNote, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
+import { OPEN_OPPORTUNITY_CLASS } from './OpportunitySheet';
 
 /**
  * Pipeline · Negotiations — the terms sheet, board PP05b of `Pipeline v2`
@@ -200,9 +201,13 @@ const BLANK_TERM = { label: '', our_position: '', their_position: '', landing: '
  * The sheet. `row` is one item of `GET /negotiations`; a quote nobody is
  * tracking yet has `negotiation: null`, and Save starts tracking it (the PUT
  * is an upsert).
+ *
+ * #9110 (D9110): `onOpenOpportunity`, when given, draws Open opportunity beside the ×. The zone closes this sheet
+ * and opens the shared `OpportunitySheet` for the same quote on its Terms tab: the read-across view. Editing the
+ * terms stays here.
  */
 export default function NegotiationTermsSheet({
-  row, onClose, busy, note, onSaveNegotiation, onAddTerm, onSaveTerm, onDeleteTerm,
+  row, onClose, busy, note, onSaveNegotiation, onAddTerm, onSaveTerm, onDeleteTerm, onOpenOpportunity,
 }) {
   const phone = usePhoneWidth();
   const n = row.negotiation;
@@ -242,6 +247,11 @@ export default function NegotiationTermsSheet({
       width={640}
       testId="negotiation-terms-sheet"
       onClose={onClose}
+      headerActions={onOpenOpportunity ? (
+        <button type="button" onClick={() => onOpenOpportunity(row)} data-testid="negotiation-open-opportunity" className={OPEN_OPPORTUNITY_CLASS}>
+          Open opportunity
+        </button>
+      ) : null}
     >
       <div className="space-y-5 px-5 py-4">
         <section aria-labelledby={`terms-h-${row.quote_id}`}>

@@ -29,6 +29,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { pipelineProject } from '../services/pipelineAccess';
 import { notifyPipelineRoom } from '../services/realtime';
 import type { RouteMount } from '../util/routeRegistry';
 
@@ -162,22 +163,33 @@ votes.post('/:deal_id', async (c) => {
   try {
     await ensureSchema(c.env);
 
-    const existing: any = await c.env.DB.prepare(
-      `SELECT id FROM pipeline_votes WHERE deal_id = ? AND user_id = ?`,
-    ).bind(dealId, user.id).first();
-    if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE pipeline_votes
-            SET vote_type = ?, weight = ?, comment = ?, anonymous = ?,
-                updated_at = CURRENT_TIMESTAMP
-          WHERE deal_id = ? AND user_id = ?`,
-      ).bind(voteType, weight, comment, anonymous, dealId, user.id).run();
-    } else {
-      await c.env.DB.prepare(
-        `INSERT INTO pipeline_votes (deal_id, user_id, vote_type, weight, comment, anonymous)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(dealId, user.id, voteType, weight, comment, anonymous).run();
+    // A DEAL IS A `projects` ROW (#9187). The pipeline board lists
+    // `projects` (`GET /api/pipeline/active`), and every vote it sends is
+    // keyed by that row's id. A vote for an id with no row used to answer 200
+    // and leave an orphan that no board would ever draw.
+    //
+    // Existence only, not the board's `read` rule: D4676 left the vote
+    // audience (admin, partner, investor) as it was, and the tally GET answers
+    // any signed-in account. Narrowing who may vote is its own decision.
+    if (!(await pipelineProject(c.env, dealId))) {
+      return refuse(c, 404, { code: 'deal_not_found', message: 'There is no deal with that id to vote on.' });
     }
+
+    // ONE STATEMENT, NOT READ-THEN-WRITE (#9187). The UNIQUE(deal_id,
+    // user_id) constraint already makes a second row impossible; a SELECT
+    // followed by an INSERT let two near-simultaneous first votes both see
+    // "no row", and the loser's INSERT hit the constraint and answered 500
+    // although its vote was saved. The upsert lets the constraint decide, so
+    // a double-click answers 200 twice and leaves one row holding the last
+    // value written.
+    await c.env.DB.prepare(
+      `INSERT INTO pipeline_votes (deal_id, user_id, vote_type, weight, comment, anonymous)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(deal_id, user_id) DO UPDATE
+          SET vote_type = excluded.vote_type, weight = excluded.weight,
+              comment = excluded.comment, anonymous = excluded.anonymous,
+              updated_at = CURRENT_TIMESTAMP`,
+    ).bind(dealId, user.id, voteType, weight, comment, anonymous).run();
 
     const publicTally = await buildPublicTally(c.env, dealId);
     const { total_voters: totalVoters, total_weight: totalWeight } = publicTally;
@@ -257,9 +269,10 @@ votes.post('/:deal_id', async (c) => {
  * fans this call out across every deal on the board, so an error per
  * unvoted deal would be noise standing in for a fact.
  *
- * No existence check against `deals` — the sibling POST does not do one
- * either, and adding a lookup per call would cost a query per deal on
- * that fan-out to tell the caller something it already knows.
+ * No existence check against `projects` here, although the sibling POST
+ * makes one (#9187): a read cannot leave an orphan row, and a lookup per
+ * call would cost a query per deal on that fan-out to tell the caller
+ * something it already knows.
  */
 votes.get('/:deal_id', async (c) => {
   // requireAuth throws; index.ts's onError maps 'Unauthorized' to a 401.

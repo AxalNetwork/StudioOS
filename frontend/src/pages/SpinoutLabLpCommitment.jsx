@@ -320,6 +320,16 @@ function FundCommitment({ row, onViewLpa, onSign, signing, onRetry, proof = null
                   <span className={`${MONO} text-gray-900 dark:text-gray-100`}>{money(c.owed_cents) ?? 'Not recorded'}</span>
                   <span className={`font-semibold ${tone}`}>{label}</span>
                 </div>
+                {c.bank_reversed && (c.bank_reversed.open ? (
+                  <p className="mx-3 mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] leading-[1.45] text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200" data-testid={`commitment-call-bank-reversed-${c.id}`}>
+                    <b>Bank reversed.</b> The bank reported the wire recorded on this call as returned or changed on {c.bank_reversed.detected_on || 'a date not recorded'}.
+                    The general partner is reviewing it; until they resolve it, this line still reads as the register records it.
+                  </p>
+                ) : (
+                  <p className="mx-3 mb-2 text-[10.5px] text-gray-500 dark:text-gray-400" data-testid={`commitment-call-bank-reversed-${c.id}`}>
+                    A bank reversal on this call, seen {c.bank_reversed.detected_on || 'on a date not recorded'}, was resolved by the general partner on {c.bank_reversed.resolved_on || 'a date not recorded'}.
+                  </p>
+                ))}
                 {c.state !== 'paid' && c.pay_instructions && <WireDetails fundId={row.fund_id} line={c} />}
                 </div>
               );

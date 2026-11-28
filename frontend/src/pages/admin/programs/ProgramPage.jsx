@@ -20,7 +20,7 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import ActivityTab from './ActivityTab';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
-import { AiNativeTabs, InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
+import { AiNativeTabs, InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs, ProductTestingTabs } from './ProgramTabs';
 import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
 import { LearningOverview, LearningParticipation, LearningPeople } from './LearningPages';
@@ -31,11 +31,14 @@ import { InvitePartner, PartnersOverview, PartnersParticipation, PartnersQueue, 
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
 import { EndAccessDialog, GiveAccessDialog, InvestorOverview, InvestorParticipation, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
 import { InvestorTabs } from './ProgramTabs';
-import { SUB, Tile } from './parts';
+import { CARD, H2, SUB, Tile, Unread } from './parts';
 import { STATUS_WORD } from './catalogueModel';
 import { totalOf } from './programPagesModel';
-import { useLearningReads, usePerksReads } from './useProgramReads';
-import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RECORDED, NOT_RUNNING_YET, READING, isReady, routeFor } from './programsModel';
+import { useLearningReads, usePerksReads, useTestingReads } from './useProgramReads';
+import {
+  AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RECORDED, NOT_RUNNING_YET, PRODUCT_TESTING_HQ_ONLY, READING, isReady, routeFor,
+  testingParticipationTiles,
+} from './programsModel';
 
 /**
  * D5313 (#5313): Perks runs in the generic program shell (PG03a), the first of the nine built-in programs to move.
@@ -258,6 +261,49 @@ function AiNativeVenture({ tab, superAdmin }) {
   );
 }
 
+/**
+ * D5894 (#5894): Product testing runs in the generic program shell (PG03a), the ninth of the nine. Its HQ page keeps
+ * its home at `/admin/platform/product-testing` (the owner's answer B, 2026-11-27) and stays HQ-only; the shell links
+ * out to it as its Applications module. Overview is the shell's Capability modules and where the program runs;
+ * Playbook, Availability & grants, History and Settings are the shell's sections on the registry read, which an Admin
+ * may make. Participation is R11's applications for a Super Admin, with members "Not recorded"; an Admin is read
+ * nothing the Worker keeps for HQ, so an Admin sees no figure and no door onto the HQ page.
+ */
+function ProductTesting({ tab, superAdmin }) {
+  const detail = useProgramDetail('product-testing');
+  const reads = useTestingReads(superAdmin && tab === 'participation');
+  return (
+    <ProgramFrame detail={detail} program="product-testing" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<ProductTestingTabs superAdmin={superAdmin} />}
+      actions={superAdmin ? <Link to="/admin/platform/product-testing" className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-testing-open">Open Product testing</Link> : null}>
+      {tab === 'overview' ? (
+        <>
+          <section className={`${CARD} flex flex-col gap-2 px-[18px] py-4`} data-testid="programs-testing-home">
+            <h2 className={H2}>Where it runs</h2>
+            {superAdmin
+              ? <p className={`m-0 ${SUB}`}>Product testing runs on its HQ page: Overview, Review, Programs, Applicants and Tester pool. <Link to="/admin/platform/product-testing" className="font-bold text-axal-violet underline dark:text-violet-300" data-testid="programs-testing-home-open">Open Product testing</Link></p>
+              : <p className={`m-0 ${SUB}`} data-testid="programs-testing-hq-only">{PRODUCT_TESTING_HQ_ONLY}</p>}
+          </section>
+          <Modules modules={shellModules('product-testing', detail.read, { superAdmin })} />
+        </>
+      ) : null}
+      {tab === 'how' ? <PlaybookEditor program="product-testing" superAdmin={superAdmin} detail={detail} testId="programs-testing-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? (
+        <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} data-testid="programs-testing-participation">
+          <h2 className={H2}>Participation</h2>
+          {superAdmin ? (
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              {testingParticipationTiles(reads.programmes).map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
+            </div>
+          ) : <Unread word="HQ only" reason={PRODUCT_TESTING_HQ_ONLY} testId="programs-testing-participation-hq-only" />}
+        </section>
+      ) : null}
+      {tab === 'activity' ? <ActivityTab program="product-testing" testId="programs-testing-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="product-testing" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+    </ProgramFrame>
+  );
+}
+
 function ProgramBody() {
   const { pathname } = useLocation();
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
@@ -268,6 +314,7 @@ function ProgramBody() {
   if (program === 'investor-cohorts') return <InvestorCohorts tab={tab} superAdmin={superAdmin} />;
   if (program === 'ai-native-venture') return <AiNativeVenture tab={tab} superAdmin={superAdmin} />;
   if (program === INFLUENCER_KEY) return <Influencers tab={tab} superAdmin={superAdmin} />;
+  if (program === 'product-testing') return <ProductTesting tab={tab} superAdmin={superAdmin} />;
   return null;
 }
 

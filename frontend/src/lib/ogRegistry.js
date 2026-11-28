@@ -576,20 +576,6 @@ const ROUTES = [
     robots: 'noindex, follow',
   },
 
-  // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
-  // A full public marketing page, built to be shared; the four audience
-  // pages beside it were removed (owner, #2297). Copy is the page's own hero.
-  {
-    path: '/lp/spinout-demo-day',
-    // D6995: the page's own words, written into its HTML before JavaScript runs.
-    heading: 'Axal VC Spin-Out Demo Day.',
-    summary: "See what 28 days of focused, structured building really produces. Find out if you're ready for the next cohort.",
-    title: 'Spin-Out Lab Demo Day',
-    description:
-      'Evidence-led and founder-honest — no polished pitches, just real companies showing real work at the end of a 28-day sprint.',
-    type: 'website',
-    section: 'spinout-lab',
-  },
 ];
 
 export const OG_ROUTES = ROUTES;

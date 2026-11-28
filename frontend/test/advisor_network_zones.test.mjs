@@ -37,7 +37,12 @@ test('an advisor Network zone renders its own body, not the next zone along', ()
   const zones = allZoneRoutes('advisor')
     .filter((r) => r.startsWith('/network/'))
     .map((r) => r.slice('/network/'.length));
-  assert.deepEqual(zones, ['relationships', 'introductions', 'organizations']);
+  // D9025 (#9025): People, the shared directory, is the first Network zone on every licence. It has one
+  // body for all of them (`NetworkPeoplePage`), dispatched before any licence's arm, so it is not in the
+  // advisor map; the three advisor bodies below still each render their own zone.
+  assert.deepEqual(zones, ['people', 'relationships', 'introductions', 'organizations']);
+  assert.match(codeOnly(netWorkspace), /if \(slug === 'people'\) \{\s*return <Suspense fallback=\{<Loading \/>\}><NetworkPeoplePage \/>/,
+    'People renders the shared directory, not the next zone along');
 
   // A dispatch map keyed by slug, with an entry for every declared zone. The
   // advisor arm previously ignored `slug` entirely and returned one component
@@ -45,7 +50,7 @@ test('an advisor Network zone renders its own body, not the next zone along', ()
   const code = codeOnly(netWorkspace);
   const block = code.slice(code.indexOf('const ADVISOR_ZONE = {'), code.indexOf('const ORG_BACKED'));
   assert.ok(block.length > 0, 'the advisor dispatch map must exist');
-  for (const z of zones) {
+  for (const z of zones.filter((x) => x !== 'people')) {
     assert.match(block, new RegExp(`\\b${z.replace('-', '')}: Advisor`),
       `${z} must dispatch to its own component`);
   }

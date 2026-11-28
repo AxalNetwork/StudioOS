@@ -23,7 +23,7 @@ import { reportError } from '../../../lib/log';
 import { safeReadJSON, safeWriteJSON } from '../../../lib/storage';
 import { DEFAULT_SLA, SLA_BAND_CLASS, slaBand } from '../../../lib/dealFlow';
 import { Lightbox, Unreadable, Unrecorded, actionGhost, actionPrimary } from '../../../ui';
-import { SCOPES, TITLE } from './dealFlowModel';
+import { DEALS_PAGE_TITLES, SCOPES, TITLE } from './dealFlowModel';
 // D4635 (#4635): the Scorecard column reads the supported scoring batch, with its own states.
 import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { ScorecardCell } from './FlowCells';
@@ -224,7 +224,7 @@ export default function StudioLens({ role, view = { view: 'board', notRaising: f
   const [sla, setSla] = useState(() => safeReadJSON('dealFlowSla', DEFAULT_SLA) || DEFAULT_SLA);
   const chooseSla = (key) => { setSla(key); safeWriteJSON('dealFlowSla', key); };
 
-  useEffect(() => { document.title = `${TITLE} — axal`; }, []);
+  useEffect(() => { document.title = DEALS_PAGE_TITLES.root; }, []); // D8681: the Deals titles' one format
 
   const all = lens.kind === 'ok' && Array.isArray(lens.data?.rows) ? lens.data.rows.map(studioRow) : null;
   const rows = all ? lensRows(all, { notRaising: view.notRaising, intakeOnly: view.intakeOnly, q }) : null;

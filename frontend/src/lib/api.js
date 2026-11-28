@@ -159,11 +159,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/for-investors'
     || currentPath === '/for-service-partners'
     || currentPath === '/for-advisors'
-    // The Spin-Out demo day page and the four retired /lp/* addresses that
-    // forward to the door pages (#2321). Public surfaces: a background
-    // settings/me 401 for an anonymous visitor must not bounce
-    // them to /login.
-    || currentPath.startsWith('/lp/')
+    // These four legacy addresses forward to public door pages (#2321).
+    || ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner'].includes(currentPath)
     || currentPath === '/directory'
     // Task #9 — Public Network layer: Circles (+ /communities redirect).
     // Public marketing surfaces: a background settings/me 401 for an

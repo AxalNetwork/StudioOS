@@ -2,7 +2,7 @@
  * #2321 — the four older audience landing pages are removed (#2297 §11, ticked
  * by the owner): the door pages (D676) replaced them. Each address forwards to
  * its door, so a link already shared outside keeps working, and is counted in
- * #2301's redirect inventory. `/lp/spinout-demo-day` stays.
+ * #2301's redirect inventory. D6994 separately retires Demo Day.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/lp_pages_removed_2321.test.mjs
  */
@@ -27,7 +27,6 @@ test('each removed address forwards to its door page, and the door page is a rou
     assert.match(routeLine(from), new RegExp(`element=\\{<Navigate to="${to}" replace />\\}`), from);
     assert.ok(routeLine(to), `${to} is not a route`);
   }
-  assert.match(routeLine('/lp/spinout-demo-day'), /<SpinoutDemoDayPage \/>/, 'the demo-day page was not in scope');
 });
 
 test('the four pages and the blocks only they used are gone, and nothing imports them', () => {
@@ -51,5 +50,4 @@ test('the redirects are in #2301\'s inventory, and no share card describes a pag
     assert.equal(REDIRECT_ROUTES.find((r) => r.path === from).keep, true, `${from} stays under D1440`);
     assert.equal(OG_ROUTES.some((r) => r.path === from), false, `${from} still has its own share card`);
   }
-  assert.ok(OG_ROUTES.some((r) => r.path === '/lp/spinout-demo-day'));
 });

@@ -26,7 +26,7 @@ export function Modules({ modules }) {
             <li key={m.key} data-testid={`programs-generic-module-${m.key}`}>
               {m.path
                 ? <Link to={m.path} className="inline-flex"><Pill tone="green"><span aria-hidden="true">✓</span>{m.label}</Pill></Link>
-                : <Pill tone="muted">{`${m.label} · no screen here`}</Pill>}
+                : <Pill tone="muted">{`${m.label} · ${m.note || 'no screen here'}`}</Pill>}
             </li>
           ))}
         </ul>

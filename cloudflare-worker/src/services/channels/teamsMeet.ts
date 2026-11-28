@@ -14,7 +14,7 @@
  */
 import type { Env } from '../../types';
 import {
-  loadRefreshTokenExport, microsoftOAuthAvailable, reencryptRefreshTokenExport, refreshMicrosoftAccessToken,
+  loadRefreshTokenExport, microsoftOAuthAvailable, refreshMicrosoftAccessTokenFor,
 } from '../calendar';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
@@ -61,14 +61,13 @@ async function accessToken(env: Env, userId: number): Promise<string> {
   if (!tok) throw new TeamsMeetingError('teams_not_connected');
   let token: string;
   try {
-    token = await refreshMicrosoftAccessToken(env, tok.raw);
+    token = await refreshMicrosoftAccessTokenFor(env, userId, tok);
   } catch (e) {
     const msg = e instanceof Error ? e.message : '';
     if (/^refresh_failed:(400|401)$/.test(msg)) throw new TeamsMeetingError('teams_reconnect');
     throw new TeamsMeetingError('teams_unreachable');
   }
   if (!token) throw new TeamsMeetingError('teams_unreachable');
-  if (tok.wasPlaintext) await reencryptRefreshTokenExport(env, 'microsoft_oauth_tokens', userId, tok.raw);
   return token;
 }
 

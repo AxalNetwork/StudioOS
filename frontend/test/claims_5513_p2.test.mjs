@@ -3,15 +3,19 @@
 // and the claims record names an owner and a review date for each claim.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as model from '../src/lib/spinoutFundModel.js';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 
-test('#5513: the Demo Day page shows no named testimonials until consent and a source are recorded', () => {
-  const page = read('frontend/src/pages/templates/SpinoutDemoDayPage.jsx');
-  assert.doesNotMatch(page, /TestimonialBlock|TESTIMONIALS|Past Attendees/);
-  for (const name of ['Nadia F.', 'Oliver K.', 'Yasmin T.']) assert.ok(!page.includes(name), name);
+test('#5513 and D6994: the retired Demo Day claims do not reappear in frontend source', () => {
+  const source = fileURLToPath(new URL('../src/', import.meta.url));
+  const retired = /Nadia F\.|Oliver K\.|Yasmin T\.|four co-founder matches|three warm investor intros/i;
+  for (const file of readdirSync(source, { recursive: true })) {
+    if (/\.(jsx?|tsx?)$/.test(file)) assert.doesNotMatch(readFileSync(join(source, file), 'utf8'), retired, file);
+  }
 });
 
 test('#5513: the fund model exports no fixed program track record', () => {

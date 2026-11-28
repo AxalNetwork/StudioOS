@@ -94,8 +94,12 @@ export type Bottlenecks = {
   outbox: Signal<{ pending: number; claimed: number; dead: number; oldest_pending_age_ms: Figure }>;
   r2_uploads: Signal<{ puts: number; refused: number; class_a_ops: number; cost_microusd: 'unavailable' }>;
   review_queue: Signal<{ awaiting: number; oldest_age_ms: Figure }>;
-  image_model_capacity: NotRecorded; github_pr_ci_wait: NotRecorded; preview_transcoding: NotRecorded; egress: NotRecorded;
+  /** `not_recorded` here; D5586-p4's recorder (`swarmRecorders.ts`) fills it from the venture's agents' image calls. */
+  image_model_capacity: Signal<ImageModelCapacity>; github_pr_ci_wait: NotRecorded; preview_transcoding: NotRecorded; egress: NotRecorded;
 };
+/** D5586-p4: the venture's agents' calls to an image (draw) model, from `ai_usage_logs`. */
+export type ImageModelCapacity = { basis: 'venture_agents'; calls: number; all_models_failed: number; budget_refused: number;
+  fallback_used: number; failure_rate: Figure };
 const outOfScope = (ctx: ValidationContext, scope: Scope) => validateWorkGraph({ assets: [{ id: 'x', scope, kind: 'composite', headVersionId: null, accessClass: 'internal', approvalPolicy: 'x' }] }, ctx)
   .some(v => v.code === 'wrong_tenant');
 const rate = (part: number, whole: number): Figure => (whole > 0 ? part / whole : NOT_RECORDED);

@@ -62,6 +62,7 @@ zones: one record each, reached from a zone's list.
 | `MarketReading.jsx` | `/research/markets/:uid`. One comparable range. A save writes a new reading; a reading past ninety days cannot be attached. Its readings, age windows (`STALE_AT`, `AGE_AT`), `daysSince` and `ageBand` are in `marketReadingRead.js` (D6285). |
 | `CompanySelection.jsx` | D7177 (RS-15 A, D): the company directory's selection bar (both limits, Compare disabled with a visible reason, fixed to the bottom on a phone) and Review selection (each pick with its page and Remove). |
 | `comparisonSave.js` | D7177: the selection rules, the generated title, the save outcomes and their words, Check save status, "Saved part-way" and the comparison pager and stepper, pure so the pages and tests share them. |
+| `observations/` | Country figures and the shared observation inspector (D7718). |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

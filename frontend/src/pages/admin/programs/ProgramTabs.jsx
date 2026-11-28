@@ -177,3 +177,22 @@ export function AiNativeTabs() {
     </Strip>
   );
 }
+
+/**
+ * D5894 (#5894): Product testing in the generic shell (PG03a): the shell's six core sections, and its Applications
+ * module between Participation and History. That module is the HQ page at its own home (the owner's answer B), which
+ * stays HQ-only, so only a Super Admin's strip carries it; an Admin's strip has no door the page would refuse.
+ */
+export function ProductTestingTabs({ superAdmin = false }) {
+  return (
+    <Strip label="Product testing">
+      <Tab to="/admin/programs/product-testing" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/product-testing/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/product-testing/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/product-testing/participation" testId="programs-tab-participation">Participation</Tab>
+      {superAdmin ? <Tab to="/admin/platform/product-testing" end testId="programs-tab-applications">Applications</Tab> : null}
+      <Tab to="/admin/programs/product-testing/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/product-testing/settings" testId="programs-tab-settings">Settings</Tab>
+    </Strip>
+  );
+}

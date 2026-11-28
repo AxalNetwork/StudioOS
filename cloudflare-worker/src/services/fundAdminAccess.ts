@@ -62,7 +62,7 @@ export type FundActTier = 'admin' | 'super_admin';
 
 export type FundActKey =
   | 'capital_call.preview' | 'capital_call.issue' | 'capital_call.receipt'
-  | 'capital_call.correct' | 'capital_call.withdraw'
+  | 'capital_call.correct' | 'capital_call.withdraw' | 'capital_call.bank_reversal'
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund_booklet.read' | 'fund_booklet.withdraw' | 'fund_booklet.accept'
@@ -113,6 +113,10 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.withdraw', label: 'Withdraw a capital call with no receipts', tier: 'super_admin', owner: '#6238',
     sentence: 'A Super Admin withdraws a capital call.',
     routes: ['POST /api/funds/:id/capital-calls/:callId/withdraw'] }),
+  // D9017 (#9017): resolving a bank reversal records what a person found; it
+  // moves no money (D8534 answer b), so it sits with recording a receipt.
+  act({ act: 'capital_call.bank_reversal', label: 'Resolve a bank reversal on a capital-call line', tier: 'admin', owner: '#9017',
+    sentence: null, routes: ['POST /api/funds/:id/capital-calls/bank-reversals/:uid/resolve'] }),
   act({ act: 'distribution.preview', label: 'Preview a distribution', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/distributions/preview'] }),
   act({ act: 'distribution.execute', label: 'Execute a distribution', tier: 'super_admin', owner: '#1779',

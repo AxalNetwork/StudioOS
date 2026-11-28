@@ -158,6 +158,8 @@ export function makeCycleWrites(request) {
       addMustHave: (projectId, body) => request(`/cycles/build/must-haves?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       // D6031 (#6031): the MVP target date, from Prototype / MVP's summary line (null clears it).
       mvpTarget: (projectId, date) => request(`/cycles/build/project/target?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify({ mvp_target_date: date }) }),
+      // D9101 (#9101, BD25): Company creation's Record IP assignment copies the caller's accepted Spin-Out application's IP answers.
+      ipCopy: (projectId, applicationId) => request(`/cycles/build/project/ip-copy?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ application_id: applicationId }) }),
       roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       // #6041: remove an item added by mistake, with its dependency edges.

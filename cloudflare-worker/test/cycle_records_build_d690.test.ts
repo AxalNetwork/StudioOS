@@ -470,8 +470,9 @@ const pillText = (body: any) => body.pills.map((p: any) => (typeof p === 'string
 
 /** CO:369-374: each record's four facts, and its main and side section titles. */
 const RECORD_CANVAS: Record<string, { id: string | number; facts: string[]; main: string[]; side: string[] }> = {
-  'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief'] },
-  'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist'] },
+  // D8775 (#8775): each feature record also says what it carries; a must-have says who builds it and how far its proof is.
+  'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief', 'Carried into its must-have'] },
+  'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist', 'Carried from the feature', 'Who builds it', 'Proof'] },
   // D8776 (#8776, BLR01B): the item shows its quarter beside its column; its key results and quarter view are a side section.
   'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date', 'Quarter'], main: ['Dependencies', 'Feedback it answers'], side: ['Quarter, links and scenarios', 'GitHub'] },
   'founding-team': { id: 'h-1', facts: ['Role', 'Equity', 'Vesting', 'Vested today'], main: ['Vesting timeline', 'Contributions'], side: ['Documents', 'Cap table'] },

@@ -5,6 +5,7 @@ import { reportError } from '../lib/log';
 import { isChunkLoadError } from '../lib/chunkLoadError';
 import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
 import { isCapturing, whenIdle } from '../lib/captureGuard';
+import { SAFE_TITLE } from '../lib/pageTitles';
 
 /**
  * Page-level error boundary that wraps the lazy `<Routes>` tree.
@@ -69,6 +70,8 @@ export class RouteErrorBoundary extends React.Component {
         console.error('[RouteErrorBoundary]', error, info.componentStack);
       }
     } catch { /* never let the boundary itself throw */ }
+    // D8681 (#8681): the tab no longer names the screen that failed to draw; the next navigation names its own.
+    try { if (typeof document !== 'undefined') document.title = SAFE_TITLE; } catch { /* ignore */ }
 
     // Auto-recover from chunk-load failures exactly once per tab (storage or URL).
     if (isChunkLoadError(error)) {
