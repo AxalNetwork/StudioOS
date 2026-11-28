@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operating Partner First Delivery · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Operating Partner · Offers, Pipeline and Delivery · #8684 · role audit 25 Nov 2026</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Operating Partner: from an empty Delivery to the first engagement, one next step at a time</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A newly admitted boutique firm wants to sell a four-week onboarding sprint. Today Offers, Pipeline and Delivery each open on a different first-run screen, and empty Delivery sends every firm to Proposals whatever it has. These boards keep the shipped Partner shell, bucket headers and Eadwyn rail, and draw three moments: before an offer exists, after an offer exists with no client engaged (no proposal yet, then one waiting), and the first active delivery. Each has one primary action, the condition that creates a delivery (a founder accepting a proposal; Axal then opens the engagement in the same step), and a way back to Delivery in the same firm. Platform States (D5129): Unavailable, Not recorded, Partial, Stale and Refused never look like an empty catalogue. Shell follows #3704; Eadwyn is the one shared rail (#5130). A violet dashed ◇ marks backend work, a grey dashed ▹ frontend-only work and an amber ⚑ an owner decision; none is product copy. Phone steps are numbered.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 (the moments are dated 20, 25 and 27 Nov) · checked on main ee23155ff6 · [Sara Holm], [Holm Sprint Partners], [Maya Ruiz], [Atlas Orchard], the need, uids and amounts are fictional sample data.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Operating Partner First Delivery Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['OPO-0', 'Today on main', 'Offers, Pipeline and Delivery as built for a new firm: three different first-run screens; Delivery shows Open Pipeline twice and never reads the catalogue; no partner screen sends a proposal; a won proposal opens the whole board.', [C('OPO00', false, 1200, 751)]],
+      ['OPO-1', 'Moment 1 · before an offer', 'Empty Delivery for a firm with no service: the path to a first delivery, one primary (Add your first service), the condition, then Offers › Catalog opened from Delivery with Back to Delivery.', [F('OPO01', 'A · Delivery · no offer', 910), F('OPO02', 'B · Offers › Catalog · add the service', 799)]],
+      ['OPO-2', 'Moment 2 · an offer, no client engaged', 'Back on Delivery: Review matching leads. The lead’s opportunity sheet with Review before sending and Send proposal (⚑ Q1). Then the proposal waits on the founder: Open the proposal, and nothing converts it on its own.', [F('OPO03', 'A · Delivery · offer, no proposal', 990), F('OPO04', 'B · Pipeline › Leads · send the proposal', 900), F('OPO05', 'C · Delivery · proposal waiting', 938)]],
+      ['OPO-3', 'What creates a delivery', 'The condition as main records it: three manual hand-offs and one automatic step, who may do each, the data each needs, when each is refused, and what does not create a delivery.', [C('OPO06', false, 1200, 847)]],
+      ['OPO-4', 'Moment 3 · the first active delivery', 'Board with the one engagement, its next action and the lifecycle’s Start work; a won proposal opens that engagement’s sheet directly (◇ engagement_uid).', [F('OPO07', 'A · Delivery · first engagement', 716), F('OPO08', 'B · Opened from a won proposal', 900)]],
+      ['OPO-5', 'Return and firm context', 'Back to Delivery after the save with focus and a polite status; the company switcher unchanged on every hop; the Delivery board’s company scope (⚑ Q2).', [C('OPO09', false, 1200, 639)]],
+      ['OPO-6', 'States', 'Loading, catalogue unavailable, proposals unavailable (partial), no partner profile, role preview refused, offline and stale, a 409 and a 403 on send.', [C('OPO10', false, 1200, 696)]],
+      ['OPO-7', 'Dark', 'Moment 2 in dark mode, as Delivery v2 and Pipeline v2 draw it.', [F('OPO11', false, 936)]],
+      ['OPO-8', 'Phone 390 · the route', 'Step 1 Delivery with no offer; 2 add the service; 3 Delivery with an offer; 4 send the proposal; 5 waiting on the founder; 6 the first engagement on Delivery; 7 the engagement opens.', [P('OPO12A', '1 · No offer'), P('OPO12B', '2 · Add a service'), P('OPO12C', '3 · Offer, no proposal'), P('OPO12D', '4 · Send proposal'), P('OPO12E', '5 · Waiting'), P('OPO12F', '6 · First engagement'), P('OPO12G', '7 · Engagement')]],
+      ['OPO-9', 'Keyboard, headings and live regions', 'Moment 2 with its tab stops numbered, the heading outline, the path list semantics, return focus and announcements, and the three states to test.', [C('OPO13', false, 1200, 980)]],
+      ['OPO-H', 'Handoff', 'Checked on main with files, preserved, two ◇ backend items, frontend only, three ⚑ owner decisions with option A drawn, every acceptance criterion mapped to its board, and the tests.', [W('OPO14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

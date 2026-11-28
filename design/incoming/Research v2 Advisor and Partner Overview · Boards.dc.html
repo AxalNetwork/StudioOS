@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research v2 Advisor and Partner Overview · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Advisor and Operating Partner · RS-23 to RS-28 · #8822</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research Overview for the advisor and the operating partner, from the stores each already reaches</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Research v2 (D3701) from RS-23. /research for an advisor or a partner is ResearchWorkspace: today a directory panel above five link cards (four for a partner) and a document table. These boards replace that root with the RS-01 card anatomy, filled only from what each licence reads on main: the newest question in Ask and how it ended, saved answers, the ventures a founder opened to the advisor by name, the library with what Ask can answer from, market readings, the advisor’s own analyses, and source coverage collapsed. Each licence keeps its own shell: the advisor sidebar and emerald #047857, the partner sidebar and #b45309, as IRV-01 does for the investor; Eadwyn and the Ask button stay violet. A client’s file says “From [Venture]”, is read-only and is never in Ask. Zero, Not recorded and Unreadable never look alike, and a failed Ask is never drawn as no passage found. Violet dashed ◇ tags mark backend work for #8822; amber ⚑ tags mark the owner’s four questions, drawn as pick A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main d26a93a252 · [Dr. Jonas Weber], [Sara Holm], [Atlas Orchard], [Tern Freight], [Tern Cold Chain] and every figure are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research v2 Advisor and Partner Overview Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-23', 'Research Overview, advisor · desktop 1440', 'The house header (“Research · Know more than the room”), the emerald primary Add a document and the violet ghost Ask; tabs Overview, Ask, Client prep, Markets, Companies, Library. Continue where you left off (newest question, when, Answered); Clients open to you (“[3] ventures open to you”, one row per grant with Project record · Data room · Other sessions, Open until / No end date, Opened, and Draft a checkpoint brief on the newest; ◇ open items across clients); Saved answers ([7], all time, the 3 most recently asked); Library ([23] answerable · [6] not answerable, [4] from clients); Market readings ([5] stored, a service line with No reading yet); Companies; Source coverage collapsed. The rail is Ask: a question runs only when you press Ask.', [F('RS23', false, 1760)]],
+      ['RS-24', 'Research Overview, operating partner · desktop 1440', 'The partner shell and #b45309 primary, eyebrow “Research · Know the client’s world”, tabs without Companies. Clients open to you in its honest empty state with ◇ “Opening records to a partner is not built”. Continue shows a question that ended with No passage to cite. Library has no client files. Market readings name the firm’s catalogued service lines.', [F('RS24', false, 1260)]],
+      ['RS-25', 'Empty · desktop 1440', 'Nothing recorded yet, each card in a sentence. Add a document is the one action that fills the page; the Library card shows what follows an upload: Pending, then Indexed and In Ask.', [F('RS25', 'A · Advisor', 940), F('RS25P', 'B · Operating partner', 860)]],
+      ['RS-26', 'States · desktop 1440', 'A · Loading: the header is drawn and every card shows bars. B · No passage to cite versus Ask could not run, No reading yet, an unreadable company name, Source coverage with Not recorded reasons, the client list Unreadable, Refused for an ended grant and for a lapsed Advisor licence (frontend-derived, no 403), Withheld scopes, out of AI tokens, no saving here, offline. C · Only Clients open to you fails; every other card stays loaded.', [F('RS26', 'A · Loading', 900), C('RS26B', 'B · States', 1400, 1070), F('RS26C', 'C · Client list unreadable, the rest loaded', 1640)]],
+      ['RS-27', 'Phone 390 · advisor, partner inset', 'The header stacks eyebrow, title, the full-width primary with Ask as a 48px icon button, the line, then the Module select. Cards in one column in RS-23’s order; client rows become cards with wrapped scope chips; Ask is a bottom sheet. Every target is 44px or more; no table is wider than the screen.', [P('RS27', 'A · Top'), P('RS27B', 'B · Clients as cards'), P('RS27C', 'C · Library, readings, companies'), P('RS27S', 'D · Ask as a bottom sheet'), P('RS27P', 'E · Operating partner inset')]],
+      ['RS-28', 'Dark · desktop 1440', 'RS-23 on the dark tokens (#0b1220 / #111827 / #e5e7eb). The advisor accent lifts to emerald-400; Eadwyn stays violet-400. States keep their words and glyphs.', [F('RS28', false, 1760)]],
+      ['RSV-H', 'Handoff', 'Checked on main, values and their stores, ◇ backend for #8822, frontend deep links, ⚑ Q1 to Q4 drawn as A, the decision file D8822.md, acceptance mapped to boards, sibling handoffs and accessibility.', [W('RSVH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

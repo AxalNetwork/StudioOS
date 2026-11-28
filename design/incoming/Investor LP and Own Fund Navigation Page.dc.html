@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor LP and Own Fund Navigation · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* IHS · Investor Studio Home v2 (#6126) — continues Studio Modularity (SM16 to SM27). Every class is ihs- prefixed. */
+.ihs-cv{--bg:#f4f3f7;--card:#fff;--raised:#faf9fc;--ink:#18181b;--body:#3f3a47;--mut:#6b6577;--line:#ececf1;--line2:#e2dfe8;--vi:#7c3aed;--vtx:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--chip:#f4f3f7;--pos:#047857;--posT:#ecfdf5;--posE:#a7f3d0;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--err:#b91c1c;--skel:#ececf1;--scrim:rgba(24,24,27,.42);
+  --sg:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--mo:'Roboto Mono',ui-monospace,Menlo,Consolas,monospace;
+  font-family:var(--sg);font-size:13px;line-height:1.45;color:var(--ink);background:var(--bg);position:relative;overflow:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.ihs-cv.ihs-dark{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--body:#d1d5db;--mut:#9ca3af;--line:#374151;--line2:#4b5563;--vi:#a78bfa;--vtx:#c4b5fd;--lav:rgba(167,139,250,.14);--lavE:rgba(167,139,250,.42);--chip:#1f2937;--pos:#34d399;--posT:rgba(52,211,153,.12);--posE:rgba(52,211,153,.4);--amT:#fcd34d;--amBg:rgba(252,211,77,.1);--amE:rgba(252,211,77,.5);--err:#f87171;--skel:#1f2937;--scrim:rgba(0,0,0,.6)}
+.ihs-cv *{box-sizing:border-box}
+.ihs-cv h1,.ihs-cv h2,.ihs-cv h3,.ihs-cv p,.ihs-cv ul,.ihs-cv ol{margin:0;padding:0}
+.ihs-cv ul,.ihs-cv ol{list-style:none}
+.ihs-cv a{color:var(--vtx);text-decoration:none}
+.ihs-cv button{font-family:var(--sg);cursor:pointer}
+.ihs-mo{font-family:var(--mo)}
+.ihs-mu{color:var(--mut)}
+.ihs-ey{font:700 10.5px var(--mo);letter-spacing:.11em;text-transform:uppercase;color:var(--mut)}
+/* shell */
+.ihs-shell{display:flex;flex-direction:column;background:var(--bg)}
+.ihs-top{height:56px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-brand{display:flex;align-items:center;gap:9px;width:214px;flex:none;font-size:15px;font-weight:800;letter-spacing:-.02em}
+.ihs-mark{width:28px;height:28px;border-radius:7px;background:var(--ink);display:grid;place-items:center;color:var(--card);font:800 12px var(--sg)}
+.ihs-search{width:340px;min-height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:var(--bg);color:var(--mut);font-size:13px}
+.ihs-ib{width:38px;height:38px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--body);display:grid;place-items:center}
+.ihs-avt{width:34px;height:34px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--vtx)}
+.ihs-hq{font:700 11.5px var(--mo);letter-spacing:.07em;padding:3px 10px;border-radius:999px;background:#18181b;color:#fff;border:1px solid #4b5563}
+.ihs-row{flex:1;display:flex;min-height:0}
+.ihs-side{width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:2px}
+.ihs-side.ihs-nar{width:64px;align-items:center}
+.ihs-sw{width:100%;min-height:52px;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);text-align:left;margin-bottom:10px}
+.ihs-sw b{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ihs-sq{width:30px;height:30px;flex:none;border-radius:7px;background:var(--lav);border:1px solid var(--lavE);color:var(--vtx);display:grid;place-items:center;font-size:11px;font-weight:800}
+.ihs-nav{display:flex;align-items:center;min-height:36px;padding:0 12px;border-radius:9px;font-size:13.5px;color:var(--body)!important;font-weight:500}
+.ihs-nav[aria-current]{background:var(--lav);color:var(--vtx)!important;font-weight:700}
+.ihs-side.ihs-nar .ihs-nav{width:40px;height:40px;padding:0;justify-content:center;font-size:11.5px;font-weight:700}
+.ihs-sep{height:1px;background:var(--line);margin:8px 4px}
+.ihs-main{flex:1;min-width:0;padding:24px 28px 32px;display:flex;flex-direction:column;gap:16px;position:relative}
+.ihs-foot{height:38px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;border-top:1px solid var(--line);background:var(--card);font-size:12px;color:var(--mut)}
+/* header */
+.ihs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.ihs-ttl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ihs-ttl h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.ihs-badge{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(14,165,233,.14);color:var(--ink)}
+.ihs-badge i{width:7px;height:7px;border-radius:999px;background:#0ea5e9}
+.ihs-purp{font-size:13.5px;color:var(--mut);margin-top:4px;max-width:640px}
+.ihs-hr{display:flex;align-items:center;gap:12px;flex:none}
+.ihs-date{font:500 12.5px var(--mo);color:var(--mut)}
+/* buttons */
+.ihs-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 14px;border-radius:9px;font-size:13.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--ink)}
+.ihs-btn.ihs-p{border-color:#7c3aed;background:#7c3aed;color:#fff}
+.ihs-btn.ihs-v{border-color:var(--vi);color:var(--vtx);background:var(--card)}
+.ihs-btn.ihs-t{border-color:transparent;background:transparent;color:var(--body)}
+.ihs-btn.ihs-sm{min-height:32px;padding:0 11px;font-size:12.5px;border-radius:8px}
+.ihs-btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.ihs-lnk{display:inline-flex;align-items:center;min-height:28px;font-size:12.5px;font-weight:600;color:var(--vtx);white-space:nowrap}
+/* annotation tags (not product copy) */
+.ihs-be{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px dashed var(--vi);border-radius:6px;background:var(--lav);color:var(--vtx);font:700 11px var(--mo);white-space:nowrap}
+.ihs-pol{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px solid var(--amE);border-radius:6px;background:var(--amBg);color:var(--amT);font:700 11px var(--mo);white-space:nowrap}
+.ihs-note{font-size:12px;color:var(--mut);line-height:1.45}
+/* bands */
+.ihs-thesis{position:relative;background:var(--lav);border:1px solid var(--lavE);border-radius:12px;padding:12px 16px;display:flex;gap:16px;align-items:flex-start}
+.ihs-thesis .ihs-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.ihs-thesis .ihs-ey{color:var(--vtx)}
+.ihs-thq{font-size:13px;line-height:1.5}
+.ihs-crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ihs-cg{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ihs-cgl{font:600 10.5px var(--mo);color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.ihs-chip{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line2);font-size:11.5px;font-weight:600;color:var(--body);white-space:nowrap}
+.ihs-chip.ihs-x{text-decoration:line-through;color:var(--mut);background:transparent;border-style:dashed}
+.ihs-band{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 40px 12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ihs-av{width:40px;height:40px;flex:none;border-radius:999px;background:var(--chip);border:2px solid #0ea5e9;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--body)}
+.ihs-pill{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--chip);color:var(--body);border:1px solid var(--line2)}
+.ihs-pill.ihs-lv{background:var(--lav);color:var(--vtx);border-color:var(--lavE)}
+.ihs-pill.ihs-ps{background:var(--posT);color:var(--pos);border-color:var(--posE)}
+.ihs-pill.ihs-am{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.ihs-lock{position:absolute;top:12px;right:12px;color:var(--mut);display:flex}
+/* Eadwyn chat */
+.ihs-chat{background:var(--card);border:1px solid var(--lavE);border-radius:14px;overflow:hidden}
+.ihs-chh{display:flex;align-items:center;gap:12px;padding:14px 18px 14px 22px;background:var(--lav);border-bottom:1px solid var(--line)}
+.ihs-ead{width:36px;height:36px;flex:none;border-radius:10px;background:#7c3aed;color:#fff;display:grid;place-items:center;font:800 15px var(--sg)}
+.ihs-chg{display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.ihs-chl{display:flex;flex-direction:column;min-height:300px}
+.ihs-thr{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:10px}
+.ihs-bub{align-self:flex-start;max-width:78%;padding:10px 13px;border-radius:12px 12px 12px 4px;background:var(--chip);border:1px solid var(--line);font-size:13.5px;line-height:1.5}
+.ihs-bub.ihs-u{align-self:flex-end;border-radius:12px 12px 4px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed}
+.ihs-comp{border-top:1px solid var(--line);padding:12px 20px 14px;display:flex;align-items:center;gap:6px}
+.ihs-inp{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden}
+.ihs-send{width:42px;height:42px;flex:none;border-radius:10px;border:none;background:#7c3aed;color:#fff;display:grid;place-items:center}
+.ihs-chr{background:var(--raised);border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.ihs-tabs{display:flex;gap:16px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ihs-tabs a{display:inline-flex;align-items:center;min-height:46px;font-size:13.5px;font-weight:600;color:var(--body);border-bottom:2px solid transparent;white-space:nowrap}
+.ihs-tabs a[aria-current]{color:var(--vtx);font-weight:700;border-bottom-color:var(--vi)}
+.ihs-prop{border:1.5px dashed var(--vi);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:9px;max-width:560px}
+/* module grid + tile */
+.ihs-mh{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ihs-mh h2{font-size:16px;font-weight:800;letter-spacing:-.02em}
+.ihs-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:stretch}
+.ihs-grid.ihs-g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ihs-grid.ihs-g1{grid-template-columns:minmax(0,1fr)}
+.ihs-tile{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ihs-th{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ihs-th h3{flex:1;min-width:0;font-size:14px;font-weight:800;letter-spacing:-.01em}
+.ihs-tn{font-size:12px;color:var(--mut);text-align:right}
+.ihs-tf{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ihs-sub{font-size:12px;color:var(--mut);line-height:1.45}
+/* Needs you rows */
+.ihs-nr{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-nr.ihs-half{grid-template-columns:30px minmax(0,1fr) auto}
+.ihs-gl{width:32px;height:32px;border-radius:9px;background:var(--chip);border:1px solid var(--line);display:grid;place-items:center;color:var(--body)}
+.ihs-nr.ihs-top .ihs-gl{background:var(--lav);border-color:var(--lavE);color:var(--vtx)}
+.ihs-ns{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ihs-ns b{font-size:13.5px;font-weight:700;line-height:1.35}
+.ihs-ns span{font-size:12px;color:var(--mut);line-height:1.4}
+.ihs-nd{font:500 12px var(--mo);color:var(--body);white-space:nowrap;text-align:right}
+.ihs-od{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ihs-od svg{color:var(--err)}
+/* state words (D5129): glyph + word, never colour alone */
+.ihs-st{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--body)}
+.ihs-st.ihs-ok{background:var(--posT);border-color:var(--posE);color:var(--pos)}
+.ihs-st.ihs-out{border-style:solid;border-color:var(--ink);color:var(--ink)}
+.ihs-st.ihs-nst{border-style:dashed;color:var(--mut);background:transparent}
+.ihs-st.ihs-nrc{border-style:dotted;color:var(--mut);background:var(--chip)}
+.ihs-st.ihs-un{border-color:var(--line2);color:var(--ink);background:var(--raised)}
+.ihs-st.ihs-wh{color:var(--mut);background:var(--chip)}
+.ihs-nrec{font-size:12.5px;font-weight:600;color:var(--mut)}
+.ihs-unr{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--body)}
+.ihs-unr svg{color:var(--err);flex:none;margin-top:2px}
+/* funds */
+.ihs-tb{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.ihs-tb td,.ihs-tb th{color:inherit}
+.ihs-tb thead th{color:var(--mut)}
+.ihs-tb th{font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;text-align:right;padding:0 10px 8px;white-space:nowrap}
+.ihs-tb th:first-child,.ihs-tb td:first-child{text-align:left;padding-left:0}
+.ihs-tb td{padding:11px 10px;border-top:1px solid var(--line);text-align:right;font-family:var(--mo);font-size:12.5px;white-space:nowrap;vertical-align:middle}
+.ihs-tb td:first-child{font-family:var(--sg);font-size:13.5px;font-weight:700}
+.ihs-tb tfoot td{font-weight:700;border-top:1.5px solid var(--line2)}
+.ihs-bar{position:relative;height:8px;border-radius:999px;background:var(--chip);border:1px solid var(--line2);overflow:hidden;min-width:120px}
+.ihs-bar i{position:absolute;left:0;top:0;bottom:0;background:var(--lavE);border-right:2px solid var(--vi)}
+.ihs-bar b{position:absolute;left:0;top:0;bottom:0;background:var(--vi)}
+.ihs-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut)}
+.ihs-lg i{width:12px;height:8px;border-radius:2px;display:inline-block}
+/* figures */
+.ihs-figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ihs-fig{padding:10px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ihs-fig .ihs-l{font-size:11.5px;color:var(--mut)}
+.ihs-fig .ihs-v{font:600 20px var(--mo);line-height:28px}
+.ihs-fig .ihs-r{font-size:12px;font-weight:600;color:var(--mut);line-height:1.35}
+.ihs-kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.ihs-kv span:last-child{font:600 12.5px var(--mo)}
+/* fit */
+.ihs-fr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-fr .ihs-co{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ihs-fr .ihs-co b{font-size:13.5px}
+.ihs-fchips{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}
+.ihs-tip{position:absolute;z-index:4;width:250px;padding:8px 11px;border-radius:8px;background:#18181b;border:1px solid #374151;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 8px 20px rgba(24,24,27,.25)}
+/* arrivals */
+.ihs-ar{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ihs-ar .ihs-gl{width:28px;height:28px;border-radius:8px}
+/* skeleton */
+.ihs-sk{display:block;height:12px;border-radius:6px;background:var(--skel)}
+/* module map */
+.ihs-scrim{position:absolute;inset:0;background:var(--scrim);z-index:6}
+.ihs-modal{position:absolute;z-index:7;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.3);display:flex;flex-direction:column;overflow:hidden}
+.ihs-mc{border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.ihs-mc b{font-size:13px}
+.ihs-pv{height:40px;border-radius:8px;background:var(--lav);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.ihs-pv i{height:4px;border-radius:3px;background:var(--vi);opacity:.55;display:block}
+.ihs-added{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:0 10px;border-radius:8px;background:var(--posT);color:var(--pos);font-size:12.5px;font-weight:700;align-self:flex-start}
+/* phone */
+.ihs-ph{width:390px;height:844px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.ihs-pht{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 4px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-t44{width:44px;height:44px;display:grid;place-items:center;border:none;background:transparent;color:var(--body);border-radius:10px;flex:none}
+.ihs-phb{flex:1;padding:14px 14px 20px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ihs-card44{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;align-items:center;gap:10px}
+.ihs-sheet{position:absolute;left:0;right:0;bottom:0;z-index:7;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 32px rgba(24,24,27,.22)}
+.ihs-grab{width:40px;height:4px;border-radius:999px;background:var(--line2);align-self:center}
+/* docs */
+.ihs-doc{width:1200px;padding:36px 44px;display:flex;flex-direction:column;gap:20px;background:var(--card)}
+.ihs-doc h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.ihs-doc h3{font-size:13.5px;font-weight:800}
+.ihs-dl{display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+.ihs-dl ul{display:flex;flex-direction:column;gap:6px}
+.ihs-dl li{font-size:12.5px;line-height:1.5;color:var(--body);padding-left:12px;position:relative}
+.ihs-dl li:before{content:'·';position:absolute;left:2px;color:var(--mut)}
+.ihs-code{font:500 11.5px var(--mo);background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ihs-crop{padding:24px;display:flex;flex-direction:column;gap:14px}
+.ihs-lab{font:700 10.5px var(--mo);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.ihs-ebar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 14px 36px rgba(24,24,27,.14)}
+.ihs-phb>*{flex:none}
+/* SIV · Studio Home Investor card destinations (#8731). Reuses ihs_extra.css (Investor Studio Home v2); every new class is siv- prefixed. */
+.siv-to{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px 5px;min-height:22px;padding:2px 8px;border:1px dashed var(--line2);border-radius:6px;background:var(--raised);color:var(--body);font-size:11.5px;max-width:100%}
+.siv-tor{display:flex;justify-content:flex-end;margin-top:-6px}
+.siv-to b{color:var(--ink);font-weight:700}
+.siv-to .ihs-mo{font-size:10.5px;color:var(--mut)}
+.siv-step{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;min-height:26px;padding:2px 10px 2px 3px;border-radius:999px;background:#18181b;color:#fff;font-size:12px;font-weight:700}
+.siv-step i{width:20px;height:20px;border-radius:999px;background:#7c3aed;display:grid;place-items:center;font:700 11px var(--mo);font-style:normal}
+.siv-was,.siv-new{align-self:flex-start;font:700 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:6px}
+.siv-was{background:var(--chip);color:var(--mut);border:1px solid var(--line2)}
+.siv-new{background:var(--lav);color:var(--vtx);border:1px solid var(--lavE)}
+.siv-bad,.siv-good{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;line-height:1.4}
+.siv-bad{color:var(--ink)}
+.siv-bad svg{color:var(--err)}
+.siv-good{color:var(--pos)}
+.siv-fx{display:flex;align-items:center;gap:10px;padding:7px 12px;border:1px dashed var(--line2);border-radius:8px;background:var(--raised);font-size:12.5px;color:var(--body)}
+.siv-fx b{font:700 11px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.siv-snip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.siv-hr{height:1px;background:var(--line)}
+.siv-dh{display:flex;align-items:flex-start;justify-content:space-between;gap:10px 16px;flex-wrap:wrap}
+.siv-dh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.siv-secn{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.siv-secn a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);font-size:13px;font-weight:600;color:var(--body)!important;white-space:nowrap}
+.siv-secn a[aria-current]{border-color:var(--vi);color:var(--vtx)!important;background:var(--lav)}
+.siv-secn.siv-scroll{flex-wrap:nowrap;overflow:hidden}
+.siv-gate{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;border:1px solid var(--lavE);background:var(--lav);color:var(--vtx)}
+.siv-gate div{display:flex;flex-direction:column;gap:2px;color:var(--ink)}
+.siv-gate b{font-size:13.5px}
+.siv-gate span{font-size:12.5px;color:var(--body)}
+.siv-gate.siv-gray{border-color:var(--line2);background:var(--raised);color:var(--mut)}
+.siv-sec{display:flex;flex-direction:column;gap:10px;border-radius:12px}
+.siv-sec.siv-focus{outline:2px solid var(--vi);outline-offset:6px}
+.siv-sech{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.siv-sech h2{font-size:16px;font-weight:800;letter-spacing:-.01em}
+.siv-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.siv-kv4{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.siv-kv4 div{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:var(--raised);border:1px solid var(--line)}
+.siv-kv4 span{font-size:11.5px;color:var(--mut)}
+.siv-kv4 b{font:600 14px var(--mo)}
+.siv-ok{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:var(--posT);border:1px solid var(--posE);color:var(--pos);font-size:12.5px;font-weight:600}
+.siv-hero{background:#241a3d;color:#fff;border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:8px}
+.siv-hero b{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.25}
+.siv-hero p{font-size:13px;color:rgba(255,255,255,.75)}
+.siv-heyb{font:600 11px var(--mo);color:rgba(255,255,255,.7)}
+.siv-terms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.siv-terms div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
+.siv-terms span{font-size:11.5px;color:var(--mut)}
+.siv-terms b{font:600 14px var(--mo)}
+.siv-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line)}
+.siv-tabs button{min-height:40px;padding:0 12px;border:none;border-bottom:2px solid transparent;background:transparent;font-size:13.5px;font-weight:600;color:var(--body);white-space:nowrap}
+.siv-tabs button[aria-selected=true]{color:var(--vtx);border-bottom-color:var(--vi);font-weight:700}
+.siv-tabs.siv-tph{overflow:hidden}
+.siv-pcs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.siv-pcs.siv-pph{grid-template-columns:minmax(0,1fr)}
+.siv-pc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.siv-pc.siv-cur{border-color:var(--vi);border-width:2px}
+.siv-li{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--body)}
+.siv-li svg{color:var(--pos)}
+.siv-sel{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:600}
+.siv-backn{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px dashed var(--line2);border-radius:8px;background:var(--raised);font-size:12.5px;color:var(--body)}
+.siv-pback{display:flex;align-items:center;gap:4px;min-height:44px;padding:0 10px;background:var(--card);border-bottom:1px solid var(--line);font-size:14px;font-weight:600;flex:none}
+.siv-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.siv-tbl th{text-align:left;font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mut);padding:0 10px 8px 0}
+.siv-tbl td{text-align:left;padding:9px 10px 9px 0;border-top:1px solid var(--line);vertical-align:top;color:var(--body);line-height:1.45}
+.siv-route{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--raised)}
+.siv-route b{font-size:13px}
+.siv-route>div{display:flex;flex-direction:column;gap:5px}
+.siv-route .siv-step{background:var(--card);color:var(--ink);border:1px solid var(--line2);font-weight:600;white-space:normal}
+.siv-ol{display:flex;flex-direction:column;gap:6px}
+.siv-ol li{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--body)}
+.siv-ol i{width:20px;height:20px;flex:none;border-radius:999px;background:var(--lav);color:var(--vtx);display:grid;place-items:center;font:700 10.5px var(--mo);font-style:normal}
+/* LPV · Investor LP and Own Fund Navigation (#8683). Reuses ihs_extra.css (Investor Studio Home v2) and siv_extra.css (Studio Home Investor); every new class is lpv- prefixed. */
+.lpv-side{gap:1px}
+.lpv-srch{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 4px 0 10px;margin:0 0 8px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--mut);font-size:12.5px}
+.lpv-srch span{flex:1}
+.lpv-col{width:28px;height:28px;display:grid;place-items:center;border:none;background:transparent;color:var(--mut);border-radius:7px}
+.lpv-nav{position:relative;display:flex;align-items:center;gap:10px;min-height:38px;padding:0 10px 0 12px;border-radius:9px;font-size:13.5px;color:var(--body)!important;font-weight:500}
+.lpv-nav svg{color:var(--mut)}
+.lpv-nav .lpv-lb{flex:1;min-width:0;white-space:nowrap}
+.lpv-nav[aria-current]{background:var(--lav);color:var(--vtx)!important;font-weight:700;box-shadow:inset -2px 0 0 var(--vi)}
+.lpv-nav[aria-current] svg{color:var(--vtx)}
+.lpv-nav.lpv-locked{color:var(--mut)!important}
+.lpv-lki{color:var(--mut)}
+.lpv-foc{outline:2px solid var(--vi);outline-offset:1px}
+.lpv-tag{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--body);flex:none}
+.lpv-tag.lpv-t-ok{background:var(--posT);border-color:var(--posE);color:var(--pos)}
+.lpv-tag.lpv-t-pend{border-style:dashed;color:var(--body)}
+.lpv-tag.lpv-t-lock{background:var(--chip);color:var(--mut)}
+.lpv-tag.lpv-t-un{background:var(--raised);color:var(--ink)}
+.lpv-tag.lpv-t-un svg{color:var(--err)}
+.lpv-skt{width:34px;height:16px;border-radius:999px;background:var(--skel);flex:none}
+.lpv-tipr{left:calc(100% + 10px);top:-4px;font-weight:400}
+.lpv-tipr b,.lpv-tipc b{font-weight:700}
+.lpv-tipc{left:calc(100% + 10px);top:0;width:230px;text-align:left}
+/* collapsed rail */
+.lpv-rail{gap:2px;padding:12px 6px}
+.lpv-cn{position:relative;width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;border-radius:8px;color:var(--body)!important;font-size:10px;font-weight:600;line-height:1.15;text-align:center}
+.lpv-cn svg{color:var(--mut)}
+.lpv-cn[aria-current]{background:var(--lav);color:var(--vtx)!important;box-shadow:inset -2px 0 0 var(--vi)}
+.lpv-cn[aria-current] svg{color:var(--vtx)}
+.lpv-cb{position:absolute;top:3px;right:7px;width:16px;height:16px;border-radius:999px;display:grid;place-items:center;border:1px solid var(--line2);background:var(--card)}
+.lpv-cb svg{width:10px;height:10px}
+.lpv-cb.lpv-t-ok{background:var(--posT);border-color:var(--posE);color:var(--pos)}
+.lpv-cb.lpv-t-lock{color:var(--mut)}
+.lpv-cb.lpv-t-pend{border-style:dashed;color:var(--body)}
+.lpv-cb.lpv-t-un{color:var(--err)}
+/* specimens */
+.lpv-spec{display:flex;flex-direction:column;gap:8px;flex:none}
+.lpv-specside{width:100%!important;border:1px solid var(--line);border-radius:12px;position:relative}
+.lpv-rail.lpv-specside{width:72px!important;align-items:center}
+.lpv-pair{display:flex;flex-direction:column;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px}
+.lpv-subl{display:block;padding:0 12px 6px 38px;font-size:11.5px;color:var(--mut);line-height:1.35}
+.lpv-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lpv-cell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lpv-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lpv-facts div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:12.5px;color:var(--body);line-height:1.4}
+/* destination headers */
+.lpv-crumb{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut)}
+.lpv-crumb a{color:var(--vtx);font-weight:600}
+.lpv-crumb b{color:var(--ink);font-weight:600}
+.lpv-h1f{outline:2px solid var(--vi);outline-offset:2px;border-radius:4px;align-self:flex-start}
+.lpv-x{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:13px;color:var(--body)}
+.lpv-zone{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px}
+.lpv-zone a{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);font-size:13px;font-weight:600;color:var(--body)!important;white-space:nowrap}
+.lpv-zone a[aria-current]{border-color:var(--vi);background:var(--lav);color:var(--vtx)!important}
+.lpv-zone.lpv-zs{flex-wrap:nowrap;overflow:hidden}
+.lpv-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.lpv-tiles div{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line)}
+.lpv-tiles span{font-size:12px;color:var(--mut)}
+.lpv-tiles b{font:600 15px var(--mo)}
+.lpv-tiles.lpv-t2{grid-template-columns:1fr 1fr;gap:8px}
+.lpv-tiles.lpv-t2 b{font-size:13px}
+.lpv-lock{display:flex;flex-direction:column;gap:10px}
+.lpv-inc{display:flex;flex-direction:column;gap:6px}
+.lpv-inc li{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border-radius:8px;background:var(--raised);border:1px solid var(--line);font-size:12.5px}
+.lpv-inc span{color:var(--mut)}
+.lpv-ead{width:280px;flex:none;border-left:1px solid var(--line);background:var(--card);padding:18px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px}
+.lpv-pv{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font-size:12px;font-weight:600}
+.lpv-pv .ihs-mo{font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.lpv-sr{font:600 11px var(--mo);color:var(--mut)}
+/* phone */
+.lpv-h1p{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.lpv-drawer{position:absolute;left:0;top:0;bottom:0;width:318px;z-index:7;background:var(--card);border-right:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:2px;box-shadow:12px 0 32px rgba(24,24,27,.22)}
+.lpv-dh{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.lpv-dn{display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:9px 10px;border-radius:10px;color:var(--body)!important}
+.lpv-dn svg{color:var(--mut);margin-top:1px}
+.lpv-dn.lpv-d1{align-items:center;padding:0 10px}
+.lpv-dn[aria-current]{background:var(--lav);box-shadow:inset -2px 0 0 var(--vi)}
+.lpv-dn[aria-current] b{color:var(--vtx)}
+.lpv-dl{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.lpv-dt{display:flex;align-items:center;gap:8px}
+.lpv-dt b{font-size:14.5px;font-weight:600;color:var(--ink)}
+.lpv-dn.lpv-locked b{color:var(--mut)}
+.lpv-dl small{font-size:12px;color:var(--mut);line-height:1.35}
+.lpv-phl .siv-card{padding:14px}
+.lpv-phl h1{font-size:19px!important}
+.lpv-specside .lpv-tipr{left:36px;top:calc(100% + 4px)}
+.ihs-dl .ihs-be,.ihs-dl .ihs-pol{white-space:normal}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "LPV02", "options": ["LPV00", "LPV01", "LPV02", "LPV18", "LPV03", "LPV04", "LPV05", "LPV06", "LPV07", "LPV08", "LPV09", "LPV10", "LPV11", "LPV12", "LPV13", "LPV14", "LPV15", "LPV16", "LPV17", "LPV18D", "LPV19", "LPV20"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'LPV02';
+    const J = a => a.join('');
+
+    /* ---------- icons and state glyphs (copied from siv.js / ihs.js, Investor Studio Home) ---------- */
+    const SV = (d, z, sw) => '<svg aria-hidden="true" width="' + (z || 16) + '" height="' + (z || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 1.8) + '" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none">' + d + '</svg>';
+    const I = {
+      bell: SV('<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>'),
+      err: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v6M12 16.5v.1"/>', 15, 2),
+      search: SV('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 14),
+      menu: SV('<path d="M4 7h16M4 12h16M4 17h16"/>', 20),
+      x: SV('<path d="M6 6l12 12M18 6L6 18"/>', 18),
+      back: SV('<path d="M15 6l-6 6 6 6"/>', 18),
+      left: SV('<path d="M15 6l-6 6 6 6"/>', 15),
+      right: SV('<path d="M9 6l6 6-6 6"/>', 15),
+      ref: SV('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>', 14),
+      chk: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 16, 2.2),
+      lock: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 16)
+    };
+    /* sidebar row icons (lucide shapes as on main: DoorOpen, FlaskConical, Handshake, Landmark, Coins, Shield, ShieldCheck, Network, Telescope) */
+    const NI = {
+      Studio: '<path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.6v16.2a1 1 0 0 1-1.2 1L5 20V5.6a2 2 0 0 1 1.5-1.9l4-1A2 2 0 0 1 13 4.6z"/>',
+      'Spin-Out Lab': '<path d="M10 2v7.5L4.5 19a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 9.5V2"/><path d="M8.5 2h7M7 16h10"/>',
+      Deals: '<path d="M11 17l2 2a1 1 0 1 0 3-3"/><path d="M14 14l2.5 2.5a1 1 0 1 0 3-3l-3.9-3.9a3 3 0 0 0-4.2 0l-.9.9a1 1 0 1 1-3-3l2.8-2.8a5.8 5.8 0 0 1 7.1-.9l.5.3a2 2 0 0 0 1.4.3L21 4"/><path d="M21 3l1 11h-2M3 3L2 14l6.5 6.5a1 1 0 1 0 3-3M3 4h8"/>',
+      AX: '<path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2l8 5H4z"/>',
+      MF: '<circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18M7 6h1v4M16.7 13.9l.7.7-2.8 2.8"/>',
+      Diligence: '<path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.7 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/>',
+      Trust: '<path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.7 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M9 12l2 2 4-4"/>',
+      Network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8"/>',
+      Research: '<path d="M10.1 4.4l3.3 7.8M2.7 10.3l3.3 7.8M16 2l2.6 6.3-6.6 2.8-2.6-6.3zM8 13l-4 9M14 22l-4-9"/>'
+    };
+    const G = {
+      ok: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 12, 2.6),
+      out: SV('<path d="M6 6l12 12M18 6L6 18"/>', 12, 2.6),
+      nr: SV('<circle cx="12" cy="12" r="8"/><path d="M8.5 12h7"/>', 12, 2),
+      un: SV('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 20L20 4"/>', 12, 2),
+      lk: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 12, 2),
+      pend: SV('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>', 12, 2)
+    };
+    const BE = t => '<span class="ihs-be" title="Annotation: backend required (not product copy)">◇ ' + t + '</span>';
+    const POL = t => '<span class="ihs-pol" title="Annotation: owner decision (not product copy)">⚑ ' + t + '</span>';
+    const btn = (t, k, ex) => '<button type="button" class="ihs-btn' + (k ? ' ' + k.split(' ').map(x => 'ihs-' + x).join(' ') : '') + '"' + (ex || '') + '>' + t + '</button>';
+    const lnk = t => '<a href="#" class="ihs-lnk">' + t + '</a>';
+    const pill = (t, k) => '<span class="ihs-pill' + (k ? ' ihs-' + k : '') + '">' + t + '</span>';
+    const mo = t => '<span class="ihs-mo">' + t + '</span>';
+    const SK = (w, h) => '<span class="ihs-sk" style="width:' + w + ';height:' + (h || 12) + 'px"></span>';
+    const LAB = t => '<span class="ihs-lab">' + t + '</span>';
+    const C = t => '<span class="ihs-code">' + t + '</span>';
+    /* annotations (not product copy) */
+    const STEP = (n, t) => '<span class="siv-step"><i>' + n + '</i>' + t + '</span>';
+    const STEPS = a => '<div style="display:flex;gap:8px;flex-wrap:wrap">' + J(a.map(x => STEP(x[0], x[1]))) + '</div>';
+    const WAS = t => '<span class="siv-was">Today on main · ' + t + '</span>';
+    const NEW = t => '<span class="siv-new">Proposed · ' + t + '</span>';
+    const BAD = t => '<span class="siv-bad">' + G.out + t + '</span>';
+    const GOOD = t => '<span class="siv-good">' + G.ok + t + '</span>';
+    const NOTE = t => '<div class="siv-backn" title="Annotation (not product copy)"><span>' + t + '</span></div>';
+    const BACKNOTE = t => '<div class="siv-backn" title="Annotation (not product copy)">' + I.back + '<span>' + t + '</span></div>';
+    const SR = t => '<span class="lpv-sr" title="Annotation: screen reader and live region (not product copy)">' + t + '</span>';
+
+    /* ---------- sample data: fictional, the same on every board (shared with SIV #8731 and RGR #8676) ---------- */
+    const AXF = 'Axal Fund I';
+    const GPF = '[Sato Ventures Fund I]';
+    const LPWS = '/spinout-lab/investor-workspace';
+    const FIX = {
+      vis: ['Visitor', '[Lena Sato] · Investor Professional · no LP record, no application · runs no fund'],
+      app: ['Applicant', '[Lena Sato] · Investor Professional · LP application in review · runs no fund'],
+      lp: ['LP only', '[Lena Sato] · Investor Professional · LP in ' + AXF + ', $250,000 committed · runs no fund'],
+      gp: ['GP only', '[Lena Sato] · Investor Institutional · runs ' + GPF + ' ([14] LPs) · no LP record in Axal'],
+      dual: ['LP and GP', '[Lena Sato] · Investor Institutional · LP in ' + AXF + ', $250,000 committed · runs ' + GPF + ' ([14] LPs)']
+    };
+    const FXB = k => '<div class="siv-fx" title="Annotation: fixture (not product copy)"><b>Fixture · ' + FIX[k][0] + '</b><span>' + FIX[k][1] + '</span></div>';
+
+    /* ---------- the two rows: label, tag, sub-line (tooltip on desktop, second line in the phone menu) ---------- */
+    const TAGS = {
+      lp: ['lpv-t-ok', G.ok, 'LP'],
+      app: ['lpv-t-pend', G.pend, 'Applied'],
+      gp: ['lpv-t-ok', G.ok, 'GP'],
+      lock: ['lpv-t-lock', G.lk, 'Institutional'],
+      un: ['lpv-t-un', G.un, 'Unavailable'],
+      none: null
+    };
+    const tag = k => TAGS[k] ? '<span class="lpv-tag ' + TAGS[k][0] + '">' + TAGS[k][1] + TAGS[k][2] + '</span>' : '';
+    const SUBA = {
+      vis: 'Axal’s own fund. You are not an LP in it.',
+      app: 'Axal’s own fund. Your application is in review.',
+      lp: 'Your LP seat in ' + AXF + '.',
+      un: 'Your standing could not be read.',
+      load: 'Axal’s own fund.',
+      pv: 'Axal’s own fund. Standing withheld in preview.'
+    };
+    const SUBB = {
+      gp: GPF + '. You run it for your LPs.',
+      lock: 'Run your own fund. Institutional add-on.',
+      none: 'Run your own fund. No fund recorded yet.',
+      un: 'Your fund records could not be read.',
+      load: 'Run your own fund.',
+      pv: 'Run your own fund. Records withheld in preview.'
+    };
+    /* fixture → [row A tag key, A sub key, row B tag key, B sub key] */
+    const ROWS = {
+      vis: ['none', 'vis', 'lock', 'lock'],
+      app: ['app', 'app', 'lock', 'lock'],
+      lp: ['lp', 'lp', 'lock', 'lock'],
+      gp: ['none', 'vis', 'gp', 'gp'],
+      dual: ['lp', 'lp', 'gp', 'gp'],
+      nofund: ['none', 'vis', 'none', 'none'],
+      un: ['un', 'un', 'un', 'un'],
+      load: ['none', 'load', 'none', 'load'],
+      pv: ['none', 'pv', 'none', 'pv']
+    };
+
+    /* ---------- shell (#3704: union sidebar, company switcher top-left, Portfolio in the Account menu) ---------- */
+    const NAVP = ['Studio', 'Spin-Out Lab', 'Deals', 'AX', 'MF', 'Diligence', '|', 'Trust', 'Network', 'Research'];
+    const NAVW = { AX: 'Axal VC Fund', MF: 'Fund' };
+    const SHORT = { Studio: 'Studio', 'Spin-Out Lab': 'Lab', Deals: 'Deals', AX: 'Axal LP', MF: 'My fund', Diligence: 'Diligence', Trust: 'Trust', Network: 'Network', Research: 'Research' };
+    const ABBR = { Studio: 'S', 'Spin-Out Lab': 'SOL', Deals: 'D', AX: 'AVF', MF: 'F', Diligence: 'D', Trust: 'T', Network: 'N', Research: 'R' };
+    const ic = (k, z) => SV(NI[k], z || 16);
+    const sw = '<button type="button" class="ihs-sw" aria-haspopup="listbox" aria-label="Switch company"><span class="ihs-sq">SV</span><b>[Sato Ventures]</b><span aria-hidden="true" class="ihs-mu">▾</span></button>';
+    /* o: {fx, cur, was, tip:'AX'|'MF', focus, pv} */
+    const side = o => {
+      o = o || {};
+      const r = ROWS[o.fx || 'dual'];
+      const rows = J(NAVP.map(k => {
+        if (k === '|') return '<div class="ihs-sep"></div>';
+        const cur = o.cur === k ? ' aria-current="page"' : '';
+        const foc = o.focus === k ? ' lpv-foc' : '';
+        if (o.was) {
+          const lockedF = k === 'MF' && (r[2] === 'lock');
+          const label = NAVW[k] || k;
+          return '<a href="#" class="lpv-nav' + (lockedF ? ' lpv-locked' : '') + foc + '"' + cur + '>' + ic(k) + '<span class="lpv-lb">' + label + '</span>' + (lockedF ? '<span class="lpv-lki">' + G.lk + '</span>' : '') + '</a>';
+        }
+        if (k === 'AX' || k === 'MF') {
+          const tk = k === 'AX' ? r[0] : r[2];
+          const sub = k === 'AX' ? SUBA[r[1]] : SUBB[r[3]];
+          const label = k === 'AX' ? 'Axal VC Fund' : 'My fund';
+          const locked = tk === 'lock';
+          const tipB = o.tip === k ? '<span class="ihs-tip lpv-tipr" role="tooltip" id="tip-' + k + '"><b>' + label + '</b><br>' + sub + '</span>' : '';
+          return '<a href="#" class="lpv-nav' + (locked ? ' lpv-locked' : '') + foc + '"' + cur + ' aria-describedby="sub-' + k + '">' + ic(k) + '<span class="lpv-lb">' + label + '</span>' + tag(tk) + tipB + '</a>';
+        }
+        return '<a href="#" class="lpv-nav' + foc + '"' + cur + '>' + ic(k) + '<span class="lpv-lb">' + k + '</span></a>';
+      }));
+      return '<nav class="ihs-side lpv-side" aria-label="Primary navigation">' + sw + '<div class="lpv-srch">' + I.search + '<span>Search…</span><button type="button" class="lpv-col" aria-label="Collapse sidebar">' + I.left + '</button></div>' + rows + '</nav>';
+    };
+    /* collapsed rail, 64 px: icon and the row's short word (proposed) or main's initials (was) */
+    const rail = o => {
+      o = o || {};
+      const r = ROWS[o.fx || 'dual'];
+      const rows = J(NAVP.map(k => {
+        if (k === '|') return '<div class="ihs-sep" style="width:36px"></div>';
+        const cur = o.cur === k ? ' aria-current="page"' : '';
+        const foc = o.focus === k ? ' lpv-foc' : '';
+        let badge = '';
+        if (!o.was && (k === 'AX' || k === 'MF')) {
+          const tk = k === 'AX' ? r[0] : r[2];
+          if (TAGS[tk]) badge = '<span class="lpv-cb ' + TAGS[tk][0] + '">' + TAGS[tk][1] + '</span>';
+        }
+        if (o.was && k === 'MF' && r[2] === 'lock') badge = '<span class="lpv-cb lpv-t-lock">' + G.lk + '</span>';
+        const tip = o.tip === k ? '<span class="ihs-tip lpv-tipc" role="tooltip">' + (k === 'AX' ? '<b>Axal VC Fund' + (TAGS[r[0]] ? ' · ' + TAGS[r[0]][2] : '') + '</b><br>' + SUBA[r[1]] : '<b>My fund' + (TAGS[r[2]] ? ' · ' + TAGS[r[2]][2] : '') + '</b><br>' + SUBB[r[3]]) + '</span>' : '';
+        return '<a href="#" class="lpv-cn' + foc + '"' + cur + (o.was ? ' title="' + (NAVW[k] || k) + '"' : '') + '>' + ic(k, 18) + '<span>' + (o.was ? ABBR[k] : SHORT[k]) + '</span>' + badge + tip + '</a>';
+      }));
+      return '<nav class="ihs-side ihs-nar lpv-rail" aria-label="Primary navigation"><span class="ihs-sq" style="margin-bottom:6px">SV</span><button type="button" class="lpv-col" aria-label="Expand sidebar">' + I.right + '</button>' + rows + '</nav>';
+    };
+    const top = o => '<header class="ihs-top"><div class="ihs-brand"><span class="ihs-mark" aria-hidden="true">A</span>Axal VC</div><div class="ihs-search">' + I.search + 'Search Axal VC</div><div style="flex:1"></div>' + (o.pv ? '<span class="ihs-hq">HQ</span>' : '') + '<button type="button" class="ihs-ib" aria-label="Notifications, [2] unread">' + I.bell + '</button><span role="button" tabindex="0" class="ihs-avt" aria-haspopup="menu" aria-label="Account menu: Portfolio, Companies, Licences, Usage, Billing">' + (o.pv ? 'HQ' : 'LS') + '</span></header>';
+    const page = (body, o) => {
+      o = o || {};
+      return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:1440px"><div class="ihs-shell">' + top(o) + '<div class="ihs-row">' + (o.collapsed ? rail(o) : side(o)) + '<main class="ihs-main">' + body + '</main>' + (o.rail ? RAIL : '') + '</div><footer class="ihs-foot"><span>© 2026 Axal VC</span><a href="#" class="ihs-mu">Terms</a><a href="#" class="ihs-mu">Privacy</a><a href="#" class="ihs-mu">Status</a></footer></div></div>';
+    };
+    const crop = (inner, w, o) => { o = o || {}; return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:' + w + 'px"><div class="ihs-crop">' + inner + '</div></div>'; };
+    /* Eadwyn, the one shared rail (#5130), as Run my fund draws it on main (WorkerRail, stance Manual) */
+    const RAIL = '<aside class="lpv-ead" aria-label="Eadwyn"><div style="display:flex;align-items:center;gap:8px"><span class="ihs-sq" style="width:26px;height:26px">E</span><b>Eadwyn</b><span class="ihs-st" style="margin-left:auto">Manual</span></div><p class="ihs-sub">Tables, schedules and source records work without AI assistance. No letters, packs or models are drafted here.</p><span class="ihs-lab">Coverage</span><p class="ihs-sub">[1] fund record readable</p>' + btn(I.ref + 'Refresh records', 'sm') + '</aside>';
+
+    /* ---------- destination A: Axal VC Fund (/spinout-lab/investor-workspace) ---------- */
+    const CRUMB = (a, b) => '<nav class="lpv-crumb" aria-label="Breadcrumb"><a href="#">' + a + '</a><span aria-hidden="true">›</span><b aria-current="page">' + b + '</b></nav>';
+    const PILLS = '<div style="display:flex;align-items:center;gap:8px">' + pill('LP records are scoped to you') + pill('Investor &amp; LP', 'lv') + '<button type="button" class="ihs-ib" aria-label="Refresh workspace" style="width:32px;height:32px">' + I.ref + '</button></div>';
+    const OWNA = {
+      lp: 'Axal VC runs this fund. This page is your relationship with it as an LP: your standing, commitment, documents and reports.',
+      vis: 'Axal VC runs this fund. You are not an LP in it. Fund and terms are open to you, and you can apply.',
+      app: 'Axal VC runs this fund. Your application to become an LP is in review.',
+      un: 'Axal VC runs this fund. This page is your relationship with it as an LP.'
+    };
+    const XA = '<p class="lpv-x">The fund you run for your own LPs is in ' + lnk('My fund ›') + '</p>';
+    const XB = '<p class="lpv-x">Your own LP seat in Axal VC is in ' + lnk('Axal VC Fund ›') + '</p>';
+    const SECN = (cur, pos) => '<nav class="siv-secn" aria-label="Fund workspace sections">' + J([['Overview', 1], ['My commitment', pos], ['Documents', pos], ['Reports', pos], ['Fund and terms', 1], ['Apply and onboarding', 1]].filter(x => x[1]).map(x => '<a href="#"' + (x[0] === cur ? ' aria-current="location"' : '') + '>' + x[0] + '</a>')) + '</nav>';
+    const GATE = s => s === 'lp' ? '<div class="siv-gate">' + I.chk + '<div><b>You are a committed LP. (' + mo('$250K') + ')</b><span>Reporting, notices and your documents are open to you.</span></div></div>'
+      : s === 'app' ? '<div class="siv-gate siv-gray">' + G.pend + '<div><b>Your application is in review.</b><span>Fund and terms stay open to you while Axal VC reviews it.</span></div></div>'
+      : '<div class="siv-gate siv-gray">' + I.lock + '<div><b>You are viewing by invitation.</b><span>Fund and terms are open to you. Apply below to participate.</span></div></div>';
+    const AHEAD = (s, sec, o) => {
+      o = o || {};
+      return '<header class="siv-dh"><div style="display:flex;flex-direction:column;gap:4px;max-width:760px">' + CRUMB('Axal VC Fund', sec) + '<h1' + (o.focus ? ' class="lpv-h1f" tabindex="-1"' : '') + '>Axal VC Fund</h1><p class="ihs-purp" style="margin-top:0">' + OWNA[s] + '</p></div>' + PILLS + '</header>' + (o.x ? XA : '');
+    };
+    const MYC = '<section class="siv-sec"><div class="siv-sech"><h2 id="my-commitment" tabindex="-1">My commitment</h2><span class="ihs-sub">Your own rows on each fund’s register</span></div><div class="siv-card"><div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px">' + AXF + '</b><span class="ihs-mo ihs-mu" style="font-size:11.5px">LPA signed Tue 3 Feb 2026</span></div><div class="ihs-bar" role="img" aria-label="Called $100,000 of $250,000 committed; $100,000 received"><i style="width:40%"></i><b style="width:40%"></b></div><div class="siv-kv4">' + J([['Committed', '$250,000'], ['Called', '$100,000'], ['Received', '$100,000'], ['Due now', '$0'], ['Uncalled', '$150,000'], ['TVPI', '1.12×'], ['DPI', '0.00×']].map(k => '<div><span>' + k[0] + '</span><b>' + k[1] + '</b></div>')) + '</div></div></section>';
+    const TERMS = '<section class="siv-sec"><div class="siv-sech"><h2 id="fund" tabindex="-1">Fund and terms</h2><span class="ihs-sub">The fund brief, open to every investor</span></div><div class="siv-hero"><span class="siv-heyb">[Raising] · Axal VC Spin-Out Fund I · [Pre-seed] · Vintage [2026]</span><b>[Companies formed in a 28-day lab, backed from day one.]</b><p>[The thesis line as the fund brief prints it.]</p></div><div class="siv-terms">' + J([['Target size', '[$25M]'], ['Minimum commitment', '[$100K]'], ['Management fee', '[2.0%]'], ['Carry', '[20%]']].map(k => '<div><span>' + k[0] + '</span><b>' + k[1] + '</b></div>')) + '</div></section>';
+    const UNA = '<div class="siv-card"><p class="ihs-unr" role="status">' + I.err + '<span><b>LP position unavailable.</b> Your LP position could not be read. This is not a claim that you hold no commitment.</span></p><div>' + btn(I.ref + 'Retry', 'sm') + '</div></div>';
+    const APAGE = (s, o) => {
+      o = o || {};
+      const sec = o.sec || (s === 'lp' ? 'My commitment' : 'Fund and terms');
+      const pos = s === 'lp' || s === 'un';
+      return AHEAD(s, sec, o) + SECN(sec, pos) + (s === 'un' ? UNA : GATE(s) + (sec === 'My commitment' ? MYC : TERMS));
+    };
+
+    /* ---------- destination B: My fund (/funds) ---------- */
+    const ZROW = cur => '<nav class="lpv-zone" aria-label="My fund sections">' + J(['Overview', 'LPs', 'Calls', 'Accounting', 'Reporting'].map(z => '<a href="#"' + (z === cur ? ' aria-current="page"' : '') + '>' + z + '</a>')) + '</nav>';
+    const BHEAD = (o) => {
+      o = o || {};
+      return '<header class="siv-dh"><div style="display:flex;flex-direction:column;gap:4px;max-width:760px">' + CRUMB('My fund', o.zone || 'Overview') + '<h1' + (o.focus ? ' class="lpv-h1f" tabindex="-1"' : '') + '>' + (o.h1 || 'My fund') + '</h1><p class="ihs-purp" style="margin-top:0">' + (o.intro || 'The fund you run as GP of record, for your own LPs: the LP registry, calls, accounting and reports.') + '</p></div></header>' + (o.x ? XB : '');
+    };
+    const FSEL = '<div style="display:flex;align-items:center;gap:10px"><span class="ihs-lab">Fund record</span><span class="siv-sel">' + GPF + ' ▾</span>' + pill('Active') + '</div>';
+    const TILES = '<div class="lpv-tiles">' + J([['Committed', '[$24,000,000.00]'], ['Called', '[$6,500,000.00]'], ['Collected', '[$5,401,666.68]'], ['LPs', '[14]']].map(k => '<div><span>' + k[0] + '</span><b>' + k[1] + '</b></div>')) + '</div><p class="ihs-sub">As at Fri 27 Nov 2026, each figure from its record. The overview body is unchanged; only the header, crumb and row label move.</p>';
+    const BPAGE = o => BHEAD(o) + ZROW(o && o.zone === 'LPs' ? 'LPs' : 'Overview') + FSEL + TILES;
+    const LPREG = '<table class="siv-tbl"><thead><tr><th>LP</th><th>Type</th><th>Commitment</th><th>KYC</th><th>LPA</th></tr></thead><tbody>' + J([['[LP · Harbor Family Office]', 'Family office', '[$5,000,000.00]', 'Verified', 'Signed'], ['[LP · Juniper Trust]', 'Trust', '[$3,000,000.00]', 'Verified', 'Signed'], ['[LP · Oduya Holdings]', 'Corporate', '[$2,500,000.00]', 'In review', 'Sent']].map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td><td class="ihs-mo">' + r[2] + '</td><td>' + r[3] + '</td><td>' + r[4] + '</td></tr>')) + '</tbody></table><p class="ihs-sub">3 of [14] LPs shown. These are your LPs’ records, not your own.</p>';
+    const LOCKB = (o) => {
+      o = o || {};
+      return '<div class="lpv-lock"><div style="display:flex;flex-direction:column;gap:4px">' + CRUMB('My fund', 'Overview') + '</div><section class="siv-card" style="gap:12px;max-width:760px"><div style="display:flex;gap:12px;align-items:flex-start"><span class="ihs-sq">' + I.lock + '</span><div style="display:flex;flex-direction:column;gap:3px"><span class="ihs-ey">Locked · Institutional add-on</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em"' + (o.focus ? ' class="lpv-h1f" tabindex="-1"' : '') + '>My fund is part of the Institutional add-on</h1></div></div><p class="ihs-sub" style="font-size:13px;color:var(--body)">My fund runs a fund you manage as GP, for your own LPs. Your account is on a lower tier, so it is locked. Your investor tools and any LP seat you hold work as before.</p>' + (o.short ? '' : '<b style="font-size:13px">The Institutional add-on includes</b><ul class="lpv-inc">' + J([['Overview', 'Committed, called, collected and deployed for each fund you run, each figure from its record.'], ['LPs', 'The LP registry: each LP’s commitment, KYC state, documents and comms log.'], ['Calls', 'Capital calls split and previewed before they are issued, append-only receipts and the wire trail.'], ['Accounting', 'Capital accounts, fees and expenses for one fund.'], ['Reporting', 'Reporting periods: start one, edit its draft and read what was issued.']].map(x => '<li><b>' + x[0] + '</b><span>' + x[1] + '</span></li>')) + '</ul>') + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' + btn('Talk to Axal', 'p') + '<span class="ihs-sub">Opens the contact form for the Axal team. Nothing changes on your account until they reply.</span></div>' + (o.lp ? '<p class="lpv-x" style="border-top:1px solid var(--line);padding-top:10px">Your own LP seat in Axal VC is in ' + lnk('Axal VC Fund ›') + '</p>' : '') + '</section></div>';
+    };
+    const UNB = '<div class="siv-card"><p class="ihs-unr" role="status">' + I.err + '<span><b>Your fund records could not be read.</b> This is not a claim that you run no fund. Nothing is created until they read.</span></p><div>' + btn(I.ref + 'Retry', 'sm') + '</div></div>';
+    const NOFUND = '<div class="siv-card"><b style="font-size:14px">No fund recorded yet</b><p class="ihs-sub" style="font-size:13px;color:var(--body)">My fund is where a GP runs their own fund for their LPs. You have the add-on and no fund record. Create one to start the LP registry.</p><div>' + btn('Create a fund', 'p') + '</div><p class="ihs-sub">Your own LP seat, if you hold one, is never here: it is in Axal VC Fund.</p></div>';
+
+    /* ---------- phone 390 ---------- */
+    const PHT = t => '<div class="ihs-pht"><button type="button" class="ihs-t44" aria-label="Menu" aria-expanded="false">' + I.menu + '</button><span class="ihs-mark" aria-hidden="true">A</span><b style="font-size:16px;flex:1">' + t + '</b><button type="button" class="ihs-t44" aria-label="Notifications, [2] unread">' + I.bell + '</button></div>';
+    const PBACK = t => '<a href="#" class="siv-pback">' + I.back + t + '</a>';
+    const phone = (t, inner, o) => { o = o || {}; return '<div class="ihs-cv' + (o.dark ? ' ihs-dark' : '') + '" style="width:390px"><div class="ihs-ph">' + PHT(t) + (o.back ? PBACK(o.back) : '') + '<div class="ihs-phb">' + inner + '</div>' + (o.over || '') + '</div></div>'; };
+    /* the menu drawer: SidebarNav in its phone sheet (onClose → Close menu), with each row's sub-line drawn under the label */
+    const drawer = (fx, o) => {
+      o = o || {};
+      const r = ROWS[fx];
+      const rows = J(NAVP.map(k => {
+        if (k === '|') return '<div class="ihs-sep"></div>';
+        const cur = o.cur === k ? ' aria-current="page"' : '';
+        if (k === 'AX' || k === 'MF') {
+          const tk = k === 'AX' ? r[0] : r[2];
+          const sub = k === 'AX' ? SUBA[r[1]] : SUBB[r[3]];
+          return '<a href="#" class="lpv-dn' + (tk === 'lock' ? ' lpv-locked' : '') + (o.focus === k ? ' lpv-foc' : '') + '"' + cur + '>' + ic(k, 18) + '<span class="lpv-dl"><span class="lpv-dt"><b>' + (k === 'AX' ? 'Axal VC Fund' : 'My fund') + '</b>' + tag(tk) + '</span><small id="sub-' + k + '">' + sub + '</small></span></a>';
+        }
+        return '<a href="#" class="lpv-dn lpv-d1"' + cur + '>' + ic(k, 18) + '<span class="lpv-dl"><span class="lpv-dt"><b>' + k + '</b></span></span></a>';
+      }));
+      return '<div class="ihs-scrim"></div><div class="lpv-drawer" role="dialog" aria-modal="true" aria-label="Menu"><div class="lpv-dh">' + sw.replace('class="ihs-sw"', 'class="ihs-sw" style="margin:0;flex:1"') + '<button type="button" class="ihs-t44" aria-label="Close menu">' + I.x + '</button></div><div class="lpv-srch" style="margin:0 0 6px">' + I.search + '<span>Search…</span></div>' + rows + '</div>';
+    };
+    const PAH = (s, sec) => '<div style="display:flex;flex-direction:column;gap:4px">' + CRUMB('Axal VC Fund', sec) + '<h1 class="lpv-h1p">Axal VC Fund</h1><p class="ihs-purp" style="font-size:12.5px;margin-top:0">' + OWNA[s] + '</p></div>';
+    const PBH = (zone) => '<div style="display:flex;flex-direction:column;gap:4px">' + CRUMB('My fund', zone || 'Overview') + '<h1 class="lpv-h1p">My fund</h1><p class="ihs-purp" style="font-size:12.5px;margin-top:0">The fund you run as GP of record, for your own LPs.</p></div>';
+    const PSECN = (cur, pos) => '<nav class="siv-secn siv-scroll" aria-label="Fund workspace sections">' + J([['Overview', 1], ['My commitment', pos], ['Documents', pos], ['Fund and terms', 1]].filter(x => x[1]).map(x => '<a href="#"' + (x[0] === cur ? ' aria-current="location"' : '') + '>' + x[0] + '</a>')) + '</nav>';
+    const PZ = cur => '<nav class="lpv-zone lpv-zs" aria-label="My fund sections">' + J(['Overview', 'LPs', 'Calls', 'Accounting', 'Reporting'].map(z => '<a href="#"' + (z === cur ? ' aria-current="page"' : '') + '>' + z + '</a>')) + '</nav>';
+    const pFund = '<div class="siv-card" style="padding:12px;gap:8px"><div style="display:flex;align-items:center;justify-content:space-between"><b>' + AXF + '</b><span class="ihs-mo ihs-mu" style="font-size:11px">LPA signed Tue 3 Feb 2026</span></div><div class="ihs-bar" role="img" aria-label="Called $100,000 of $250,000 committed"><i style="width:40%"></i><b style="width:40%"></b></div>' + J([['Committed', '$250,000'], ['Called', '$100,000'], ['Received', '$100,000'], ['Due now', '$0'], ['Uncalled', '$150,000']].map(k => '<div class="ihs-kv" style="padding:3px 0;border:none"><span>' + k[0] + '</span><span>' + k[1] + '</span></div>')) + '</div>';
+    const pTiles = '<div class="lpv-tiles lpv-t2">' + J([['Committed', '[$24,000,000.00]'], ['Called', '[$6,500,000.00]'], ['Collected', '[$5,401,666.68]'], ['LPs', '[14]']].map(k => '<div><span>' + k[0] + '</span><b>' + k[1] + '</b></div>')) + '</div>';
+
+    /* side-by-side sidebar specimen with caption */
+    const SPEC = (cap, inner, w) => '<div class="lpv-spec" style="width:' + (w || 260) + 'px"><span class="ihs-lab">' + cap + '</span>' + inner + '</div>';
+    const SNIP = (cap, inner) => '<div style="display:flex;flex-direction:column;gap:8px;min-width:0">' + LAB(cap) + '<div class="siv-snip">' + inner + '</div></div>';
+    const ol = a => '<ol class="siv-ol">' + J(a.map((x, i) => '<li><i>' + (i + 1) + '</i><span>' + x + '</span></li>')) + '</ol>';
+    const UL = a => '<ul>' + J(a.map(x => '<li>' + x + '</li>')) + '</ul>';
+
+    /* ---------- boards ---------- */
+    let html;
+    if (B === 'LPV00') {
+      const row = (fx, a, b, ad, bd) => '<tr><td><b>' + fx + '</b></td><td>' + a + '</td><td>' + b + '</td><td>' + ad + '</td><td>' + bd + '</td></tr>';
+      const route = (k, steps) => '<div class="siv-route"><b>' + k + '</b><div>' + J(steps.map((s, i) => STEP(i + 1, s))) + '</div></div>';
+      const T = k => TAGS[k] ? ' · tag <b>' + TAGS[k][2] + '</b>' : ' · no tag';
+      html = '<div class="ihs-cv" style="width:1200px"><div class="ihs-doc"><div><span class="ihs-ey">Investor · navigation · #8683 · role audit 25 Nov</span><h2 style="font-size:22px;margin-top:6px">Two rows, two owners: Axal’s fund where you are an LP, and the fund you run</h2><p class="ihs-sub" style="margin-top:6px">Wayfinding and entry copy only. Routes, guards and the Institutional tier are unchanged. Checked on main ee23155ff6, Fri 27 Nov 2026. [Lena Sato], [Sato Ventures Fund I] and every bracketed figure are fictional. The LP sample is the one in Studio Home Investor (SIV, #8731).</p></div>'
+        + '<h3>Labels today and proposed (⚑ Q1, option A drawn)</h3><table class="siv-tbl"><thead><tr><th>Row</th><th>Today on main</th><th>Proposed label</th><th>Sub-line (tooltip on desktop, second line in the phone menu)</th><th>Heading it opens</th></tr></thead><tbody>'
+        + '<tr><td><b>A · ' + C(LPWS) + '</b></td><td>Axal VC Fund · collapsed “AVF”</td><td><b>Axal VC Fund</b> + standing tag · collapsed “Axal LP”</td><td>' + SUBA.lp + ' / ' + SUBA.vis + ' / ' + SUBA.app + '</td><td>Axal VC Fund, with “Axal VC runs this fund…” and a crumb</td></tr>'
+        + '<tr><td><b>B · ' + C('/funds') + '</b></td><td>Fund · collapsed “F” · tagline “Run my fund”</td><td><b>My fund</b> + GP or lock tag · collapsed “My fund”</td><td>' + SUBB.gp + ' / ' + SUBB.lock + ' / ' + SUBB.none + '</td><td>My fund (today “Run my fund”); zones crumb “My fund ‹ LPs”</td></tr>'
+        + '</tbody></table>'
+        + '<h3>What each relationship sees before opening either row</h3><table class="siv-tbl"><thead><tr><th>Relationship</th><th>Row A</th><th>Row B</th><th>A opens</th><th>B opens</th></tr></thead><tbody>'
+        + row('Visitor (no LP record, no application)', 'Axal VC Fund' + T('none'), 'My fund' + T('lock'), 'Axal VC Fund › Fund and terms, “You are not an LP in it”', 'My fund is part of the Institutional add-on')
+        + row('Applicant (application pending or approved, no holding)', 'Axal VC Fund' + T('app'), 'My fund' + T('lock'), 'Axal VC Fund › Fund and terms, “in review”', 'Locked, as above')
+        + row('LP only (Professional)', 'Axal VC Fund' + T('lp'), 'My fund' + T('lock'), 'Axal VC Fund › My commitment', 'Locked, with a line back to Axal VC Fund')
+        + row('GP only (Institutional, no Axal LP record)', 'Axal VC Fund' + T('none'), 'My fund' + T('gp'), 'Axal VC Fund › Fund and terms', 'My fund › Overview, ' + GPF)
+        + row('LP and GP (Institutional)', 'Axal VC Fund' + T('lp'), 'My fund' + T('gp'), 'Axal VC Fund, line to My fund', 'My fund, line to Axal VC Fund')
+        + row('Institutional, no fund record', 'Axal VC Fund' + T('none'), 'My fund · no tag', 'Fund and terms', 'My fund · No fund recorded yet · Create a fund')
+        + row('A read failed', 'Axal VC Fund' + T('un'), 'My fund' + T('un'), 'LP position unavailable · Retry', 'Your fund records could not be read · Retry')
+        + row('Administrator preview', 'Axal VC Fund · no tag', 'My fund · no tag', 'as main (admin preview switcher)', 'as main (admin, or Fund Admin redirect)')
+        + '</tbody></table>'
+        + '<h3>Routes (numbered as on the boards)</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        + route('R1 · LP only → own LP seat (LPV04, LPV12, LPV14)', ['Sidebar or menu: Axal VC Fund · LP, sub-line “Your LP seat in Axal Fund I”', 'Axal VC Fund › My commitment, h1 focused', 'Back → the page you came from'])
+        + route('R2 · LP only → My fund (LPV05, LPV16)', ['My fund · Institutional (locked) and its sub-line', 'My fund is part of the Institutional add-on · Talk to Axal', 'Line back: Axal VC Fund ›'])
+        + route('R3 · GP only → own fund (LPV06, LPV15)', ['My fund · GP, sub-line ' + GPF, 'My fund › Overview, h1 focused', 'Back → previous page'])
+        + route('R4 · GP only → Axal VC Fund (LPV07)', ['Axal VC Fund, no tag, “You are not an LP in it”', 'Axal VC Fund › Fund and terms', 'Back'])
+        + route('R5 · LP and GP (LPV08, LPV09, LPV12)', ['Both tags visible: LP and GP', 'Axal VC Fund › My commitment; its line opens My fund', 'My fund › LPs: crumb “My fund ‹ LPs”, h1 LP registry', 'Back ×2 → My fund → Axal VC Fund'])
+        + route('R6 · collapsed and unavailable (LPV10, LPV11, LPV17)', ['Collapsed: “Axal LP” and “My fund”, tag as a corner glyph, tooltip on focus', 'A read fails: tag Unavailable, never a lower standing', 'Destination says Unavailable with Retry'])
+        + '</div></div></div>';
+    }
+    else if (B === 'LPV01') {
+      html = crop(WAS('ee23155ff6 · source-confirmed') + '<div style="display:grid;grid-template-columns:260px 100px minmax(0,1fr);gap:20px;align-items:start">'
+        + SPEC('Sidebar · LP and GP', side({ fx: 'dual', was: true }).replace('ihs-side lpv-side', 'ihs-side lpv-side lpv-specside'), 260)
+        + SPEC('Collapsed', rail({ fx: 'dual', was: true }).replace('lpv-rail', 'lpv-rail lpv-specside'), 100)
+        + '<div style="display:flex;flex-direction:column;gap:14px;min-width:0">'
+        + SNIP('Axal VC Fund → ' + LPWS, '<header class="siv-dh"><div><h1>Axal VC Fund</h1><p class="ihs-purp">Your LP relationship, reporting access, and participation standing with Axal VC.</p></div>' + PILLS + '</header>' + SECN('Overview', true) + BAD('No crumb. Nothing on the row says whether you are an LP, an applicant or neither'))
+        + SNIP('Fund → /funds (Institutional)', '<header class="siv-dh"><div><h1>Run my fund</h1><p class="ihs-purp">The GP back office. Every movement is traceable to the fund schedule and LP record that produced it.</p></div></header>' + FSEL + BAD('Row says “Fund”, heading says “Run my fund”: the label names neither whose fund nor the job'))
+        + SNIP('Fund › LPs → /funds/lps', '<div class="lpv-crumb" style="gap:6px">Fund <span>‹</span> <b>LPs</b></div><h1 style="font-size:22px;font-weight:800">LP registry</h1><p class="ihs-purp" style="margin-top:0">Registry, KYC state, documents and comms log.</p>' + BAD('“LP registry” beside an LP’s own “Axal VC Fund”: whose LPs is never said'))
+        + SNIP('Fund below Institutional → /funds', '<div class="lpv-crumb" style="gap:6px">Fund <span>›</span> <b>Overview</b></div><h1 style="font-size:22px;font-weight:800">Overview is part of the Institutional add-on</h1>' + BAD('The sidebar row opens the paywall modal instead (SidebarNav.jsx locked button); the route draws this page'))
+        + '</div></div>'
+        + '<div class="lpv-facts">' + J([
+          ['sidebarConfig.js:566–567', 'Axal VC Fund (Landmark) and Fund (Coins, requiredInvestorTier institutional), adjacent'],
+          ['SidebarNav.jsx:446', 'Collapsed labels are initials: “AVF” and “F”'],
+          ['mobileTabs.js', 'No investor tab bar: the phone Menu opens this same sidebar as a sheet, same labels'],
+          ['InvestorWorkspacePage.jsx:23', 'h1 Axal VC Fund, no crumb; InvestorFundLanding.jsx:235 h1 Run my fund'],
+          ['ZoneHeader.jsx', 'Zone crumb is the bucket label: “Fund ‹ LPs”'],
+          ['sidebarConfig.js withDiligenceRow', 'Diligence sits after the licence rows, before Trust; Deals stays third']
+        ].map(x => '<div><span class="ihs-code">' + x[0] + '</span><span>' + x[1] + '</span></div>')) + '</div>', 1200);
+    }
+    else if (B === 'LPV02' || B === 'LPV18') {
+      const dark = B === 'LPV18';
+      const fxs = [['vis', 'Visitor'], ['app', 'Applicant'], ['lp', 'LP only'], ['gp', 'GP only'], ['dual', 'LP and GP'], ['nofund', 'Institutional, no fund'], ['un', 'A read failed'], ['load', 'Loading (no tag yet)']];
+      const two = fx => {
+        const r = ROWS[fx];
+        return '<div class="lpv-pair">' + ['AX', 'MF'].map(k => {
+          const tk = k === 'AX' ? r[0] : r[2];
+          const sub = k === 'AX' ? SUBA[r[1]] : SUBB[r[3]];
+          return '<div class="lpv-nav' + (tk === 'lock' ? ' lpv-locked' : '') + '">' + ic(k) + '<span class="lpv-lb">' + (k === 'AX' ? 'Axal VC Fund' : 'My fund') + '</span>' + tag(tk) + '</div><span class="lpv-subl">' + sub + '</span>';
+        }).join('') + '</div>';
+      };
+      html = crop(NEW('the two rows for every relationship · ⚑ Q1 option A drawn') + '<div class="lpv-grid4">' + J(fxs.map(f => '<div class="lpv-cell"><span class="ihs-lab">' + f[1] + '</span>' + two(f[0]) + '</div>')) + '</div>'
+        + (dark ? '' : '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">'
+          + SNIP('The tag is a word and a glyph, never colour alone (D5129)', '<div style="display:flex;gap:8px;flex-wrap:wrap">' + tag('lp') + tag('app') + tag('gp') + tag('lock') + tag('un') + '</div><p class="ihs-sub">Visitor and loading draw no tag: no claim is made. A failed read says Unavailable and never falls back to a lower standing. Each tag is read out after the label: “Axal VC Fund, LP. Your LP seat in Axal Fund I.”</p>')
+          + SNIP('Where the tags come from (reads that exist)', '<p class="ihs-sub" style="color:var(--body)">LP and Applied: ' + C('lpAccessState()') + ' over ' + C('GET /api/funds/lp-portal') + ' and the LP application read, already used by the Axal VC Fund page. GP: ' + C('GET /api/funds/analytics') + ' items, already used by Run my fund. Lock: ' + C('hasInvestorTier(user, ‘institutional’)') + ', as today.</p>' + BE('#8683 · standing read · proposed'))
+          + SNIP('⚑ Q1 · the label pair', '<p class="ihs-sub" style="color:var(--body)"><b>A (drawn)</b> Axal VC Fund + standing tag / My fund + GP tag. Keeps the noun the Studio card and the page already use (SIV).<br><b>B</b> Invest in Axal VC / Run my fund: verbs, matching today’s h1.<br><b>C</b> Axal VC · as LP / My fund · as GP: no tags, a visitor reads “as LP” wrongly.</p>' + POL('Q1 · A drawn'))
+          + '</div>')
+        + '<div style="display:flex;gap:20px;align-items:flex-start">' + SPEC('Expanded · LP and GP · hover or focus on My fund', side({ fx: 'dual', cur: 'AX', tip: 'MF' }).replace('ihs-side lpv-side', 'ihs-side lpv-side lpv-specside'), 300)
+        + SPEC('Collapsed · same member', rail({ fx: 'dual', cur: 'AX' }).replace('lpv-rail', 'lpv-rail lpv-specside'), 100)
+        + SPEC('Expanded · LP only', side({ fx: 'lp', cur: 'AX' }).replace('ihs-side lpv-side', 'ihs-side lpv-side lpv-specside'), 260)
+        + SPEC('Collapsed · LP only', rail({ fx: 'lp' }).replace('lpv-rail', 'lpv-rail lpv-specside'), 100)
+        + (dark ? SPEC('Unavailable', side({ fx: 'un' }).replace('ihs-side lpv-side', 'ihs-side lpv-side lpv-specside'), 260) : '<div class="siv-snip" style="flex:1"><b>Order is kept</b><p class="ihs-sub">Studio, Spin-Out Lab, Deals, Axal VC Fund, My fund, Diligence, then Trust, Network, Research (licence union, D4473; Diligence before Trust, D6292). Deals and Diligence keep their rows, labels and places, so neither is harder to find. Research keeps its own Diligence zone.</p><b>Collapsed words (proposed)</b><p class="ihs-sub">A ' + C('short') + ' per row replaces the initials: “Axal LP” and “My fund” instead of “AVF” and “F”. The tag becomes a corner glyph; the tooltip on hover or focus gives label, tag and sub-line.</p></div>')
+        + '</div>', 1200, { dark: dark });
+    }
+    else if (B === 'LPV03') {
+      html = crop(NEW('the two destination headers · crumb, ownership line, cross line') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
+        + SNIP('A · LP (LP only, or LP and GP)', AHEAD('lp', 'My commitment', { x: true }) + GOOD('h1 matches the row; the line says Axal VC runs it and it is your relationship as an LP') + '<p class="ihs-sub">The line to My fund is drawn only when row B is open and you are GP of a fund.</p>')
+        + SNIP('A · Visitor or GP only', AHEAD('vis', 'Fund and terms') + GOOD('“You are not an LP in it”: a GP never mistakes this for their own fund'))
+        + SNIP('A · Applicant', AHEAD('app', 'Fund and terms') + GATE('app'))
+        + SNIP('A · Position unavailable', AHEAD('un', 'Overview') + UNA)
+        + SNIP('B · GP (GP only, or LP and GP)', BHEAD({ x: true }) + ZROW('Overview') + FSEL + GOOD('h1 My fund (today Run my fund), crumb My fund › Overview'))
+        + SNIP('B · zones: My fund ‹ LPs', '<div style="display:flex;flex-direction:column;gap:4px"><nav class="lpv-crumb" aria-label="Breadcrumb"><a href="#">My fund</a><span aria-hidden="true">‹</span><b aria-current="page">LPs</b></nav><h1 style="font-size:22px;font-weight:800">LP registry</h1><p class="ihs-purp" style="margin-top:0">The LPs of ' + GPF + ', the fund you run. Registry, KYC state, documents and comms log.</p></div>' + GOOD('The bucket label carries the crumb, so the change is one word in shellConfig.js'))
+        + SNIP('B · Institutional, no fund record', BHEAD() + NOFUND)
+        + SNIP('B · Fund records unavailable', BHEAD() + UNB)
+        + '</div>' + LAB('B · below Institutional: the one locked surface (D6233), named for the row') + '<div class="siv-snip">' + LOCKB({ lp: true }) + '</div>', 1200);
+    }
+    else if (B === 'LPV04') html = page(FXB('lp') + STEPS([[1, 'Hover or focus Axal VC Fund · LP: “Your LP seat in Axal Fund I.”'], [2, 'Open it: Axal VC Fund › My commitment, focus on the h1']]) + APAGE('lp', { focus: true }) + BACKNOTE('Step 3 · Back returns to the page you came from. The section is a hash, so one Back leaves the page. My fund stays locked and says so before it is opened.'), { fx: 'lp', cur: 'AX', tip: 'AX' });
+    else if (B === 'LPV05') html = page(FXB('lp') + STEPS([[1, 'My fund · Institutional: “Run your own fund. Institutional add-on.”'], [2, 'Opens /funds: the locked surface, named My fund']]) + LOCKB({ lp: true, focus: true }) + POL('Q2 · A drawn: the locked row opens this page, not the paywall modal') + BACKNOTE('Step 3 · “Axal VC Fund ›” returns the LP to their own seat; Back returns to the previous page.'), { fx: 'lp', cur: 'MF' });
+    else if (B === 'LPV06') html = page(FXB('gp') + STEPS([[1, 'My fund · GP: “' + GPF + '. You run it for your LPs.”'], [2, 'My fund › Overview, focus on the h1']]) + BPAGE({ focus: true }) + BACKNOTE('Step 3 · Back returns to the previous page. Eadwyn stays the one rail here, as on Run my fund today.'), { fx: 'gp', cur: 'MF', tip: 'MF', rail: true });
+    else if (B === 'LPV07') html = page(FXB('gp') + STEPS([[1, 'Axal VC Fund, no tag: “Axal’s own fund. You are not an LP in it.”'], [2, 'Axal VC Fund › Fund and terms']]) + APAGE('vis') + BACKNOTE('Step 3 · Back. The GP’s own fund is never on this page; it stays one row below, under My fund.'), { fx: 'gp', cur: 'AX' });
+    else if (B === 'LPV08') html = page(FXB('dual') + STEPS([[1, 'Both tags: Axal VC Fund · LP and My fund · GP'], [2, 'Axal VC Fund › My commitment'], [3, 'The line under the header opens My fund']]) + APAGE('lp', { x: true }), { fx: 'dual', cur: 'AX' });
+    else if (B === 'LPV09') html = page(FXB('dual') + STEPS([[4, 'My fund › LPs from the zone row'], [5, 'Crumb “My fund” returns to the overview; Back ×2 returns to Axal VC Fund']]) + BHEAD({ zone: 'LPs', h1: 'LP registry', intro: 'The LPs of ' + GPF + ', the fund you run. Registry, KYC state, documents and comms log.', x: true }).replace('<span aria-hidden="true">›</span><b aria-current="page">LPs', '<span aria-hidden="true">‹</span><b aria-current="page">LPs') + ZROW('LPs') + LPREG, { fx: 'dual', cur: 'MF', rail: true });
+    else if (B === 'LPV10') html = page(FXB('dual') + STEPS([[1, 'Collapsed: Tab to My fund, tooltip on focus'], [2, 'Enter opens My fund; the rail stays collapsed']]) + BPAGE() + NOTE('The tooltip is the row’s accessible description too (aria-describedby), so a screen reader hears “My fund, GP. ' + GPF + '. You run it for your LPs.” without hovering. Touch on a tablet: a tap opens the row; the words under each icon carry the meaning without the tooltip.'), { fx: 'dual', cur: 'MF', collapsed: true, tip: 'MF', focus: 'MF', rail: true });
+    else if (B === 'LPV11') {
+      html = crop(NEW('states around the rows') + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">'
+        + SNIP('Loading', '<div class="lpv-nav">' + ic('AX') + '<span class="lpv-lb">Axal VC Fund</span><span class="lpv-skt" aria-hidden="true"></span></div><div class="lpv-nav">' + ic('MF') + '<span class="lpv-lb">My fund</span><span class="lpv-skt" aria-hidden="true"></span></div><p class="ihs-sub">The rows work at once; the tag slot holds a skeleton and nothing is read out until the standing arrives. Never a lower standing first.</p>')
+        + SNIP('Unavailable', '<div class="lpv-nav">' + ic('AX') + '<span class="lpv-lb">Axal VC Fund</span>' + tag('un') + '</div><div class="lpv-nav">' + ic('MF') + '<span class="lpv-lb">My fund</span>' + tag('un') + '</div><p class="ihs-sub">The row still opens its page, which says Unavailable with Retry (LPV03). No standing is guessed.</p>')
+        + SNIP('No Investor licence', '<p class="ihs-sub" style="color:var(--body)">Neither row is drawn: both are investor licence rows (' + C('LICENCE_ROWS.investor') + '). A founder who is also an LP holds the Investor licence and sees both. Unchanged.</p>')
+        + SNIP('Administrator preview (role switching)', '<div role="status" class="lpv-pv"><span class="ihs-mo">Preview</span>Investor workspace as an administrator. Standing tags are withheld.</div><div class="lpv-nav">' + ic('AX') + '<span class="lpv-lb">Axal VC Fund</span></div><div class="lpv-nav">' + ic('MF') + '<span class="lpv-lb">My fund</span></div><p class="ihs-sub">The administrator’s own records are not a member’s standing, so no tag. Labels and sub-lines still say whose fund each is.</p>' + POL('Q3 · A drawn'))
+        + SNIP('Locked row opens the page (⚑ Q2 A)', '<div class="lpv-nav lpv-locked">' + ic('MF') + '<span class="lpv-lb">My fund</span>' + tag('lock') + '</div><p class="ihs-sub">Today the locked row is a button that opens the paywall modal, while the route draws FundLocked. A: the row is a link to /funds, so keyboard, touch and the URL agree. B: keep the modal.</p>' + POL('Q2 · A drawn'))
+        + SNIP('Applicant, approved but no holding', '<div class="lpv-nav">' + ic('AX') + '<span class="lpv-lb">Axal VC Fund</span>' + tag('app') + '</div><p class="ihs-sub">' + C('lpAccessState') + ' keeps an approved application with no ' + C('limited_partners') + ' row at pending, so the tag stays Applied until the GP records the holding. Unchanged rule.</p>')
+        + '</div>', 1200);
+    }
+    else if (B === 'LPV12') html = phone('Studio', '', { over: drawer('dual', { focus: 'AX' }) });
+    else if (B === 'LPV13') html = phone('Studio', '', { over: drawer('lp') });
+    else if (B === 'LPV14') html = phone('Axal VC Fund', STEP(2, 'Axal VC Fund › My commitment') + PAH('lp', 'My commitment') + PSECN('My commitment', true) + '<div class="siv-gate" style="padding:10px 12px">' + I.chk + '<div><b>You are a committed LP. (' + mo('$250K') + ')</b></div></div>' + pFund + '<p class="lpv-x">The fund you run for your own LPs is in ' + lnk('My fund ›') + '</p>' + BACKNOTE('Step 3 · Menu or Back. ‹ Studio shows only when a Studio card opened the page (D8731).'));
+    else if (B === 'LPV15') html = phone('My fund', STEP(2, 'My fund › Overview') + PBH() + PZ('Overview') + '<div style="display:flex;align-items:center;gap:8px"><span class="siv-sel" style="flex:1">' + GPF + ' ▾</span>' + pill('Active') + '</div>' + pTiles + '<p class="lpv-x">Your own LP seat in Axal VC is in ' + lnk('Axal VC Fund ›') + '</p>' + BACKNOTE('Step 3 · Back returns to the previous page; the crumb “My fund” returns here from any zone.'));
+    else if (B === 'LPV16') html = phone('My fund', STEP(2, 'LP only · My fund is locked') + '<div class="lpv-phl">' + LOCKB({ lp: true, short: true }) + '</div>');
+    else if (B === 'LPV17') html = phone('Axal VC Fund', STEP(1, 'Standing unreadable') + '<div class="siv-snip" style="padding:10px;gap:4px"><span class="ihs-lab">In the menu</span><div class="lpv-dn" style="min-height:0;padding:4px 0">' + ic('AX', 18) + '<span class="lpv-dl"><span class="lpv-dt"><b>Axal VC Fund</b>' + tag('un') + '</span><small>' + SUBA.un + '</small></span></div><div class="lpv-dn" style="min-height:0;padding:4px 0">' + ic('MF', 18) + '<span class="lpv-dl"><span class="lpv-dt"><b>My fund</b>' + tag('un') + '</span><small>' + SUBB.un + '</small></span></div></div>' + STEP(2, 'The page says so too') + PAH('un', 'Overview') + '<div class="siv-card" style="padding:12px"><p class="ihs-unr" role="status">' + I.err + '<span><b>LP position unavailable.</b> This is not a claim that you hold no commitment.</span></p><div>' + btn(I.ref + 'Retry', 'sm', ' style="min-height:44px"') + '</div></div>');
+    else if (B === 'LPV18D') {
+      html = page(FXB('dual') + APAGE('lp', { x: true }), { fx: 'dual', cur: 'AX', dark: true, tip: 'AX' });
+    }
+    else if (B === 'LPV19') {
+      html = crop('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">'
+        + '<div class="siv-snip"><b>Keyboard · desktop</b>' + ol(['Company switcher', 'Search… (sidebar filter; typing “fund” keeps both rows)', 'Collapse sidebar', 'Rows in order: Studio … Axal VC Fund, My fund, Diligence … Research. Focus on a row shows its tooltip; Esc hides it', 'Enter opens the row; focus moves to the destination h1 (tabindex −1)', 'Crumb, then the cross line, then the page’s own controls']) + '<b>Collapsed</b>' + ol(['Expand sidebar is the first stop in the rail', 'Each row: icon and short word; the tooltip is its description', 'aria-current="page" on the open row, also drawn as the violet edge'])
+        + '</div><div class="siv-snip"><b>Touch · 390 menu</b>' + ol(['Menu (44 × 44) opens the sheet; focus moves to Close menu', 'Rows are 44 px or taller; the two fund rows are two-line, the sub-line inside the link', 'Tapping a row closes the sheet and opens the page; focus to the h1', 'Close menu or the scrim returns focus to Menu', 'Back: the browser’s own. ‹ Studio only when a Studio card opened the page (StudioBackLink, D8731)']) + '<b>Headings</b>' + ol(['h1 Axal VC Fund or My fund, the same words as the row', 'Crumb is a nav “Breadcrumb”; the last item is aria-current="page"', 'h2 per section (My commitment, Fund and terms); zone pages keep their own h1 (LP registry)'])
+        + '</div><div class="siv-snip"><b>Announcements</b>' + ol(['On arrival the h1 is focused, so the page name is read: “Axal VC Fund, heading level 1”', 'A tag arriving after load is not announced (no live region in the sidebar); it is read with the row on focus', 'Unavailable on a page is role="status": “LP position unavailable”', 'Preview banner is role="status", read once']) + '<b>Back</b>' + ol(['A section hash is replaceState, so one Back leaves Axal VC Fund', 'Zone pages are real routes: Back from My fund ‹ LPs returns to My fund', 'Opening the menu adds no history entry']) + '<p class="ihs-sub">200% zoom: the tag drops under the label; the label never truncates. Tags pair a glyph and a word; contrast ≥ 4.5:1 in both themes.</p></div>'
+        + '</div>', 1200);
+    }
+    else if (B === 'LPV20') {
+      html = '<div class="ihs-cv" style="width:1200px"><div class="ihs-doc"><div><span class="ihs-ey">Investor · navigation · #8683 · handoff</span><h2 style="font-size:22px;margin-top:6px">Handoff: two rows that say whose fund, and headers that agree</h2><p class="ihs-sub" style="margin-top:6px">Checked on main ee23155ff6 (Fri 27 Nov 2026). Companion to the landed destinations Axal VC Fund v2 and LP Workspace (#6127) and Investor Fund v2 (#6229), and to Studio Home Investor (#8731), whose cards open these same headings. People and figures are fictional.</p></div>'
+        + '<div class="ihs-dl"><div><h3>Checked on main</h3>' + UL([
+          C('sidebarConfig.js:566–567') + ': rows “Axal VC Fund” (' + C(LPWS) + ') and “Fund” (' + C('/funds') + ', ' + C('requiredInvestorTier: institutional') + '), adjacent. ' + C('licenceSidebar.js') + ' ' + C('LICENCE_ROWS.investor') + ' = /deals, the LP workspace, /funds.',
+          C('shellConfig.js:281,298') + ': link “Axal VC Fund” (untouched) and bucket “Fund”, tagline “Run my fund”, zones LPs, Calls, Accounting, Reporting.',
+          C('ui/SidebarNav.jsx') + ': collapsed rows show ' + C('abbreviateLabel') + ' initials (AVF, F); a locked row is a button opening the paywall modal; the phone sheet is the same component with Close menu.',
+          C('lib/mobileTabs.js') + ': ' + C('mobilePlan') + ' returns null for the investor, so the phone has Menu only.',
+          C('InvestorWorkspacePage.jsx:23') + ' h1 Axal VC Fund, no crumb; ' + C('InvestorFundLanding.jsx:235') + ' h1 Run my fund; ' + C('ZoneHeader.jsx') + ' crumb “Fund ‹ LPs”; ' + C('FundLocked.jsx') + ' / ' + C('fundLockedModel.js') + ' h1 “Overview is part of the Institutional add-on”.',
+          C('App.jsx:2780') + ' LP workspace guard admin/investor; ' + C('App.jsx:3877') + ' /funds: InvestorFundLanding when the Investor licence is held, else Fund Admin redirect.',
+          C('lib/spinoutFundModel.js') + ' ' + C('lpAccessState') + ': visitor, pending, approved, committed, voting; approved with no holding stays pending.',
+          C('sidebarConfig.js withDiligenceRow') + ': Diligence for every eligible investor, before Trust (D6292). Deals and Research unchanged.',
+          'Cause of the audit finding: two adjacent rows named by noun only (“Axal VC Fund”, “Fund”), no standing on either, initials when collapsed, and headings that do not repeat the row.'
+        ]) + '<h3 style="margin-top:14px">Frontend only</h3>' + UL([
+          'Row label “Fund” → “My fund” in ' + C('sidebarConfig.js') + ' and the bucket label in ' + C('shellConfig.js') + ' (the crumb follows); Eadwyn rail keys in ' + C('railPages.js') + ' follow the label.',
+          'A ' + C('short') + ' word per row for the collapsed rail; tags and sub-lines (' + C('aria-describedby') + ') on the two rows; two-line rows in the phone sheet.',
+          'Destination headers: crumb, ownership line, cross line; h1 “My fund” on /funds; FundLocked titled “My fund is part of the Institutional add-on”.',
+          'Focus the h1 on arrival. Routes, guards, tiers and the order of rows are unchanged.'
+        ]) + '</div><div><h3>Requires engineering ◇</h3>' + UL([
+          BE('#8683 · proposed') + ' one light standing read for the shell (LP / applied / GP of record), so the sidebar does not load the whole LP portal and fund analytics on every page. The drawn design works without it, from the two existing reads, at their cost.'
+        ]) + '<h3 style="margin-top:14px">Pending the owner ⚑ (option A drawn)</h3>' + UL([
+          POL('Q1') + ' Labels: A “Axal VC Fund” + standing tag and “My fund” + GP tag; B “Invest in Axal VC” / “Run my fund”; C “Axal VC · as LP” / “My fund · as GP”.',
+          POL('Q2') + ' Locked My fund: A the row links to /funds and its locked page (one surface, D6233); B keep the paywall modal.',
+          POL('Q3') + ' Administrator preview: A withhold tags; B show the administrator’s own standing.'
+        ]) + '<h3 style="margin-top:14px">Acceptance → boards</h3>' + UL([
+          '1 · Choose own LP relationship vs own fund’s LP registry before opening: rows with tag and sub-line LPV02, LPV04 to LPV10, phone LPV12, LPV13; route table LPV00.',
+          '2 · Routes and entitlements kept; visitor, LP, fund manager and both labelled: LPV00 table, LPV02, LPV03, LPV05 (locked), LPV07 (GP not an LP), LPV11 (applicant, preview, no licence).',
+          '3 · Collapsed, mobile menu, heading, crumbs and Back with keyboard and touch: LPV10, LPV12 to LPV17, LPV03, LPV09, LPV19. Dark: LPV18, LPV18D.'
+        ]) + '<h3 style="margin-top:14px">Tests the acceptance asks for</h3>' + UL([
+          'Update ' + C('investor_shell.test.mjs') + ' (82, 110 pin the label “Fund”), ' + C('investor_shell_canvas.test.mjs') + ' (Fund: “Run my fund”) and ' + C('investor_fund_i6.test.mjs') + ' (h1 “Run my fund”); keep the asserts that the routes and ' + C('requiredInvestorTier') + ' are unchanged. Tests that pin “Axal VC Fund” stay as they are.',
+          'Unit: tag per fixture (visitor, applicant, LP, GP, both, unavailable, loading, preview) from ' + C('lpAccessState') + ' and the fund list.',
+          'Browser: Tab and touch through expanded, collapsed and the 390 sheet; h1 focused on arrival; crumb and Back from /funds/lps; locked row opens /funds.'
+        ]) + '</div></div></div></div>';
+    }
+    else html = '<div class="ihs-cv" style="width:600px"><div class="ihs-doc">Board not found</div></div>';
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

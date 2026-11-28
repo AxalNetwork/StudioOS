@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkGraph Frozen Export and Confirm · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Platform · WorkGraph · #8833 (for #5582) · continues WorkGraph PR Conflicts and Reservations (WG-10 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · WorkGraph drafting — the pinned revision, conflict review, renewed approval, frozen export and Confirm publication, for Super Admins</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Drafting (/admin/workgraph/drafting, proposed) shows which approved revision of a deck, template or offer WorkGraph pins, where two drafts touch the same clause, how a later domain save is adopted as a renewed approval, and how the approved head is frozen into a release manifest. A slim strip on the deck editor, template publication and partner quote screens lets a Super Admin confirm a saved version (the owner’s pick A); founders and partners see nothing new. Every route is Super Admin only, on the HQ preview deployment with the drafting preview switched on, with a two-step check on every write; templates also need counsel. Nothing here publishes, signs or merges by itself, and signed agreements are never edited. It keeps the WorkGraph canvas’s Platform v2 HQ frame and the Platform States chips (D5129). Violet dashed ◇ tags mark values that need backend work (#8833 unless named); amber ⚑ tags mark the owner’s two questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026, 14:02 UTC · checked against main d26a93a252 · [Atlas Orchard], [Iris Chen], [Maya Ruiz], [Sara Holm], every id, digest, clause and figure are fictional samples</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="WorkGraph Frozen Export and Confirm Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['WG-10', 'Drafting assets · desktop 1440', 'The verified company’s drafting assets: kind, name (ids only today ◇), access class, head number with what it counts, short digest with copy, source row, and a Current-or-Changed column tagged ◇ because the list never reads the domain row. Filter by kind; Open asset on the focused row. B: Register an asset, with the tenant read-only and the four refusals.', [F('WG10', false, 1040), C('WG10B', 'Register an asset · sheet and refusals', 1200, 580)]],
+      ['WG-11', 'One asset · pinned revision · desktop 1440', 'Template [#88]: twelve clauses in document order with sensitive chips and counsel reservations (Reserve, Renew, Release; one held by someone else), the pinned revision card (head, revision, digest, source row, Current), approver and history as ◇. B: Propose a candidate. C: the column with reservations off, as on main.', [F('WG11', false, 1360), C('WG11B', 'Propose a candidate · sheet', 760, 440), C('WG11C', 'Reservations off', 900, 250)]],
+      ['WG-12', 'Conflict review · two drafts, the same clause · desktop 1440', 'From the refused candidate response: 3 of 12 clauses in conflict, counts per outcome, base / ours / theirs per clause with its reason, sensitive clauses flagged A person decides, merged and unchanged collapsed. Pick and Submit combined revision are ◇. Eadwyn explains each conflict and proposes a pick for §6 only. B: where a candidate waits, by kind.', [F('WG12', false, 1520), C('WG12B', 'Where it waits · deck', 1100, 220)]],
+      ['WG-13', 'Renewed approval after a later edit · desktop 1440', 'The founder’s Keep moved Deck [#1042]: Changed outside WorkGraph, head 4 beside the current row (◇: the stale read returns no row), and the result after Adopt current: head 5, the two approvals invalidated, and the exports of head 4 as ◇. Eadwyn proposes a summary of what changed and never adopts. B: the Adopt current sheet with the two-step check.', [F('WG13', false, 1150), C('WG13B', 'Adopt current · confirm sheet', 680, 350)]],
+      ['WG-14', 'Frozen export · desktop 1440', 'Head 5 and its approved digest, release line (named or Unnamed line, with audience), role, profile and package, and the plain note that freezing neither publishes nor signs. The result: manifest id and digest, the pinned revision and digest, source row, base manifest, its status from the release read, media versions ◇ (#5582) and Download “Not rendered yet” ◇. B: the same export after a later adoption, Reapproval required.', [F('WG14', false, 1070), C('WG14B', 'Status · Reapproval required', 700, 690)]],
+      ['WG-15', 'Domain screens · confirm after a save (Super Admins only) · desktop 1440', 'Option A drawn: on each domain screen a slim WorkGraph strip that only Super Admins on preview see, with the saved version, the digest to confirm (◇) and Confirm publication; beside it the founder’s, counsel’s and partner’s own view, unchanged.', [C('WG15A', 'Deck editor after Keep', 1440, 665), C('WG15B', 'Template publication result', 1440, 680), C('WG15C', 'Partner’s saved proposal version', 1440, 535)]],
+      ['WG-16', 'Empty · desktop 1440', 'No drafting asset yet in [Atlas Orchard], a measured zero, with Register an asset. B: no release line yet on WG-14, linking to the release page. C, a loaded state beside them: a candidate with no conflicts, ready for a person’s confirmation.', [F('WG16', false, 480), C('WG16B', 'No release line yet', 700, 220), C('WG16C', 'Loaded · no conflicts', 1100, 340)]],
+      ['WG-17', 'States', 'Loading; every Not recorded with its reason; five Unreadable reads with what still works; six refusals, each naming who grants access; Stale head and Stale approval; Waiting (a deck proposal or counsel draft already waiting); Clause reservation needed; Saving and save failed with inputs kept.', [C('WG17A', 'Loading', 1100, 175), C('WG17B', 'Not recorded', 1100, 390), C('WG17C', 'Unreadable', 1100, 465), C('WG17D', 'Refused', 1100, 315), C('WG17E', 'Stale', 1100, 245), C('WG17F', 'Waiting', 1100, 245), C('WG17G', 'Clause reservation needed', 1100, 170), C('WG17H', 'Saving · save failed', 1100, 325)]],
+      ['WG-18', 'Phone 390', 'Assets as cards; one asset with the pinned revision card and slide areas (an image reads No text (image)); a conflict card with Base / Ours / Theirs tabs; Adopt current and Freeze as bottom sheets; Eadwyn as a bottom sheet; the domain strip as a collapsible banner. 44px targets, digests truncate with copy.', [P('WG18A', 'Assets'), P('WG18B', 'One asset'), P('WG18C', 'Conflict · tabs'), P('WG18D', 'Adopt current · sheet'), P('WG18E', 'Freeze · sheet'), P('WG18F', 'Eadwyn · sheet'), P('WG18G', 'Deck editor · strip')]],
+      ['WG-19', 'Dark · desktop 1440', 'WG-12 on the dark tokens: outcome, reason and sensitive chips, and the Not recorded, Stale and Unreadable chips keep their words and shapes.', [F('WG19', false, 1580)]],
+      ['WG-20', 'Handoff · design', 'Reused, frontend only, the owner’s two questions with option A drawn, the rules kept, and accessibility.', [W('WG20')]],
+      ['WGX-H', 'Handoff · engineering', 'Checked on main d26a93a252, every ◇ by issue, the decision file D5580-p6, acceptance mapped to boards, and the handoffs to the release page, the domain screens and counsel.', [W('WGXH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

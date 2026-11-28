@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Library v2 Restore · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · AI agents · Skills library · Skill Library v2 addendum · #8825 (for #4537)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Restore a published version of an HQ skill as the draft</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Skill Library v2 (SK-01 to SK-16, D4956; SK-17 to SK-25 are the Extension Compare addendum) as SK-26 to SK-33, inside SK-05 “Review & versions”, card Published versions. Restore copies one immutable version’s definition into the draft; it publishes nothing and moves no pin. The draft then goes through the existing review (a second Super Admin, never the restorer), the evals and the Publish gate, and ships as the next version (D4533 §10). Super Admins at HQ only. A required reason (10 to 500 characters) goes to the audit log; unpublished draft edits are discarded only after a separate confirmation (draft_has_changes). Every refusal is shown by its code. States follow Platform States (D5129): Not recorded and Unavailable are never 0 or empty. A violet dashed ◇ tag marks backend work (#8825); an amber ⚑ tag marks an owner question, drawn as its pick. Eadwyn stays the one rail; it proposes, the person decides, and no proposal sends a restore.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main d26a93a252 (routes/admin_hq_skills.ts, services/agents/skillRecovery.ts) · [Launch checklist], [Iris Chen], [M. Osei], [R. Haddad], [M. Okafor] and every version, step, tool and count are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Skill Library v2 Restore Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SK-26', 'Published versions with Restore', 'SK-05 with the Published versions card as a table: Version (with a Publish recorded mark), Published, By, Release note, Approved by, Runs at publish (of 10), Agents pinned now, and Restore as draft… on every row, the current row included (owner Q1, pick A). [v3] is current; the draft holds unpublished edits by [M. Osei], so the card says so; an open review by [R. Haddad] makes the status read In review. One line: restoring publishes nothing and moves no agent. Eadwyn proposes [v1] with Accept, Pick another, Dismiss.', [F('SK26', false, 1240)]],
+      ['SK-27', 'Restore dialog', '“Restore [Launch checklist] [v1] as the draft” (640): a picker of published versions only, What happens (ships only as [v4] after review and evals; you become the author and can’t approve; R. Haddad’s review is withdrawn; [4] agents on v3 and [2] on v1 keep their pins), the draft → v1 diff (collapsible, open here), Reason · required with a live count, and Eadwyn’s reason suggestion beside the empty field, never pre-filled (owner Q2, pick A). Restore is disabled until the reason is long enough.', [F('SK27', false, 1360)]],
+      ['SK-28', 'Discard unpublished edits · separate confirmation', 'Opens only after the server answers draft_has_changes, replacing the first dialog (560). Last edited by [M. Osei]; ◇ the edit time (stored, not served). The reason from SK-27, read only. Eadwyn proposes Keep my draft, because the edit touches a step. Keep my draft changes nothing; the destructive button re-sends with discard_draft.', [C('SK28', false, 600, 700)]],
+      ['SK-29', 'Restored', 'Toast “Restored v1 as the draft. It ships as v4 after review and evals.” The status chip reads Published (the review was withdrawn; a restore changes no status). Readiness from the restore answer’s freshness: Needs approval, “A new review is needed”, 10 of 10 pass with “Results reused from [v1]: 10 of 10 required runs”, the discarded-edits line, and the other blocking words. ◇ “Restored from v1 by …” after a reload. v3 is still current; the v1 row says the draft holds it. Eadwyn proposes [M. Okafor] as reviewer. Primary: Ask for review….', [F('SK29', false, 1320)]],
+      ['SK-30', 'Refusals, each by its code', 'A already_restored · B retired (replacement read from GET /:uid, link to [Launch plan]) · C a checkDraft code (tag_unknown drawn; tool_not_read_only with its tool) · D reason_required on the field · E version_unknown · F 403 and 404 not_found. Code in mono beside the plain sentence. Eadwyn proposes a hand edit on C only; on the rest it says why it proposes nothing.', [C('SK30', false, 1440, 540)]],
+      ['SK-31', 'States', 'A · Loading, Empty (Publish, SK-06), Not recorded, Unavailable for the pins read, the diff read, the skill read and the publish record (publish_audited null), Refused, Saving, Save failed, and the two draft-match cases. B · The refused page: an HQ admin who is not a Super Admin, or a branch deployment (HQ only).', [C('SK31A', 'A · States', 1440, 1000), F('SK31B', 'B · Refused page', 760)]],
+      ['SK-32', 'Phone 390', 'A · One card per version with a full-width 44px Restore as draft…, Eadwyn collapsed above the list. B · The restore as a bottom sheet: what happens, the diff collapsed, Eadwyn collapsed, reason, button. C · The discard confirmation as its own sheet. D · Restored, with the toast and the readiness line. No table wider than the screen.', [P('SK32A', 'A · Versions'), P('SK32B', 'B · Restore sheet'), P('SK32C', 'C · Discard sheet'), P('SK32D', 'D · Restored')]],
+      ['SK-33', 'Dark', 'SK-26 with the SK-27 dialog open on #0B1220 / #111827, the Eadwyn proposal on the rail. The destructive button, codes and states keep their words and shapes.', [F('SK33', false, 1360)]],
+      ['SKR-H', 'Handoff', 'What was checked on main, acceptance mapped to boards, backend required (◇ #8825: draft edit time, the restored-from line after a reload; #4533 part E timeline rows), owner questions drawn as A, frontend-only work, handoffs and accessibility. Decision file on landing: D4956-p1.md.', [W('SKRH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Feedback Themes · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · Customers › Feedback · #8835 · continues Grow v2 · Feedback (#6099) from GR-43</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Rename a feedback theme, or merge it into another, from the theme’s own heading</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The control for D6098 inside the Feedback tab (/grow/product-improvement, GR-21): Rename sits on the selected theme’s heading on desktop and on the selected chip’s heading at 390, not in a separate block. A new name renames every feedback row and roadmap item with the theme in this venture without asking; a name that is already a theme is a merge, which always asks first and names both themes and both counts, including the Worker’s own counts when the list was stale. Matching is exact, case included (owner, 14 Nov 2026): “[Exprot]”, “[Export]” and “[export]” are three themes. Only the venture’s writers see Rename; readers and advisors see nothing of it. Eadwyn proposes nothing on this control; its GR-21C placements keep Accept, Edit and Discard, and a placement into a renamed theme is held back, never moved. <b>Numbering:</b> the brief’s GR-32 to GR-39 are drawn as GR-43 to GR-50 (GR-32 to GR-42 belong to #8819, Beehiiv). Violet dashed ◇ tags mark backend work under #8835; amber ⚑ tags mark the two owner questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main d26a93a252 · [Atlas Orchard], [Maya Ruiz], every bracketed person, company and theme, and every count are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Feedback Themes Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-43', 'Rename a theme · desktop 1440 (brief GR-32)', 'The GR-21 tab with [Exprot] selected in the theme column ([Export] 9, [Exprot] 6, [Onboarding] 4, No theme yet 2). Its heading reads “[Exprot] · 6 feedback rows · 1 roadmap item” with a quiet Rename (⚑ Q1 A). B · Rename turns the heading into a labelled name field with Save (the one primary) and Cancel, the “Or merge into an existing theme” list with each theme’s counts (0 roadmap items shown as measured), and the note that other ventures are never touched. The rail is GR-21C: two placements, each with Accept, Edit and Discard (⚑ Q2 A).', [F('GR43', 'A · Rename on the selected theme', 1000), F('GR43B', 'B · Rename open', 1100)]],
+      ['GR-44', 'Merge confirmation (brief GR-33)', 'A · [Export] picked: the question replaces Save in place, “Merge “[Exprot]” into “[Export]”? This moves 6 feedback rows and 1 roadmap item…”, with Merge and Cancel. B · the list was stale and the Worker answered 409 merge_needed: the same question with its counts (7 rows) and “The counts changed since this page loaded.” C · done: [Export] · 15 items selected, “Merged: 6 feedback rows and 1 roadmap item moved.”, and the [Exprot] placement held back in the rail.', [F('GR44', 'A · Merge question', 1140), C('GR44B', 'B · Stale list, the Worker’s counts', 940, 337), F('GR44C', 'C · Merged', 1000)]],
+      ['GR-45', 'Refusals (brief GR-34)', 'The field keeps the typed name in every case. Empty: “A theme needs a name.” Same name: “The new name is the same as the old one.” Case only, before Save: “[Export]” exists with other capitals, and Save still renames. Not found: “No feedback has that theme any more.” with Reload themes. Read-only (403). The counter from 70 characters.', [C('GR45', false, 1440, 617)]],
+      ['GR-46', 'No themes yet (brief GR-35)', 'Every item has no theme: Themes 0, measured; “No theme yet · 3 items” in the column with no Rename. The one action is Change theme on an item; after the first theme is saved it appears with Rename on its heading.', [F('GR46', false, 860)]],
+      ['GR-47', 'States (brief GR-36)', 'Loading (no Rename until the counts arrive), Not recorded (No theme yet is never renamed or counted), Unreadable theme counts (“Rename is unavailable: theme counts could not be read.” with Try again; nothing shown as 0), Refused for an advisor or reader (nothing drawn), Saving, and Save failed with the name kept. B · the tab with the counts unreadable: items, weight and Close the loop still work.', [C('GR47', false, 1440, 478), F('GR47B', 'B · Theme counts unreadable', 1000)]],
+      ['GR-48', 'Phone 390 (brief GR-37)', 'A · the GR-29 chip row; the selected chip’s heading carries Rename (44px). B · Rename as a bottom sheet: the field, the merge list as full-width rows with counts wrapping under each name, Save and Cancel at the foot. C · the merge question replaces the sheet’s body, Merge and Cancel stacked. D · the case-only note under the field.', [P('GR48A', 'A · Chip row and Rename'), P('GR48B', 'B · Rename sheet'), P('GR48C', 'C · Merge question'), P('GR48D', 'D · Note under the field')]],
+      ['GR-49', 'Dark (brief GR-38)', 'GR-43 B and GR-44 A on the dark tokens of GR-30; the case-only note, a refusal and the unreadable line keep their words and glyphs.', [F('GR49', 'Rename open · dark', 1100), F('GR49B', 'Merge question · dark', 1140), C('GR49C', 'Notes and refusals · dark', 1440, 264)]],
+      ['GR-50', 'After a rename (brief GR-39)', 'A · [Exprot] renamed to [CSV export], which stays selected with “Renamed: 6 feedback rows and 1 roadmap item updated.” The rail still offers the [Onboarding] placement with Accept, Edit and Discard; the [Exprot] one is held back and counted (◇ re-pointing it). B · the roadmap item still answers the theme under its new name; the renamer’s own Activity shows “Theme renamed on 6 feedback rows and 1 roadmap item”; ◇ a venture-wide activity list is not built.', [F('GR50', 'A · After the rename', 1000), C('GR50B', 'B · Where the new name reads', 1440, 266)]],
+      ['GTM-H', 'Handoff', 'Renumbering (brief GR-32..39 → GR-43..50), what main does today, what was checked on main, acceptance mapped to boards, backend required (◇ #8835), the owner questions with option A drawn, frontend-only work, sibling handoffs, the decision file D6099-p3.md and accessibility.', [W('GTMH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

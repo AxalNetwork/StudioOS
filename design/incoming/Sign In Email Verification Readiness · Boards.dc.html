@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign In Email Verification Readiness · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Auth · /login · email link step · #8687 · extends Sign In v2 (SGN-04) · EML-00 onward</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Sign in — the email link waits for the automatic check, says who has to act, and recovers when the check stalls</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Email me a sign-in link step of /login, in the shipped Sign In v2 card (desktop) and bottom sheet (390), over the shipped login artwork. On main, Cloudflare Turnstile runs invisibly and the page refuses an early press with “Please complete the verification challenge first.” while no challenge is on screen; a widget error or stall is never handled. These boards add one readiness line under the address with four states — Checking readiness, Ready to send, Your turn (Cloudflare shows its check) and Unavailable — plus main’s existing Couldn’t load rule. Send stays off (aria-disabled, still focusable) until a token arrives, one press sends one request, the entered address is kept through every retry, and Try the check again sits with Use a different method. Each state names who acts. Live-region text, focus moves and the focus order are annotated in dark design-note panels. The Worker is unchanged. Amber ⚑ tags mark owner decisions, drawn as option A. Sign-in forces the light theme, so there is no dark board.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main ee23155ff6 · [Maya Ruiz] and [maya@example.com] are fictional; the artwork is the production asset</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Sign In Email Verification Readiness Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['EML-00', 'Journey, signals and rules', 'Steps 1 to 4 of the email link route with the branches 1b Your turn, 1c Unavailable, 1d Couldn’t load and the token expiry; each Turnstile callback mapped to a state and to Send; the rules; why the client saw a challenge that was not there.', [W('EML00')]],
+      ['EML-01', 'Main today (ee23155ff6)', 'For comparison only: an early press refused with a challenge nobody can see, the same button sending a moment later, and a widget error that never ends.', [C('EML01', 'Main today · A, B, C', 1340, 564)]],
+      ['EML-02', 'Desktop 1440 · step 1 · Checking readiness', 'State 1 of 4. The readiness line under the address says an automatic check is running and there is nothing to do. Send is off with a lock glyph and is described by the line.', [F('EML02', 'Step 1 · Checking readiness', 900)]],
+      ['EML-03', 'Desktop 1440 · step 2 · Ready to send', 'State 2 of 4. Check passed; Send is on where it was. The change is announced only after an early press or a slow check.', [F('EML03', 'Step 2 · Ready to send', 900)]],
+      ['EML-04', 'Desktop 1440 · step 1b · Your turn', 'State 3 of 4. Cloudflare asks for interaction: its widget renders in place inside a named group, which takes focus after a Send press. Send stays off until it passes.', [F('EML04', 'Step 1b · User interaction required', 900)]],
+      ['EML-05', 'Desktop 1440 · step 1c · Unavailable', 'State 4 of 4. Error, timeout, unsupported browser or no answer in 15 s. The platform’s Unavailable word and dashed border; the address is kept; Try the check again and Use a different method sit together. ⚑ Q2.', [F('EML05', 'Step 1c · Verification unavailable', 900)]],
+      ['EML-06', 'Fast submission and one send', '1 an early press sends nothing and says Still checking (⚑ Q1); 2 the check passes; 3 Sending ignores further presses; 4 Check your email with the 60 s Resend.', [C('EML06', 'Steps 1 → 4 · announcements', 1760, 602)]],
+      ['EML-07', 'Recovery variants', 'A Couldn’t load keeps main’s rule (Send on); B retrying with the address kept; C the token expired and the check renews; D Your turn passed, focus on Send.', [C('EML07', 'Couldn’t load · retrying · expired · passed', 1760, 621)]],
+      ['EML-08', 'Phone 390 · the sheet', 'The same steps in the existing bottom sheet, numbered: 1 checking with the keyboard open, 1 pressed early, 2 ready, 1b your turn, 1c unavailable, 4 sent once. Each with its announcement.', [P('EML08A', '1 · Checking · keyboard'), P('EML08B', '1 · Pressed early'), P('EML08C', '2 · Ready'), P('EML08D', '1b · Your turn'), P('EML08E', '1c · Unavailable'), P('EML08F', '4 · Sent once')]],
+      ['EML-09', 'Focus order, announcements and names', 'Numbered focus order on the Your turn state and the heading structure; then every change with its live-region text, focus move and Send state, the names and roles, and how each state avoids colour alone.', [F('EML09', 'Focus order · step 1b', 900), W('EML09B')]],
+      ['EML-10', 'Tests', 'Fast submission, delayed readiness, interaction, failure, retry, expiry, double press and the kept verification requirement, at 1440 and 390, counting requests to /api/auth/magic/start.', [W('EML10')]],
+      ['EML-11', 'Handoff', 'What was checked on main, no Worker change, the owner questions Q1 and Q2 with option A drawn, acceptance mapped to boards, frontend-only work and what is open.', [W('EML11')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
