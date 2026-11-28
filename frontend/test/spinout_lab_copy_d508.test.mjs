@@ -9,8 +9,7 @@
  *      of nineteen working tools, not the whole programme (LabIntro.jsx's
  *      own repositioning note explains why that undersells it and quietly
  *      excludes founders who already have an entity).
- *   2. SpinoutDemoDayPage's "What Is the Spin-Out Lab" subhead — same claim,
- *      same fix.
+ *   2. The retired Demo Day campaign page (#6994).
  *   3. FounderHomePage's testimonial sub — "the 38 companies" was never
  *      backed by anything. Its pins went with the page: #2297 removed the
  *      `/lp/*` campaign pages, FounderHomePage among them.
@@ -22,13 +21,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { codeOnly } from './_codeOnly.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const REGISTRY = read('cloudflare-worker/src/templates/email/registry.ts');
-const DEMO_DAY = codeOnly(read('frontend/src/pages/templates/SpinoutDemoDayPage.jsx'));
 
 test('spinout_admitted email no longer sells a single idea-to-incorporated arc', () => {
   // Scoped to the spinout_admitted entry, not the whole registry file, so a
@@ -39,8 +36,4 @@ test('spinout_admitted email no longer sells a single idea-to-incorporated arc',
   const entry = REGISTRY.slice(start, start + 2000);
   assert.doesNotMatch(entry, /idea to incorporated/i);
   assert.doesNotMatch(entry, /idea\s*(→|->)\s*customer discovery/i, 'the HTML highlight box kept the same linear-arc framing as prose');
-});
-
-test('SpinoutDemoDayPage no longer sells "idea to incorporated company"', () => {
-  assert.doesNotMatch(DEMO_DAY, /idea to incorporated/i);
 });

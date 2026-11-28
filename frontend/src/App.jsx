@@ -449,7 +449,6 @@ const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // does not belong in the entry chunk.
 const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
-const SpinoutDemoDayPage = lazy(() => import('./pages/templates/SpinoutDemoDayPage'));
 const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage'));
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
@@ -4310,7 +4309,7 @@ function AppInner() {
       <Route path="/lp/customer-discovery" element={<Navigate to="/for-founders" replace />} />
       <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
       <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
-      <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
+      <Route path="/lp/spinout-demo-day" element={<Navigate to="/events" replace />} />
       {/* ── Route modules (D528) ── every frontend/src/routes/<area>.jsx, as
           ROUTE_MODULES (the block of the same name at the top of this file)
           collects them (#4105): each module's routes(routeTools), in its
