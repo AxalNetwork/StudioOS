@@ -355,8 +355,25 @@ test('a member removed between a draft and its Send: the quote ran, the ask is r
   assert.equal(list.json.error, 'space_not_member');
   const mine = await call(env, 'GET', '/conversations/mine');
   assert.deepEqual(mine.json.conversations.filter((x: any) => x.kind === 'eadwyn').map((x: any) => x.id), [], 'a lost space\'s conversation was listed');
+  const legacy = await call(env, 'GET', '/conversations?workspace=Build');
+  assert.deepEqual(legacy.json.conversations, [], 'the older workspace list kept a lost space\'s conversation');
   // The owner can still delete their own conversation.
   assert.equal((await call(env, 'DELETE', `/conversations/${sib}`)).status, 200);
+});
+
+test('a company space is lost when the member leaves it or it is archived, and another member never had it', async () => {
+  const { env, db } = world();
+  const uid = await start(env, 'company', COMPANY);
+  assert.equal((await call(env, 'GET', `/conversations/${uid}`)).status, 200);
+  const stranger = await call(env, 'POST', '/conversations', { scope: 'company', id: COMPANY }, { id: OTHER });
+  assert.equal(stranger.json.error, 'space_not_member', 'a member with no link started a conversation in the company');
+  db.prepare('UPDATE company_profiles SET archived_at = ? WHERE id = ?').run('2026-11-20 10:00:00', COMPANY);
+  const archived = await call(env, 'GET', `/conversations/${uid}`);
+  assert.equal(archived.status, 403);
+  assert.equal(archived.json.error, 'space_access_lost', 'an archived company stayed a space');
+  db.prepare('UPDATE company_profiles SET archived_at = NULL WHERE id = ?').run(COMPANY);
+  db.prepare('DELETE FROM user_company_links WHERE user_id = ? AND company_id = ?').run(ME, COMPANY);
+  assert.equal((await call(env, 'GET', `/conversations/${uid}`)).json.error, 'space_access_lost');
 });
 
 test('a pending action confirmed after access to its project is lost sends nothing', async () => {

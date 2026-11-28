@@ -5,7 +5,9 @@
  * A space is `{ scope: 'company' | 'project', id }`. It is never inherited: a project that sits under a company is
  * not in that company's space, and a company space does not reach a project's own space, even when the member is in
  * both. The membership test for each kind is the platform's own:
- *   company  a `user_company_links` row for a company that is not archived (`resolveActiveCompany`, D1137);
+ *   company  a `user_company_links` row for a company that is not archived (the predicate `resolveActiveCompany`
+ *            applies, D1137). It is read here for the STORED company, never the client's selection: a space is
+ *            not the active company, so these reads are not in the company-scope inventory (D8526).
  *   project  the project exists, is not in Trash, and `canAccessProject` lets the member read it.
  *
  * The API, for `/api/eadwyn` and for the advisor binding that reuses it (#9285):
@@ -22,7 +24,6 @@
  *   publicSpace(space)            what a page shows: `{ scope, id, name }`.
  */
 import type { Env, User } from '../types';
-import { resolveActiveCompany } from '../middleware/activeCompany';
 import { canAccessProject } from './projectAccess';
 
 export type SpaceKind = 'company' | 'project';
@@ -118,10 +119,15 @@ type Member = Pick<User, 'id' | 'role' | 'founder_id'>;
 export async function resolveSpace(env: Env, user: Member, ref: SpaceRef | null | undefined): Promise<Space | null> {
   if (!ref) return null;
   if (ref.scope === 'company') {
-    if ((await resolveActiveCompany(env, user, String(ref.id))) !== ref.id) return null;
-    const row = await env.DB.prepare('SELECT company_name FROM company_profiles WHERE id = ?')
-      .bind(ref.id).first<{ company_name: string | null }>();
-    return { scope: 'company', id: ref.id, name: row?.company_name ?? null, companyId: ref.id, projectId: null };
+    if (typeof user?.id !== 'number') return null;
+    // The member's link to a company that is not archived: the same test as resolveActiveCompany's.
+    const row = await env.DB.prepare(
+      `SELECT p.company_name FROM user_company_links l LEFT JOIN company_profiles p ON p.id = l.company_id
+        WHERE l.user_id = ? AND l.company_id = ? AND (p.id IS NULL OR p.archived_at IS NULL)
+        LIMIT 1`,
+    ).bind(user.id, ref.id).first<{ company_name: string | null }>();
+    if (!row) return null;
+    return { scope: 'company', id: ref.id, name: row.company_name ?? null, companyId: ref.id, projectId: null };
   }
   const project = await env.DB.prepare('SELECT id, name, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(ref.id).first<{ id: number; name: string | null; founder_id: number | null; company_id: number | null }>();
