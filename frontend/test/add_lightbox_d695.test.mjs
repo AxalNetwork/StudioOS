@@ -266,7 +266,7 @@ test('opt-in page mode starts at phone width and restores modal effects when wid
   await assertPage({ default: Lightbox });
   await mutationCheck(shellSource, 'ui/Lightbox.jsx', assertPage, [
     ["pageBelow === 'lg' && phone", "pageBelow === 'lg'"],
-    ['[id, initialFocus, returnFocusTo, page, keep]', '[id, initialFocus, returnFocusTo, keep]'],
+    ['[id, initialFocus, returnFocusTo, off, keep]', '[id, initialFocus, returnFocusTo, keep]'],
     ['{bar || <header', '{null || <header'],
     ["pageBelow === 'lg' && phone", 'phone'],
   ]);

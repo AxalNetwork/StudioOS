@@ -82,26 +82,24 @@ export function useLightboxPage() {
   return useContext(LightboxPage);
 }
 
-export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm,
-  // D1443 part 4 (#3992): selectors of what stays live behind the dialog (the AIRail and the Ask panel beside an open form).
-  keep = null,
-}) {
-  const id = useId();
-  const dialog = useRef(null);
+/**
+ * D9289 (#9289): the shell's modal behaviour on its own, for a dialog that
+ * draws its own frame (Eadwyn's fullscreen view). On mount it locks the
+ * page's scroll, makes everything else inert, joins the Escape stack and
+ * moves focus in; on unmount it undoes each and gives focus back. It returns
+ * the dialog's Tab handler, which keeps Tab and Shift+Tab inside. `off`
+ * skips all of it (the page form below 1024px). `Lightbox` itself uses it,
+ * so the two can never drift apart.
+ */
+export function useLightboxFocus(dialog, { id: givenId, off = false, onClose, onEscape, initialFocus, returnFocusTo, keep = null } = {}) {
+  const ownId = useId();
+  const id = givenId || ownId;
   const close = useRef(onClose);
   close.current = onClose;
   const escape = useRef(onEscape);
   escape.current = onEscape;
-  const tall = size === 'tall';
-  const inheritedPhone = useContext(LightboxPhone);
-  const sheet = (phoneForm || inheritedPhone) === 'sheet';
-  const phone = usePhoneWidth();
-  const page = pageBelow === 'lg' && phone;
-  const providedBar = useContext(LightboxBar);
-
   useEffect(() => {
-    if (page) return undefined;
+    if (off) return undefined;
     const el = dialog.current;
     if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return undefined; // no DOM to manage (a server render, a stub)
     const opener = returnFocusTo?.current || document.activeElement;
@@ -122,7 +120,40 @@ export default function Lightbox({
       pop(); restore(); release();
       if (opener && opener.isConnected !== false) opener.focus?.();
     };
-  }, [id, initialFocus, returnFocusTo, page, keep]);
+  }, [id, initialFocus, returnFocusTo, off, keep]);
+
+  const onTab = (e) => {
+    if (e.key !== 'Tab') return;
+    const el = dialog.current;
+    const list = tabbable(el, document.activeElement);
+    const to = tabTarget(list, document.activeElement, e.shiftKey);
+    if (to === null) return;
+    e.preventDefault();
+    (to === -1 ? el : list[to]).focus();
+  };
+
+  return onTab;
+}
+
+export default function Lightbox({
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm,
+  // D1443 part 4 (#3992): selectors of what stays live behind the dialog (the AIRail and the Ask panel beside an open form).
+  keep = null,
+}) {
+  const id = useId();
+  const dialog = useRef(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  const escape = useRef(onEscape);
+  escape.current = onEscape;
+  const tall = size === 'tall';
+  const inheritedPhone = useContext(LightboxPhone);
+  const sheet = (phoneForm || inheritedPhone) === 'sheet';
+  const phone = usePhoneWidth();
+  const page = pageBelow === 'lg' && phone;
+  const providedBar = useContext(LightboxBar);
+
+  const onTab = useLightboxFocus(dialog, { id, off: page, onClose, onEscape, initialFocus, returnFocusTo, keep });
 
   // D686 §5.4 (#1597): the frame's content can swap (Build's list ⇄ a tool) under
   // the same dialog. A swap that removed the focused control leaves focus on
@@ -136,16 +167,6 @@ export default function Lightbox({
     if (typeof el.contains === 'function' && el.contains(document.activeElement)) return;
     (el.querySelector(FOCUSABLE) || el).focus?.();
   }, [focusKey, page]);
-
-  const onTab = (e) => {
-    if (e.key !== 'Tab') return;
-    const el = dialog.current;
-    const list = tabbable(el, document.activeElement);
-    const to = tabTarget(list, document.activeElement, e.shiftKey);
-    if (to === null) return;
-    e.preventDefault();
-    (to === -1 ? el : list[to]).focus();
-  };
 
   // D695: an opt-in page has no modal effects or fixed/scrolling frame.
   if (page) {
