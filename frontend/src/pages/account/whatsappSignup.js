@@ -19,13 +19,13 @@
  * `frontend/test/interview_channels_d684.test.mjs` runs the whole flow
  * against fakes.
  *
- * NO CSP STANDS IN THE WAY: the SPA's HTML carries no Content-Security-Policy
- * (see `frontend/public/_headers`), so neither the script from
- * connect.facebook.net nor Meta's window is blocked. If a CSP is ever added
- * there, it must allow `https://connect.facebook.net` (script) and
- * `https://www.facebook.com` (frame and window) on /account/connectors/* (the
- * hub and WhatsApp's own page, D753 C1) and the interview pages, or this
- * button stops working.
+ * THE SHELL'S CSP MUST LET IT THROUGH. Since D9166 the SPA's HTML carries a
+ * Content-Security-Policy (Report-Only first; `frontend/public/_headers`,
+ * built by `scripts/lib/spaCsp.mjs`). It allows `https://connect.facebook.net`
+ * (script) and `https://www.facebook.com` (frame and connections), which
+ * /account/connectors/* (the hub and WhatsApp's own page, D753 C1) and the
+ * interview pages need, or this button stops working;
+ * `interview_channels_ui_d684.test.mjs` fails a policy that drops them.
  */
 
 export const SDK_URL = 'https://connect.facebook.net/en_US/sdk.js';

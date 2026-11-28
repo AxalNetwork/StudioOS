@@ -147,7 +147,7 @@ const map=refs=>'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f='+JSON.
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(typeof input==='string'?input:input.url), p=u.pathname;
  appendFileSync(process.env.REQUEST_LOG, JSON.stringify([u.origin,p])+'\\n');
- const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin'};
+ const js='application/javascript', headers={'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin','content-security-policy-report-only':"default-src 'self'; script-src 'self'"};
  if(p==='/api/auth/google/config') return Response.json({configured:false,popup:false,client_id:null});
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
  if(p==='/api/public/version') return Response.json({sha:'a'.repeat(40),version_id:null,built_at:null,missing:['version_id','built_at']});
@@ -178,7 +178,10 @@ globalThis.fetch=async(input,init={})=>{
  // D4582: /login is the sign-in page: its own title and canonical in the document, and noindex in its header.
  if(p==='/login' && process.env.FAULT==='login-home') return new Response('<html><head><title>From idea to funded company — Axal VC StudioOS</title><link rel="canonical" href="https://axal.vc/"></head><div id="root"></div></html>',{headers:{...headers,'content-type':'text/html'}});
  if(p==='/login') return new Response('<html><head><title>Sign in — Axal VC StudioOS</title><link rel="canonical" href="https://axal.vc/login"><meta property="og:title" content="Sign in — Axal VC StudioOS"></head><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'x-robots-tag':'noindex, follow','content-type':'text/html'}});
- return new Response('<html><meta property="og:title" content="Insights — Axal VC"><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'content-type':'text/html'}});
+ // D9166: a shell whose inline script has no hash in the policy, and one sent without the policy.
+ const inline=process.env.FAULT==='shell-csp' && p==='/about' ? '<script>unhashed()</script>' : '';
+ const sent=process.env.FAULT==='no-csp' && p==='/about' ? Object.fromEntries(Object.entries(headers).filter(([k])=>k!=='content-security-policy-report-only')) : headers;
+ return new Response('<html><meta property="og:title" content="Insights — Axal VC"><div id="root"></div>'+inline+'<script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...sent,'content-type':'text/html'}});
 };`;
 
 function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false, artifact = false) {
@@ -239,6 +242,16 @@ test('#3590: a nested dependency map in the built generation is checked too', ()
   const result = smoke('', false, false, false, true);
   assert.deepEqual({ status: result.status, leaves: result.requests.filter(([,p]) => p==='/assets/nested-leaf.js') },
     { status: 0, leaves: [['https://apex.test','/assets/nested-leaf.js'],['https://app.test','/assets/nested-leaf.js']] });
+});
+
+test('D9166: a shell route without the shell CSP, or with inline code it does not hash, fails the live smoke', () => {
+  // Mutation checked: the shellCspProblems call removed from checkRoute → both runs pass.
+  for (const [fault, needle] of [['no-csp', /missing security header content-security-policy-report-only/], ['shell-csp', /inline <script> 'sha256-[^']+' has no hash/]]) {
+    const result = smoke(fault);
+    assert.equal(result.status, 1, fault);
+    assert.match(result.stderr, needle, fault);
+    assert.match(result.stderr, /A SPA shell response is missing a security header/, `${fault}: the run prints the headers hint`);
+  }
 });
 
 test('D4582: a /login that carries the homepage head, or is indexable, fails the live smoke', () => {

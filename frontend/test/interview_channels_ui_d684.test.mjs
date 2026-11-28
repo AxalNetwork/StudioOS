@@ -809,7 +809,7 @@ test('a channel session waiting for its words shows what it waits for, never the
 
 // ------------------------------------------------------------------ where each is mounted
 
-test('mounted: the inbox route, the Connectors group, the page’s two ways in; no CSP was added to the shell', () => {
+test('mounted: the inbox route, the Connectors group, the page’s two ways in; the shell’s CSP lets the SDK through', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /const ChannelsInboxPage = lazy\(\(\) => import\('\.\/pages\/founder\/ChannelsInbox'\)\);/);
   assert.match(app, /<Route path="\/validate\/inbox" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ChannelsInboxPage \/>\)\} \/>/);
@@ -820,7 +820,17 @@ test('mounted: the inbox route, the Connectors group, the page’s two ways in; 
   const lightbox = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
   assert.match(lightbox, /channelsSource\.assign\(thread, assignTarget\(/, 'the chat import is the lightbox\'s own, inline (#1587)');
   assert.match(lightbox, /<SchedulePanel interview=\{who\} \/>/);
-  assert.doesNotMatch(readFileSync('frontend/public/_headers', 'utf8').replace(/^#.*$/gm, ''), /Content-Security-Policy/i, 'the SDK is blocked by nothing on the shell');
+  // D9166: the shell carries a CSP now (Report-Only first). Whatever its name, it must admit Meta's SDK
+  // script and its window and frame, or this button stops working once it enforces.
+  const csps = [...readFileSync('frontend/public/_headers', 'utf8').replace(/^#.*$/gm, '')
+    .matchAll(/^\s+Content-Security-Policy(?:-Report-Only)?:\s*(.+)$/gim)].map((m) => m[1]);
+  assert.ok(csps.length > 0, 'the shell policy line is where D9166 put it');
+  const sources = (csp, name) => (csp.split(';').map((d) => d.trim().split(/\s+/)).find((d) => d[0] === name) || []).slice(1);
+  for (const csp of csps) {
+    assert.ok(sources(csp, 'script-src').includes('https://connect.facebook.net'), 'script-src admits the SDK');
+    assert.ok(sources(csp, 'frame-src').includes('https://www.facebook.com'), 'frame-src admits Meta’s frame');
+    assert.ok(sources(csp, 'connect-src').includes('https://www.facebook.com'), 'connect-src admits Meta’s calls');
+  }
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /http-equiv="Content-Security-Policy"/i);
   // The SDK is never a static script on the page: only the click adds it. The
   // page holds no `connect.facebook.` at all, a ban on the text rather than a

@@ -292,7 +292,8 @@ export async function serveDeckEmbed(request: Request, env: Env): Promise<Respon
   const shell = await env.ASSETS.fetch(new Request(request.url, { method: 'GET', headers: { accept: 'text/html' } }));
   const headers = new Headers(shell.headers);
   for (const k of ['content-length', 'etag', 'content-security-policy', 'content-security-policy-report-only', 'x-frame-options']) headers.delete(k);
-  for (const [k, v] of Object.entries(SHELL_HEADERS)) if (k !== 'x-frame-options') headers.set(k, v);
+  // D9166: nor the shell's Report-Only policy, whose `frame-ancestors 'none'` would report every allowed embed.
+  for (const [k, v] of Object.entries(SHELL_HEADERS)) if (k !== 'x-frame-options' && k !== 'content-security-policy-report-only') headers.set(k, v);
   headers.set('content-security-policy', frameAncestors(link.publish));
   headers.set('x-robots-tag', 'noindex');
   headers.set('cache-control', 'no-store');

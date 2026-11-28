@@ -141,6 +141,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assetPath, assetProblem, entriesFromLedger, entryRefsFromHtml, parseViteMapDeps } from './lib/spaChunks.mjs';
 import { CONNECTOR_READINESS_PATH, connectorReadinessVerdict, summaryMarkdown, warnLine } from './lib/connectorReadiness.mjs';
+import { shellCspProblems } from './lib/spaCsp.mjs';
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
 
@@ -525,6 +526,7 @@ async function checkRoute(base, route, assetSink, entrySink) {
       if (route.shell) {
         problems.push(...assertShell(body));
         problems.push(...assertSecurityHeaders(headers));
+        problems.push(...shellCspProblems(headers, body)); // D9166
         if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertOpenerPolicy(headers));
         if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertSignInPolicy(headers, body));
         if (route.card) problems.push(...assertRecordCard(body));

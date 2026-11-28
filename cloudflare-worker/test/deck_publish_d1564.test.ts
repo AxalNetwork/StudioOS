@@ -198,6 +198,9 @@ test('D1564: /embed/:token answers only a frame from a listed origin, with frame
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get('content-security-policy'), `frame-ancestors ${SITE}`);
   assert.equal(ok.headers.get('x-frame-options'), null, 'no X-Frame-Options on the embed');
+  // D9166: nor the shell's Report-Only policy, whose frame-ancestors 'none' would report this allowed frame.
+  assert.equal(ok.headers.get('content-security-policy-report-only'), null, 'no shell CSP on the embed');
+  assert.equal(ok.headers.get('strict-transport-security'), 'max-age=63072000; includeSubDomains; preload', 'the other shell headers stay');
   assert.equal(ok.headers.get('x-robots-tag'), 'noindex');
   assert.match(await ok.text(), /id="root"/);
   const elsewhere = await frame({ referer: 'https://evil.example.test/', 'sec-fetch-dest': 'iframe' });

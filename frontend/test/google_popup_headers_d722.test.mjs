@@ -14,10 +14,10 @@
  * shell at all. The Worker's `same-origin` on `/api/*` JSON is harmless —
  * COOP only acts on documents.
  *
- * The shell sends no CSP today (see the note in `_headers`). If it ever gains
- * one, it must admit GIS: the script, its stylesheet, and accounts.google.com
- * for connections and the frame GIS uses. The checker is exercised on a
- * fixture below, so it is not vacuous while there is nothing to check.
+ * The shell sends a CSP since D9166 (Report-Only first; see the note in
+ * `_headers`). It must admit GIS: the script, its stylesheet, and
+ * accounts.google.com for connections and the frame GIS uses. The checker is
+ * also exercised on a fixture below, so a broken parse cannot pass vacuously.
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/google_popup_headers_d722.test.mjs
  */
