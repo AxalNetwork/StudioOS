@@ -12,6 +12,7 @@ import { doNamespace } from '../util/doNamespace';
 import { bindingKey } from '../util/schemaBootstrap';
 import { CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger, triggersFor } from '../util/cronHistory';
 import { nextCronRun } from '../util/cronSchedule';
+import { logAdminAction } from '../services/adminAudit';
 
 const infra = new Hono<{ Bindings: Env }>();
 
@@ -52,7 +53,9 @@ async function ensureInfraSchema(env: Env) {
       moved_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE INDEX IF NOT EXISTS idx_dlq_type ON dead_letter_queue(job_type, moved_at)`,
-    // Task #7 (IE) — mirror table for CF Queue DLQ messages.
+    // Task #7 (IE) — mirror table for CF Queue DLQ messages. D9034: one row
+    // per message_id, with the message's idempotency key (migration
+    // 202611272117_9034_cf_dlq_mirror_once.sql declares the same shape).
     `CREATE TABLE IF NOT EXISTS cf_dlq_mirror (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       message_id TEXT NOT NULL,
@@ -60,10 +63,12 @@ async function ensureInfraSchema(env: Env) {
       payload TEXT,
       attempts INTEGER NOT NULL DEFAULT 0,
       error TEXT,
-      received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      idempotency_key TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_cf_dlq_time ON cf_dlq_mirror(received_at)`,
     `CREATE INDEX IF NOT EXISTS idx_cf_dlq_type ON cf_dlq_mirror(job_type, received_at)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_cf_dlq_message ON cf_dlq_mirror(message_id)`,
     `CREATE TABLE IF NOT EXISTS system_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metric_name TEXT NOT NULL,
@@ -279,50 +284,109 @@ infra.get('/dlq', async (c) => {
   });
 });
 
+// D9034 (#9034): the two tables a dead letter can sit in. Each statement is
+// written out whole, so no value reaches the query text: `columns` is the
+// bind order of `restore`, every column a replay puts back if its enqueue fails.
+const DLQ_TABLES = {
+  cf: {
+    columns: ['id', 'message_id', 'job_type', 'payload', 'attempts', 'error', 'received_at', 'idempotency_key'],
+    select: `SELECT id, message_id, job_type, payload, attempts, error, received_at, idempotency_key
+               FROM cf_dlq_mirror WHERE id = ?`,
+    claim: `DELETE FROM cf_dlq_mirror WHERE id = ?`,
+    restore: `INSERT INTO cf_dlq_mirror (id, message_id, job_type, payload, attempts, error, received_at, idempotency_key)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  },
+  d1: {
+    columns: ['id', 'original_job_id', 'job_type', 'payload', 'last_error', 'attempts', 'moved_at'],
+    select: `SELECT id, original_job_id, job_type, payload, last_error, attempts, moved_at
+               FROM dead_letter_queue WHERE id = ?`,
+    claim: `DELETE FROM dead_letter_queue WHERE id = ?`,
+    restore: `INSERT INTO dead_letter_queue (id, original_job_id, job_type, payload, last_error, attempts, moved_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  },
+} as const;
+
+/**
+ * The replay's idempotency key: the dead letter's own key as the stem where it
+ * kept one (a cf row mirrored after D9034), else the row's address. An earlier
+ * replay's suffix is dropped first, so a message dead-lettered again after a
+ * replay does not grow its key. The key names the row, so a replay that is
+ * restored and run again carries the same key and the consumer runs it once.
+ */
+export function dlqReplayKey(source: 'cf' | 'd1', id: number, storedKey: unknown): string {
+  const stem = typeof storedKey === 'string' && storedKey ? storedKey.split(':dlq-replay:')[0] : `dlq-${source}-${id}`;
+  return `${stem}:dlq-replay:${source}-${id}`;
+}
+
 // POST /api/infra/dlq/:id/retry — re-enqueue a dead-letter job and remove it from DLQ.
 // Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
+//
+// D9034: once only. The handler claims the row by deleting it, and only the
+// request whose DELETE changed the row enqueues; a second click or a second
+// admin gets 409. An enqueue that throws puts the row back, unchanged, so the
+// dead letter is never lost. Each replay writes an admin audit row.
 infra.post('/dlq/:id/retry', async (c) => {
   await ensureInfraSchema(c.env);
-  await requireAdmin(c);
+  const user = await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
   const source = (c.req.query('source') || '').trim();
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
   if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
 
-  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
-  const errorCol = source === 'cf' ? 'error' : 'last_error';
-  const row = await c.env.DB.prepare(
-    `SELECT job_type, payload, ${errorCol} AS last_error, attempts FROM ${table} WHERE id = ?`
-  ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
+  const sqlFor = DLQ_TABLES[source];
+  const row = await c.env.DB.prepare(sqlFor.select).bind(id).first<Record<string, unknown>>();
 
   if (!row) return c.json({ error: 'DLQ item not found' }, 404);
 
-  // Re-enqueue with a fresh idempotency key so the dedup layer won't
-  // silently skip it if the original key is still in job_idempotency.
-  const payload = row.payload ? JSON.parse(row.payload) : {};
-  const result = await enqueueJob(c.env, row.job_type as JobType, payload, {
-    idempotency_key: `dlq-retry-${source}-${id}-${crypto.randomUUID()}`,
-  });
+  // The claim: exactly one request deletes the row.
+  const claim = await c.env.DB.prepare(sqlFor.claim).bind(id).run();
+  if ((claim.meta?.changes ?? 0) !== 1) {
+    return c.json({ error: 'dlq_item_already_claimed', message: 'This dead letter was already replayed or deleted.' }, 409);
+  }
 
-  // Remove from the correct table.
-  await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+  const jobType = String(row.job_type);
+  let result;
+  try {
+    const payload = typeof row.payload === 'string' && row.payload ? JSON.parse(row.payload) : {};
+    result = await enqueueJob(c.env, jobType as JobType, payload, {
+      idempotency_key: dlqReplayKey(source, id, row.idempotency_key),
+    });
+  } catch (e) {
+    console.error('[infra] dlq replay enqueue failed', source, id, (e as Error)?.name);
+    try {
+      await c.env.DB.prepare(sqlFor.restore).bind(...sqlFor.columns.map((k) => row[k] ?? null)).run();
+    } catch {
+      console.error('[infra] dlq replay row could not be restored', source, id);
+    }
+    return c.json({ error: 'dlq_replay_enqueue_failed', message: 'The job could not be queued again. The dead letter is unchanged; try again.' }, 502);
+  }
+
+  await logAdminAction(c.env, user.id, user.email, 'dlq_replayed', {
+    source, dlq_id: id, job_type: jobType, transport: result.transport,
+  });
 
   return c.json({ ok: true, requeued: true, source, transport: result.transport, idempotency_key: result.idempotency_key });
 });
 
 // DELETE /api/infra/dlq/:id — discard a dead-letter entry (admin only).
 // Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
+// D9034: the discard writes an admin audit row (no payload).
 infra.delete('/dlq/:id', async (c) => {
   await ensureInfraSchema(c.env);
-  await requireAdmin(c);
+  const user = await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
   const source = (c.req.query('source') || '').trim();
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
   if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
 
-  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
-  const r = await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+  const sqlFor = DLQ_TABLES[source];
+  const row = await c.env.DB.prepare(sqlFor.select).bind(id).first<{ job_type: string }>();
+  const r = await c.env.DB.prepare(sqlFor.claim).bind(id).run();
   if ((r.meta?.changes ?? 0) === 0) return c.json({ error: 'DLQ item not found' }, 404);
+
+  await logAdminAction(c.env, user.id, user.email, 'dlq_deleted', {
+    source, dlq_id: id, job_type: row?.job_type ?? null,
+  });
 
   return c.json({ ok: true, deleted: true });
 });

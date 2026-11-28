@@ -2312,6 +2312,16 @@ const studioos = {
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
+        // D9033 (#9033): system_metrics, error_logs, rate_limit_logs and
+        // cf_dlq_mirror keep 30 days, pruned in bounded batches beside
+        // Jobs.cleanup; each table is its own sub-task. Not gated on
+        // `hqCadences`: every deployment writes its own tables.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
+          try {
+            const { runLogPrune } = await import('./services/logRetention');
+            await runLogPrune(env, now, { done: (t, n) => cronTasks.done(t, n), failed: taskFailed });
+          } catch (e) { taskFailed('log prune', e); }
+        }
         // D1256 (#3279) — the venture scorecard. Every 15 minutes, ventures
         // whose people's connectors synced since their last row; at 04:20 the
         // nightly recompute; at 04:30 on a quarter's first day the fairness
@@ -3445,7 +3455,8 @@ const studioos = {
         // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
         // yesterday's Overview + Financial rollup into `analytics_snapshots`
         // (USD baseline) so admin historical comparisons survive the
-        // nightly system_metrics cleanup. Idempotent on re-run via the
+        // system_metrics prune, which keeps 30 days at 03:00 (D9033,
+        // services/logRetention.ts). Idempotent on re-run via the
         // table's UNIQUE(snapshot_date) constraint.
         if (now.getUTCHours() === 2 && now.getUTCMinutes() === 5) {
           try {

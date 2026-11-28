@@ -9,13 +9,15 @@
  *   backup_stale         the newest successful D1 backup started longer ago than BACKUP_MAX_AGE_MS (the 24-hour
  *                        recovery-point objective plus the 2-hour slack its schedule needs);
  *   schedule_missed      no run of a watched workflow was created within its window;
- *   credentials_missing  the newest finished run failed at the workflow's own credential guard step.
+ *   credentials_missing  the newest finished run failed at the workflow's own credential guard step;
+ *   release_stale        D9050: production has not published for longer than RELEASE_MAX_AGE_MS while `main` moved on
+ *                        (`releaseHealth.mjs`, merged in by the `ops-schedules` reporter).
  *
  * Unreadable evidence is `active: null`, never a recovery: an open alert stays open until a read proves it healthy.
  */
 export const APPROVAL_GRACE_MS = 60 * 60_000;
 export const BACKUP_MAX_AGE_MS = 26 * 60 * 60_000;
-export const OPS_REASONS = Object.freeze(['approval_pending', 'backup_stale', 'schedule_missed', 'credentials_missing']);
+export const OPS_REASONS = Object.freeze(['approval_pending', 'backup_stale', 'schedule_missed', 'credentials_missing', 'release_stale']);
 
 /** The scheduled jobs this alert watches. `window` is how long a missing run is tolerated; `backup` also needs a success. */
 export const WATCHED = Object.freeze([

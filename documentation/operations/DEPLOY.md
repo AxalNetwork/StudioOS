@@ -578,6 +578,23 @@ exists for hosts with no network route to production. If you set it, the deploy
 is unverified until you check by other means — say so rather than reporting a
 clean deploy.
 
+**Production that stops shipping opens an alert (D9050, #9050).** A deploy run
+whose `build and deploy studioos Worker` job was skipped or cancelled still ends
+`success`, so a failed run is not the signal. The hourly `ops-schedules` check
+(`.github/workflows/github-alerts.yml`, `scripts/lib/releaseHealth.mjs`) reads
+this workflow's last 30 `main` runs and, newest first, each run's jobs until one
+published: its `Deploy to Cloudflare Worker` step concluded `success` (a job
+that failed at `Apply pending D1 migrations` did not). The check adds
+`release_stale` to the `[alert] scheduled production operations not running`
+issue when that run started more than 24 hours ago (`RELEASE_MAX_AGE_MS`) and the
+`main` tip is not the commit it published. The alert names that commit and its
+age. A deploy job waiting on the production environment's approval for more than
+an hour adds `approval_pending`. The reason clears on the first hourly read that
+finds a publish in the last 24 hours, or finds the published commit at the
+`main` tip. The issue closes once no scheduled operation has a reason left. If
+the check cannot read the listing, the jobs or the tip, an open alert stays open
+and the check fails visibly.
+
 ### 5.1 A 401 from a token you minted is not a broken deploy
 
 When probing an authenticated route, do not assume a `JWT_SECRET` from a dev

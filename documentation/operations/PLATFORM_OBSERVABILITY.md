@@ -136,6 +136,27 @@ lists open episodes and those cleared in the last 30 days.
 the Super Admin write bar, audited) stops an open episode's notices until
 `muted_until`; it is still tracked and still clears.
 
+**Detected incidents as episodes (D9032).** The same sweep also reads three of
+the incidents in §7 and runs them through these episodes, so they notify
+without anyone opening HQ · Platform (`readIncidentSignals` in
+`services/platformCapacitySignals.ts`). They are read by the sweep only, not by
+the capacity read, and are not in `SNAPSHOT_KEY`: with no measured history, an
+unreadable source holds an open episode and opens none. The thresholds are the
+ones `platformHealth.ts` already uses.
+
+| Metric | Value | Warning | Critical |
+| --- | --- | --- | --- |
+| `incidents.cron.failure_streak` | the longest run of failed rows of any declared trigger (§7.1) | `CRON_FAILURE_STREAK` (3) | none |
+| `incidents.webhook.refusal_streak` | Stripe webhook deliveries refused in a row (§7.2) | `WEBHOOK_FAILURE_STREAK` (3) | `WEBHOOK_FAILURE_CRITICAL` (10) |
+| `incidents.dlq.new_waiting` | dead letters above the watch mark still waiting in `dead_letter_queue` and `cf_dlq_mirror`, `agent_run` letters excluded (§7.3) | 1 | `DLQ_HIGH` (100) |
+
+The dead-letter watch keeps one KV mark (`platform-capacity:dlq:mark`, the
+highest id of each table already accounted for). The first sweep sets it, so
+the backlog already waiting stays the page's figure. It moves up only on a sweep
+that finds no new letter waiting, so an episode stays open while its letters
+wait and clears once they are replayed or discarded. A branch sweep returns
+before reading anything, so a branch deploy notifies no one.
+
 ## 5.1 Signals from other issues (D4559 part 3)
 
 `services/platformCapacitySignals.ts` adds the signals that closed issues
@@ -297,6 +318,10 @@ on every read from the signal that raises them (`services/platformHealth.ts`):
 - **Keyed and deduplicated.** One failure is one incident however often the
   page loads. It clears on the first read after the signal recovers.
 - **Not stored.** No table is written.
+- **Three of them notify (D9032).** A cron failure streak (§7.1), a webhook
+  refusal streak (§7.2) and new dead letters (§7.3) are also capacity alert
+  episodes (§5), so HQ Super Admins get one in-app notice per episode and
+  stage. The others show on the page only.
 - **Kept apart from published incidents.** Status-page incidents are entered
   by hand. They are counted apart and never raise or clear the state.
 - **Never healthy with a gap.** A signal that could not be read is listed as
@@ -326,6 +351,11 @@ Steps:
    each one's `error_class`, and shows the tasks that ran and did nothing
    (§5.3).
 
+**Notifies (D9032):** `CRON_FAILURE_STREAK` failed runs in a row open the
+`incidents.cron.failure_streak` episode (§5), one in-app notice to HQ Super
+Admins, and the first ok run clears it. A single failure and a late run show on
+the page only.
+
 ### 7.2 The Stripe webhook is refusing or silent
 
 The incident's severity depends on what the request log shows:
@@ -346,6 +376,10 @@ Steps:
 4. Stripe retries refused events for up to three days. The incident clears on
    the first 2xx.
 
+**Notifies (D9032):** the high and critical streaks open the
+`incidents.webhook.refusal_streak` episode (warning, then critical, §5). The
+low silence note shows on the page only.
+
 ### 7.3 Dead letters are waiting
 
 Severity is **medium** from one dead letter and **high** from `DLQ_HIGH`.
@@ -360,6 +394,29 @@ Steps:
    fulfillment and notification jobs a replay produces the outcome once even
    if part of the job had already happened (§5.3); a dead-lettered email's
    log row reads `dlq` until then.
+
+A replay runs once (D9034). The route claims the row by deleting it, and only
+the request whose delete changed the row enqueues the job: a second click, or a
+second admin at the same moment, gets 409 `dlq_item_already_claimed`. If the
+enqueue throws, the row is put back unchanged and the answer is 502
+`dlq_replay_enqueue_failed`; try again. The replay's idempotency key is the
+message's own key (kept in `cf_dlq_mirror.idempotency_key`) with
+`:dlq-replay:<source>-<id>` added, so a replay that is retried carries the same
+key and the consumer runs it once. Each replay writes a `dlq_replayed` audit
+row and each discard (`DELETE /api/infra/dlq/:id`) a `dlq_deleted` row, naming
+the admin, the source, the row id and the job type, never the payload.
+
+The mirror itself holds one row per message (`idx_cf_dlq_message`). A mirror
+write that fails is retried after 60 seconds (`retry_delay` on every job DLQ
+consumer in `wrangler.toml`). On the final attempt the consumer writes an
+`error_logs` row with `source = 'dlq-consumer'`, the job type and the message
+id, and acks: the message is gone, so read that row before anything else.
+
+**Notifies (D9032):** a new dead letter of any job but `agent_run` opens the
+`incidents.dlq.new_waiting` episode (warning from one, critical at `DLQ_HIGH`,
+§5); it clears when those letters are replayed or discarded. Agent-run letters
+are told to HQ by `agents/alerts.ts`, once per batch. The backlog that was
+already waiting when the watch started shows on the page only.
 
 ### 7.4 Telemetry cannot be read
 

@@ -426,16 +426,24 @@ monitoring.post('/score-flags/:id/waiver', async (c) => {
   return c.json({ ok: true });
 });
 
-// ---------- /cleanup (manual; safe to call by admin or cron) ----------
+// ---------- /cleanup (manual) ----------
+// D9033 (#9033): the same prune the 03:00 cron runs (services/logRetention.ts),
+// so the button and the cron cannot drift: 30 days, bounded batches, the four
+// log tables. A table that fails is named in `failed`; the others still run.
 monitoring.post('/cleanup', async (c) => {
   await requireAdmin(c);
-  const sql = getSQL(c.env);
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const r1 = await sql`DELETE FROM system_metrics WHERE timestamp < ${cutoff}`;
-  const r2 = await sql`DELETE FROM rate_limit_logs WHERE created_at < ${cutoff}`;
-  const r3 = await sql`DELETE FROM error_logs WHERE created_at < ${cutoff}`;
-  await sql.end();
-  return c.json({ purged: { system_metrics: r1, rate_limit_logs: r2, error_logs: r3 }, cutoff });
+  const { pruneLogTables } = await import('../services/logRetention');
+  const { cutoff, results } = await pruneLogTables(c.env);
+  const purged: Record<string, number> = {};
+  const failed: string[] = [];
+  for (const r of results) {
+    purged[r.table] = r.deleted;
+    if (!r.ok) {
+      failed.push(r.table);
+      console.error('[monitoring] log prune failed', r.table, (r.error as Error)?.name);
+    }
+  }
+  return c.json({ purged, failed, capped: results.filter((r) => r.capped).map((r) => r.table), cutoff });
 });
 
 export default monitoring;
