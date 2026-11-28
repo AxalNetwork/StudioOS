@@ -41,6 +41,7 @@ those parts report through the required `test:drift (full suite)` context.
 | `meeting-bot/` | suite › `test:meeting-bot`<br>`meeting-bot-image.yml` › validate<br>`meeting-worker-contracts.yml` › Meeting reliability contracts | pull request, merge queue, push to main<br>pull request (paths), manual<br>pull request (paths) | yes, in `test:drift (full suite)`<br>no<br>no | unit and contract | #3588 |
 | `merge-control/` | suite › `test:merge-control` | pull request, merge queue, push to main | yes, in `test:drift (full suite)` | unit and contract | none filed |
 | `scripts/` | suite › `test:guards`<br>suite › `test:retention`<br>`agent-provenance.yml` › provenance<br>`claude-review.yml` › claude review (self-test)<br>`ownership.yml` › ownership<br>`release-alpha-rename.yml` › add the stage suffix to unsuffixed releases<br>`release-draft.yml` › update the release draft<br>`release-rehearsal.yml` › Release window rehearsal | pull request, merge queue, push to main<br>pull request, merge queue, push to main<br>pull request, merge queue<br>pull request<br>pull request<br>manual<br>push to main, manual<br>pull request (paths) | yes, in `test:drift (full suite)`<br>yes, in `test:drift (full suite)`<br>no<br>no<br>no<br>no<br>no<br>no | unit and contract | none filed |
+| `workspace-engine/` | suite › `test:worker`<br>`workspace-image.yml` › validate | pull request, merge queue, push to main<br>pull request (paths) | yes, in `test:drift (full suite)`<br>no | unit and contract | none filed |
 
 ## Worker services
 

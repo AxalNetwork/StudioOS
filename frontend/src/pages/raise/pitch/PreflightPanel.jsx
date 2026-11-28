@@ -13,8 +13,8 @@ import { refusalOf } from './newDeckModel';
 import {
   ADD_TOKENS, ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FIX_WAITING, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER,
   NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SAVE_FIRST, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
-  canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
-  sentLine, subLine, uncheckedBanner,
+  canAskFix, chargedLine, checkingLine, clustersOf, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
+  sentLine, subLine, uncheckedBanner, draftLine, focusAfter, headlineOf,
 } from './preflightUiModel';
 
 /**
@@ -120,24 +120,31 @@ function FixAction({ fix, testId }) {
   );
 }
 
+/** D8772 (Q1 A): the severity chip on a finding's row, "Blocks export" or "Warning". */
+const CHIP = {
+  blocking: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200',
+  warning: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200',
+};
+
 /** One finding (pf2): the slide number, where, the defect, why it matters, and its actions. */
-function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, onRetry = null, retrying = false, testId }) {
+function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, onRetry = null, retrying = false, rowRef = null, testId }) {
   const askable = !readOnly && Boolean(fix);
   return (
-    <li className={`${BOX} flex gap-3`} aria-label={row.label} data-testid={testId}>
+    <li className={`${BOX} flex gap-3`} aria-label={row.label} tabIndex={rowRef ? -1 : undefined} ref={rowRef} data-finding-id={row.id} data-testid={testId}>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-axal-ground font-mono text-[12px] font-bold text-axal-ink dark:bg-gray-800 dark:text-gray-100" aria-hidden="true">{row.slide ?? '—'}</span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-center gap-1.5">
           {n != null ? <span className="font-mono text-[10.5px] font-bold text-axal-muted dark:text-gray-400" aria-hidden="true">{n}</span> : null}
           <span className={EYE}>{row.where}</span>
+          {row.severityWord ? <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${CHIP[row.severity === 'blocking' ? 'blocking' : 'warning']}`} data-testid={`${testId}-severity`}>{row.severityWord}</span> : null}
           {stale ? <span className="rounded-full bg-axal-ground px-1.5 py-0.5 text-[10px] font-bold text-axal-muted dark:bg-gray-800 dark:text-gray-400" data-testid={`${testId}-stale`}>{OUT_OF_DATE}</span> : null}
         </span>
         <span className={`text-[13px] font-bold leading-snug ${INK}`}>{row.headline}</span>
         {!compact && row.detail ? <span className={MUTED}>{row.detail}</span> : null}
         {!compact && row.fix ? <span className={MUTED}>{row.fix}</span> : null}
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
-          {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{SHOW_ME}</button> : null}
-          {!compact && onDismiss && row.dismissible && !readOnly ? <button type="button" className={GHOST} onClick={() => onDismiss(row)} data-testid={`${testId}-dismiss`}>{DISMISS}</button> : null}
+          {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} aria-label={row.showLabel} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{SHOW_ME}</button> : null}
+          {!compact && onDismiss && row.dismissible && !readOnly ? <button type="button" className={GHOST} aria-label={row.dismissLabel} onClick={() => onDismiss(row)} data-testid={`${testId}-dismiss`}>{DISMISS}</button> : null}
           {/* #3661 pf5c: a slide that couldn't be checked is tried again on its own. */}
           {onRetry && row.slide != null ? (
             <button type="button" className={GHOST} disabled={retrying} aria-busy={retrying || undefined} aria-label={retryLabel(row.slide)}
@@ -169,6 +176,24 @@ function Group({ title, note, count, tag = null, children, testId }) {
   );
 }
 
+/**
+ * D8772 (Q2 A): a group's rows, the same problem on the same slide under one heading with a row
+ * per element. Each row keeps its own number, id and buttons. `row(r, n)` draws one row.
+ */
+function Clustered({ rows, start = 1, row, testId }) {
+  let n = start;
+  return clustersOf(rows).map((c) => {
+    if (!c.heading) { const one = c.rows[0]; const out = row(one, n); n += 1; return <React.Fragment key={one.id}>{out}</React.Fragment>; }
+    const items = c.rows.map((r) => { const out = row(r, n); n += 1; return <React.Fragment key={r.id}>{out}</React.Fragment>; });
+    return (
+      <li key={c.key} className="flex flex-col gap-1.5" data-testid={`${testId}-cluster`}>
+        <span className={`text-[12.5px] font-extrabold ${INK}`} role="heading" aria-level={4} data-testid={`${testId}-cluster-heading`}>{c.heading}</span>
+        <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label={c.heading}>{items}</ul>
+      </li>
+    );
+  });
+}
+
 /** pf5a: a slide at a time, with the slides listed. */
 function Checking({ progress, testId = 'pitch-preflight-checking' }) {
   const { done, total } = progress;
@@ -193,14 +218,26 @@ function Checking({ progress, testId = 'pitch-preflight-checking' }) {
  * The results panel (PF2, PF4, PF5). `pf` is `usePreflight()`'s; `onShow(row)`
  * selects the finding's card and block and closes the panel.
  */
-export function PreflightPanel({ pf, version, readOnly = false, deckId = null, tokensOut = false, onTokens, onProposals, onOpenAsk, onShow, onClose }) {
+export function PreflightPanel({ pf, version, readOnly = false, draft = false, returnTo = null, onReturned, deckId = null, tokensOut = false, onTokens, onProposals, onOpenAsk, onShow, onClose }) {
   const [openPassed, setOpenPassed] = useState(false);
   const [lastDismissed, setLastDismissed] = useState(null);
   const g = pf.groups;
   const slides = (pf.snapshot || {}).slides?.length ?? 0;
   const stale = Boolean(g) && !pf.current;
-  const sub = subLine({ version, at: pf.at, slides: pf.running ? pf.progress.total : slides, current: !stale, running: Boolean(pf.running) });
-  const fixed = fixedLine(fixedSince(pf.previous, g));
+  const sub = subLine({ version, at: pf.at, slides: pf.running ? pf.progress.total : slides, current: !stale, running: Boolean(pf.running), draft });
+  const fixedWheres = fixedSince(pf.previous, g);
+  const fixed = fixedLine(fixedWheres);
+  const head = g ? headlineOf(g) : null;
+  // D8772 (PTF04): back from a finding, once the check is current again, focus the same row, else the next one.
+  const rowRefs = useRef(new Map());
+  const refFor = (id) => (el) => { if (el) rowRefs.current.set(id, el); else rowRefs.current.delete(id); };
+  useEffect(() => {
+    if (!returnTo || !g || pf.running || stale) return;
+    const id = focusAfter(returnTo.order, [...g.fix, ...g.look], returnTo.id);
+    const el = id != null ? rowRefs.current.get(id) : null;
+    if (el && typeof el.focus === 'function') el.focus();
+    onReturned?.(id);
+  }, [returnTo, g, pf.running, stale]); // eslint-disable-line react-hooks/exhaustive-deps
   const banner = uncheckedBanner(g);
   const nothing = g && !g.fix.length && !g.look.length && !g.unchecked.length;
   const dismiss = (row) => { pf.dismiss(row.id, row.severity); setLastDismissed(row); };
@@ -227,6 +264,8 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
               </div>
             ) : null}
             {fixed ? <span className="text-[12.5px] font-bold text-emerald-700 dark:text-emerald-300" role="status" data-testid="pitch-preflight-fixed">✓ {fixed}</span> : null}
+            {/* D8772: a check of the draft says so, and a repair found there is the draft's until it is saved as a version. */}
+            {draft && !stale ? <span className={MUTED} data-testid="pitch-preflight-draft">{draftLine({ version, fixed: fixedWheres.length })}</span> : null}
             {banner ? (
               <div className={`${BOX} flex flex-wrap items-center justify-between gap-2`} data-testid="pitch-preflight-unchecked-banner">
                 <span className={`text-[12.5px] ${INK}`}>{banner}</span>
@@ -239,7 +278,7 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
                 <span className={MUTED}>{passedLine(g.passed.length, slides)}</span>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1.5" role="status" aria-label={countsLine({ fix: g.fix.length, look: g.look.length, unchecked: g.unchecked.length })} data-testid="pitch-preflight-counts">
+              <div className="flex flex-wrap gap-1.5" role="status" aria-label={head.announce} data-testid="pitch-preflight-counts">
                 {g.fix.length ? <Count n={g.fix.length} word="to fix" tone="fix" testId="pitch-preflight-count-fix" /> : null}
                 {g.look.length ? <Count n={g.look.length} word="to look at" tone="look" testId="pitch-preflight-count-look" /> : null}
                 {g.unchecked.length ? <Count n={g.unchecked.length} word="couldn’t check" tone="unchecked" testId="pitch-preflight-count-unchecked" /> : null}
@@ -247,7 +286,7 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
             )}
             {g.fix.length ? (
               <Group title={GROUPS.fix} note={GROUP_NOTES.fix} count={g.fix.length} testId="pitch-preflight-fix">
-                {g.fix.map((r, i) => <FindingRow key={r.id} row={r} n={i + 1} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} testId={`pitch-preflight-row-${r.id}`} />)}
+                <Clustered rows={g.fix} start={1} testId="pitch-preflight-fix" row={(r, n) => <FindingRow row={r} n={n} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} rowRef={refFor(r.id)} testId={`pitch-preflight-row-${r.id}`} />} />
               </Group>
             ) : null}
             {lastDismissed && pf.dismissed.has(lastDismissed.id) ? (
@@ -258,7 +297,7 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
             ) : null}
             {g.look.length ? (
               <Group title={GROUPS.look} note={readOnly ? null : GROUP_NOTES.look} count={g.look.length} testId="pitch-preflight-look">
-                {g.look.map((r, i) => <FindingRow key={r.id} row={r} n={g.fix.length + i + 1} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} onDismiss={dismiss} testId={`pitch-preflight-row-${r.id}`} />)}
+                <Clustered rows={g.look} start={g.fix.length + 1} testId="pitch-preflight-look" row={(r, n) => <FindingRow row={r} n={n} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} onDismiss={dismiss} rowRef={refFor(r.id)} testId={`pitch-preflight-row-${r.id}`} />} />
               </Group>
             ) : null}
             {pf.notKept ? <span role="alert" className="text-[12.5px] font-semibold text-rose-700 dark:text-rose-300" data-testid="pitch-preflight-not-kept">{NOT_KEPT}</span> : null}
@@ -306,13 +345,18 @@ export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch
   if (progress) return <Checking progress={progress} testId={`${prefix}-checking`} />;
   if (!gate) return null;
   const showLook = !gate.fix.length || openLook;
+  // D8772 (PTF13): "Nothing to fix" only when nothing at all is found; warnings alone read "No blockers · 3 warnings to confirm".
+  const head = headlineOf(gate);
+  const headTone = head.tone === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : head.tone === 'fix' ? 'text-rose-700 dark:text-rose-300' : head.tone === 'look' ? 'text-amber-800 dark:text-amber-300' : INK;
+  const headId = head.tone === 'ok' || head.tone === 'unchecked' ? `${prefix}-nothing` : head.tone === 'look' ? `${prefix}-warnings` : `${prefix}-blockers`;
   return (
     <>
+      <span className={`text-[14px] font-extrabold ${headTone}`} role="status" aria-label={head.announce} data-testid={headId}>{head.tone === 'ok' ? '✓ ' : ''}{head.text}</span>
       {gate.fix.length ? (
         <Group title="To fix first" count={gate.fix.length} testId={`${prefix}-fix-list`}>
-          {gate.fix.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />)}
+          <Clustered rows={gate.fix} testId={`${prefix}-fix-list`} row={(r) => <FindingRow row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />} />
         </Group>
-      ) : <span className="text-[14px] font-extrabold text-emerald-700 dark:text-emerald-300" data-testid={`${prefix}-nothing`}>✓ {NOTHING_TO_FIX}</span>}
+      ) : null}
       {gate.look.length && gate.fix.length ? (
         <button type="button" className={`self-start text-[12.5px] font-bold ${INK}`} aria-expanded={openLook} onClick={() => setOpenLook((o) => !o)} data-testid={`${prefix}-look-toggle`}>
           {gate.look.length} worth a look {openLook ? '▾' : '▸'}
@@ -320,7 +364,7 @@ export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch
       ) : null}
       {gate.look.length && showLook ? (
         <Group title={GROUPS.look} note={GROUP_NOTES.lookGate} count={gate.look.length} testId={`${prefix}-look`}>
-          {gate.look.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />)}
+          <Clustered rows={gate.look} testId={`${prefix}-look`} row={(r) => <FindingRow row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />} />
         </Group>
       ) : null}
       {gate.waitLine ? <span className={MUTED} data-testid={`${prefix}-wait`}>{gate.waitLine}</span> : null}
@@ -356,10 +400,17 @@ export function PreflightGate({ gate, progress = null, version, dirty = false, o
  * Where "Show me" leaves the founder (pf5g): the finding over the slide, with
  * Previous and Next through the findings and the way back to the panel.
  */
-export function FindingStrip({ rows, id, onStep, onBack, onClose }) {
+export function FindingStrip({ rows, id, repair = null, onRepair, onStep, onBack, onClose }) {
   const s = stepOf(rows, id);
   const row = rows[s.index];
   if (!row) return null;
+  // D8772 (PTF03): a source finding on a bound tile offers its repair here, in the draft; Back re-checks.
+  const fixLine = repair ? (
+    <span className="flex basis-full flex-wrap items-center gap-2" data-testid="pitch-preflight-strip-repair">
+      {repair.state === 'ready' ? <button type="button" className={PRIMARY} onClick={() => onRepair?.(repair)} data-testid="pitch-preflight-strip-repair-run">{repair.action}</button> : null}
+      <span className={MUTED} data-testid="pitch-preflight-strip-repair-line">{repair.line}</span>
+    </span>
+  ) : null;
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/40" role="region" aria-label={s.line} data-testid="pitch-preflight-strip">
       <button type="button" className={GHOST} onClick={onBack} data-testid="pitch-preflight-strip-back"><ChevronLeft size={14} aria-hidden="true" />{TITLE}</button>
@@ -371,6 +422,7 @@ export function FindingStrip({ rows, id, onStep, onBack, onClose }) {
       <button type="button" className={GHOST} aria-disabled={!s.prev || undefined} onClick={() => s.prev && onStep(s.prev)} data-testid="pitch-preflight-strip-prev"><ChevronLeft size={14} aria-hidden="true" />Previous</button>
       <button type="button" className={GHOST} aria-disabled={!s.next || undefined} onClick={() => s.next && onStep(s.next)} data-testid="pitch-preflight-strip-next">Next<ChevronRight size={14} aria-hidden="true" /></button>
       <button type="button" className={GHOST} aria-label="Close the finding" onClick={onClose} data-testid="pitch-preflight-strip-close">×</button>
+      {fixLine}
     </div>
   );
 }

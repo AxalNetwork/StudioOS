@@ -74,6 +74,8 @@ test('DE26: below 768px each venture is a card with its reads and its decision a
     assert.equal(all(v, 'screening-move-1').length, 1, 'the table keeps its own ids');
     await press(v, 'screening-move-1-card');
     await settle(v);
+    await press(v, 'dealflow-diligence-go');
+    await settle(v);
     assert.deepEqual(s.calls, [['add', { deal_id: 1, stage: 'diligence' }]]);
   } finally { await v.unmount(); s.restore(); }
 });
@@ -85,7 +87,7 @@ test('DE26: Pass on a card opens the same reason dialog; an unread flow offers o
   try {
     await settle(v);
     await press(v, 'screening-pass-1-card');
-    assert.ok(v.text().includes('Pass on Example Robotics?'));
+    assert.ok(v.text().includes('Pass on Example Robotics'));
   } finally { await v.unmount(); s.restore(); }
   const s2 = stub({ flow: async () => { const e = new Error('down'); e.status = 503; throw e; } });
   const v2 = await mountContracts(h(InvestorScreeningZone), '/deals/screening');

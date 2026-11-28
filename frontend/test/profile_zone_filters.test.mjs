@@ -801,6 +801,9 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // states (IRV-02). `Granted` became the Rooms granted tile and `Not staged`
     // selects no row; `Partly staged` and `Declined` are that canvas's words.
     if (name === 'investor') canvas['research/diligence'] = ['All', 'Partly staged', 'Requested', 'Declined'];
+    // D8776 (#8776, BLR00, owner question 3 A): the Build Roadmap Shortcut canvas draws /build/roadmap's views as
+    // By quarter · Dependencies · Scenarios; Board and Timeline are Product roadmap's own.
+    if (name === 'founder') canvas['build/roadmap'] = ['By quarter', 'Dependencies', 'Scenarios'];
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {

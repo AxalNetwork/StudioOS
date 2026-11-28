@@ -87,3 +87,44 @@
   .fb-roadmap-scenario-rows li { flex-direction: column; align-items: stretch; }
   .fb-roadmap-scenario-rows input { min-width: 0; }
 }
+
+/* D8776 (#8776, BLR02, BLR05B, BLR06, BLR07): Back, the one primary, notices, the relation card and By quarter. */
+.fb-roadmap-back { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: 8px; color: #6933ca; font-size: 12px; font-weight: 700; text-decoration: none; }
+.fb-roadmap-back:hover { text-decoration: underline; }
+.fb-roadmap-title-row h1:focus { outline: 2px solid #b79cf2; outline-offset: 3px; border-radius: 4px; }
+.fb-roadmap-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid #6d28d9; border-radius: 8px; background: #6d28d9; color: #fff !important; padding: 0 14px; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.fb-roadmap-notice { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; border: 1px solid #fcd34d; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 9px 11px; font-size: 11.5px; line-height: 1.5; }
+.fb-roadmap-notice strong { display: block; }
+.fb-roadmap-notice p { margin: 2px 0 0; }
+.fb-roadmap-relation { margin-top: 12px; }
+.fb-roadmap-relation summary { cursor: pointer; list-style: none; min-height: 32px; display: flex; align-items: center; }
+.fb-roadmap-relation summary h2 { margin: 0; font-size: 14px; letter-spacing: -.02em; }
+.fb-roadmap-relation-lead { margin: 6px 0 8px; color: #696273; font-size: 11.5px; }
+.fb-roadmap-relation dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.fb-roadmap-relation dl > div { border: 1px solid #ece8f1; border-radius: 9px; padding: 10px 11px; }
+.fb-roadmap-relation dt { font-size: 11.5px; font-weight: 700; }
+.fb-roadmap-relation dd { margin: 4px 0 0; color: #6e6676; font-size: 11px; line-height: 1.5; }
+.fb-roadmap-quarter { border-top: 1px solid #f0edf2; padding: 10px 0 4px; }
+.fb-roadmap-quarter h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 6px; font-size: 12.5px; }
+.fb-roadmap-quarter h3 small { color: #766e7e; font-size: 10.5px; font-weight: 600; }
+.fb-roadmap-quarter.is-none { border-top-style: dashed; }
+.fb-roadmap-quarter ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.fb-roadmap-quarter li { display: grid; gap: 4px; border: 1px solid #ece8f1; border-radius: 9px; padding: 9px 11px; font-size: 11.5px; }
+.fb-roadmap-quarter li > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.fb-roadmap-quarter li a { color: #342f3b; text-decoration: none; }
+.fb-roadmap-quarter li a:hover { text-decoration: underline; }
+.fb-roadmap-quarter li small { color: #766e7e; font-size: 10.5px; }
+.fb-roadmap-quarter li.is-current { border-color: #7c3aed; background: #faf7ff; box-shadow: 0 0 0 2px #ddd2fb; }
+.fb-roadmap-quarter li.is-current:focus { outline: 2px solid #7c3aed; outline-offset: 2px; }
+.fb-roadmap-quarter-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.dark .fb-roadmap-notice { border-color: #8a6a1c; background: #2b2414; color: #f5d27a; }
+.dark .fb-roadmap-relation dl > div, .dark .fb-roadmap-quarter li, .dark .fb-roadmap-quarter { border-color: #3a3444; }
+.dark .fb-roadmap-quarter li a, .dark .fb-roadmap-back { color: #e2d6ff; }
+.dark .fb-roadmap-quarter li.is-current { background: #2b2337; box-shadow: 0 0 0 2px #59427d; }
+.dark .fb-roadmap-relation dd, .dark .fb-roadmap-relation-lead, .dark .fb-roadmap-quarter li small, .dark .fb-roadmap-quarter h3 small { color: #b8aebe; }
+@media (max-width: 640px) {
+  .fb-roadmap-relation dl { grid-template-columns: 1fr; }
+  .fb-roadmap-back { min-height: 44px; }
+  .fb-roadmap-primary { width: 100%; min-height: 48px; margin-top: 10px; }
+  .fb-roadmap-quarter li { padding: 11px; }
+}

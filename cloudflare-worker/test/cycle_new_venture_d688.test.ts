@@ -121,8 +121,8 @@ test('D688: no company keeps operating systems and its figure not recorded, with
   db.exec('UPDATE projects SET company_id = NULL WHERE id = 101');
   const { body } = await call(env, '/api/cycles/build/overview?project=101');
   assert.deepEqual(body.cards.slice(0, 5).map((c: any) => c.state), Array(5).fill('empty'));
-  assert.deepEqual([body.cards[5].state, body.cards[5].reason], ['not_recorded', 'This project has no company scope for connectors.']);
-  assert.deepEqual([body.figures[3].state, body.figures[3].value, body.figures[3].reason], ['not_recorded', null, 'The project has no company scope.']);
+  assert.deepEqual([body.cards[5].state, body.cards[5].reason], ['not_recorded', 'This venture is not in a company yet, so no connected tool feeds it.']);
+  assert.deepEqual([body.figures[3].state, body.figures[3].value, body.figures[3].reason], ['not_recorded', null, 'This venture is not in a company yet.']);
   assert.equal(body.focus.rule, 'first_feature');
   db.close();
 });

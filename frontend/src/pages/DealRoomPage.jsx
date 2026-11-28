@@ -1,5 +1,4 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
-import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
@@ -9,7 +8,7 @@ import { api } from '../lib/api';
 import { branchOfUser } from '../lib/shellRole';
 import { mercuryAttestationsApi } from '../lib/api/mercuryAttestations';
 import { ProofOfFundsSheet } from './investor/ProofOfFunds';
-import { COMMIT_RECORDED, SHARE_BUTTON, newestDealTarget, showsProof } from './investor/proofOfFundsModel';
+import { newestDealTarget, showsProof } from './investor/proofOfFundsModel';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
@@ -28,7 +27,8 @@ import { usePhoneWidth } from '../ui';
 import DealOverview from './deal/DealOverview';
 import { DealActivity, InvestorActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
-import { ROUTES, ROUTE_NONE, ROUTE_NOTE, commitAction, commitRefusal, myCommitment, routePreferenceWord } from './deal/dealWorkModel';
+import { CommitModal } from './deal/DealCommitDialog';
+import { commitAction, myCommitment } from './deal/dealWorkModel';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
 import DealDocumentsStaff from './deal/DealDocumentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
@@ -45,10 +45,6 @@ function useCurrentRole() {
 }
 
 const PILL_N = 'inline-flex items-center rounded-axal-pill border border-axal-hairline bg-axal-ground px-2.5 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300';
-
-function fmtMoney(n, currency = 'USD') {
-  return dealMoney(n, currency) ?? 'Not recorded';
-}
 
 export default function DealRoomPage() {
   // D1148 (#2421): each tab is its own address under /deals/:dealId. D4815 part 4
@@ -283,99 +279,8 @@ function DealRoomMembership({ dealId }) {
   );
 }
 
-/**
- * D6191 (#6191): a new commitment starts at the deal minimum with no note; a change starts from
- * `current`, the live commitment, so saving without touching the note keeps it (the Worker sets
- * `amount` and `notes` from the body). A refusal stays in the dialog, in words.
- */
-export function CommitModal({ deal, onClose, onDone, user = null, current = null }) {
-  const changing = !!current;
-  const [amount, setAmount] = useState(changing && current.amount != null ? String(current.amount) : (deal.minimum_check || ''));
-  const [notes, setNotes] = useState(changing && current.notes != null ? String(current.notes) : '');
-  // D6195: how the investor would like to invest, a preference only. '' is none recorded (never Direct).
-  const [pref, setPref] = useState(changing && routePreferenceWord(current.route_preference) ? current.route_preference : '');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  // D752 (#1891): an optional last step for an investor on HQ, once the commitment is recorded.
-  const [recorded, setRecorded] = useState(false);
-  const submit = async () => {
-    const amt = Number(amount);
-    if (!amt || amt <= 0) { setErr('Enter a positive amount.'); return; }
-    if (deal.minimum_check && amt < deal.minimum_check) { setErr(`Minimum check is ${fmtMoney(deal.minimum_check, deal.currency)}.`); return; }
-    setSaving(true); setErr('');
-    try {
-      await api.createCommitment(deal.id, { amount: amt, notes: notes || null, route_preference: pref || null });
-      if (showsProof(user)) setRecorded(true);
-      else onDone();
-    } catch (e) { setErr(commitRefusal(e, deal)); reportError('CommitModal', e); }
-    finally { setSaving(false); }
-  };
-  const input = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-violet-500 focus:ring-1 focus:ring-violet-200 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
-  if (recorded) {
-    // Every close is today's success: Done, ×, the backdrop. Only Show Axal asks for the sheet.
-    return (
-      <>
-        <div className="fixed inset-0 bg-black/40 z-40" onClick={() => onDone()} />
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md dark:bg-gray-900" data-testid="commit-recorded">
-            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{COMMIT_RECORDED}</h2>
-              <button onClick={() => onDone()} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close"><X size={18} /></button>
-            </div>
-            <div className="p-5 flex flex-wrap justify-end gap-2">
-              <button onClick={() => onDone()} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400" data-testid="commit-done">Done</button>
-              <button onClick={() => onDone({ share: true })} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium" data-testid="commit-share">{SHARE_BUTTON}</button>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md dark:bg-gray-900">
-          <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100" data-testid="commit-title">{changing ? 'Change your commitment' : 'Commit capital'}</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1"><X size={18} /></button>
-          </div>
-          <div className="p-5 space-y-4">
-            <p className="text-sm text-gray-500">{changing ? 'Changing your commitment to ' : 'Committing to '}<span className="font-medium text-gray-800 dark:text-gray-200">{deal.project_name}</span>. This records your intent — no funds move.</p>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Amount ({deal.currency || 'USD'})</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={input} placeholder="50000" data-testid="commit-amount" />
-              {deal.minimum_check ? <div className="text-xs text-gray-400 mt-1">Minimum check: {fmtMoney(deal.minimum_check, deal.currency)}</div> : null}
-            </div>
-            <fieldset data-testid="commit-route-preference">
-              <legend className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">How you would like to invest (optional)</legend>
-              <div className="flex flex-col gap-1.5">
-                {[...ROUTES.map((r) => ({ key: r.key, title: r.title })), { key: '', title: ROUTE_NONE }].map((r) => (
-                  <label key={r.key || 'none'} className="flex min-h-[24px] cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
-                    <input type="radio" name="commit-route-preference" value={r.key} checked={pref === r.key} onChange={() => setPref(r.key)} data-testid={`commit-route-${r.key || 'none'}`} />
-                    {r.title}
-                  </label>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{ROUTE_NOTE}</p>
-            </fieldset>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Notes (optional)</label>
-              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className={input} data-testid="commit-notes" />
-            </div>
-            {err && <div role="alert" className="text-sm text-red-600" data-testid="commit-error">{err}</div>}
-          </div>
-          <div className="p-5 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
-            <button onClick={submit} disabled={saving} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center gap-2">
-              {saving && <Loader2 size={14} className="animate-spin" />} {changing ? 'Save the change' : 'Confirm Commitment'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+/** D5914 (#5914, DE14): the Commit dialog lives in `deal/DealCommitDialog.jsx`, in the DX14 shell; its name stays exported here. */
+export { CommitModal };
 
 function InviteModal({ dealId, onClose }) {
   const [investors, setInvestors] = useState([]);

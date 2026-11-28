@@ -7,7 +7,10 @@ import InvestorFirmSettings from '../src/pages/investor/settings/InvestorFirmSet
 import { mountContracts } from './_contracts_dom.mjs';
 
 const route = '/account/portfolio/settings';
-const mount = () => mountContracts(createElement(InvestorFirmSettings), route);
+// D6287 part 2: the status blocks, seats and fit reads answer from a stub, so these tests stay on the editor.
+const quiet = () => new Promise(() => {});
+const client = { kycStatus: quiet, fundsList: quiet, licences: quiet, seats: quiet, inviteSeat: quiet, revokeSeat: quiet, dealFlow: async () => ({ items: [] }), dealFit: quiet };
+const mount = () => mountContracts(createElement(InvestorFirmSettings, { client }), route);
 
 test('a failed read has no editor and Try again fetches the profile', async (t) => {
   let attempts = 0;

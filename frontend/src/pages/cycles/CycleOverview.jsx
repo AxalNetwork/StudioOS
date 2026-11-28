@@ -206,7 +206,9 @@ export function FigureTile({ fig, details = null, setLink = null }) {
   );
 }
 
-export function CardBody({ card, onRetry, charts, compact = false, search = '', limit = null, wide = false }) {
+// D8729 (#8729): `nextLink(next, href)` lets a host draw the card's next step its own way (the founder Studio's
+// tile opens it in the venture with the way back kept); null or absent draws the plain link.
+export function CardBody({ card, onRetry, charts, compact = false, search = '', limit = null, wide = false, nextLink = null }) {
   let view = cardView(card);
   if (charts && view.state !== 'locked') view = { state: 'ok', charts };
   if (view.state === 'ok' && limit && view.charts.length > limit) view = { ...view, charts: view.charts.slice(0, limit) };
@@ -248,9 +250,9 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
       <div className="flex flex-col items-start gap-1.5" data-testid="card-empty">
         <span className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</span>
         {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}
-        {next?.text && (href
+        {next?.text && ((href && nextLink?.(next, href)) || (href
           ? <Link to={href} className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text} ›</Link>
-          : <span className="text-[12.5px] font-semibold text-axal-violet-deep dark:text-violet-300">{next.text}</span>)}
+          : <span className="text-[12.5px] font-semibold text-axal-violet-deep dark:text-violet-300">{next.text}</span>))}
       </div>
     );
   }

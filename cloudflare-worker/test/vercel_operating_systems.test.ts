@@ -261,7 +261,7 @@ test('the Tools rule: a non-member reads the counts, never a domain; a venture w
   const outsider = partner.hosting.systems[0];
   assert.deepEqual([outsider.health.open, outsider.health.items, outsider.owner], [6, null, null]);
   assert.doesNotMatch(JSON.stringify(partner.hosting), /acme\.example|dpl_/, 'no domain or deployment for a non-member');
-  assert.deepEqual([(await tools(env, 303, 1)).hosting.state, (await tools(env, 303, 1)).hosting.reason], ['not_recorded', 'This project has no company scope for connectors.'], 'a venture with no company has no connectors');
+  assert.deepEqual([(await tools(env, 303, 1)).hosting.state, (await tools(env, 303, 1)).hosting.reason], ['not_recorded', 'This venture is not in a company yet, so no connected tool feeds it.'], 'a venture with no company has no connectors');
 });
 
 test('one failed read costs one block: Hosting Unreadable on its own; GitHub’s Code system unchanged', async () => {
