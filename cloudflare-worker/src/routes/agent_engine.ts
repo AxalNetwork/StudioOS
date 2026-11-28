@@ -165,9 +165,16 @@ router.get('/project/:id/assignable', async (c) => {
     return mapError(c, e);
   }
 });
+// #9198: Studio, HQ and every workspace read this on load, so an engine that is off answers
+// 200 with an empty list and `available: false` (still behind sign-in) instead of the
+// 404 `agent_engine_off` the other engine routes send: a signed-in page load should
+// make no failed request. workAdapter.myTasks turns it into the same off block.
 router.get('/me/tasks', async (c) => {
   try {
-    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    if (!agentEngineEnabled(c.env)) {
+      await requireAuth(c);
+      return c.json({ available: false, projects: [], compliance: [], has_more: false });
+    }
     const user = await requireAuth(c);
     return c.json(await myTasks(c.env, user, { state: c.req.query('state') ?? null, project: c.req.query('project') ?? null, due: c.req.query('due') ?? null }));
   } catch (e) {

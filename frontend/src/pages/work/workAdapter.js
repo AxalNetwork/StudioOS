@@ -101,7 +101,12 @@ export const workAdapter = {
   complianceReopen: (uid, taskUid) => through(() => cc.reopen(uid, taskUid), COMPLIANCE_OFF),
   // D1614 W8 (#3994): the Team picker and My tasks (#4286).
   assignable: (projectId) => through(() => workApi.assignable(projectId), WORK_OFF),
-  myTasks: (filter) => through(() => workApi.myTasks(filter), WORK_OFF),
+  // #9198: with the engine off the route answers 200 `{ available: false }` (no failed
+  // request on load); an older Worker's 404 `agent_engine_off` still reaches `through()`.
+  myTasks: async (filter) => {
+    const r = await through(() => workApi.myTasks(filter), WORK_OFF);
+    return r.available && r.data?.available === false ? { available: false, reason: WORK_OFF } : r;
+  },
   // #4735: a person's weekly capacity (`null` clears it), W4's `PUT /work/capacity/:person`.
   setCapacity: (projectId, personUid, points) => through(() => workApi.setCapacity(projectId, personUid, points), WORK_OFF),
 };
