@@ -7,11 +7,12 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
-import { AreaDot, CostLine, JobLines, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
+import { AreaDot, CostLine, EligibilityChip, JobLines, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
 import { BasedOnLine, ExtendSkillSheet } from './SkillExtension.jsx';
 import {
-  AREAS, SORTS, areaCounts, areaFromParam, areaLine, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillAreas, skillFileName,
+  AREAS, SORTS, areaCounts, areaFromParam, areaLine, assignGroups, assignRows, authorLine, companySkillsTitle, directory, eligibilityOf, eligibilityWhy, groups, outputWords,
+  scopeLine, skillAreas, skillFileName, yourAgentsLine,
 } from './skillsModel.js';
 
 /**
@@ -219,6 +220,63 @@ export function UsingAgents({ block }) {
   );
 }
 
+/**
+ * D8768 part 3 (TMS02): every agent the caller manages, each with the one rule's state for this skill (Attached, Can
+ * attach, Blocked by policy with its reason and recovery), natural fit first; the same read as Assign to agents.
+ * A read that fails says so with Try again and never shows an agent as Can attach (TMS09 "eligibility unavailable").
+ */
+export function YourAgents({ skill, personaOf = () => null }) {
+  const [block, setBlock] = useState(null);
+  const [reads, setReads] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setBlock(null);
+    agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); });
+    return () => { alive = false; };
+  }, [skill.uid, reads]);
+  let body;
+  if (!block) body = <p className={`m-0 ${MUTED}`} aria-busy="true">Reading…</p>;
+  else if (!block.available) {
+    body = block.unreadable ? (
+      <div role="alert" className="flex flex-col gap-1.5" data-testid="skill-your-agents-failed">
+        <span className="text-[12.5px] text-axal-ink dark:text-gray-200">Your agents’ eligibility couldn’t be read. None is shown as Can attach until it is.</span>
+        <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => setReads((n) => n + 1)} data-testid="skill-your-agents-retry">Try again</button>
+      </div>
+    ) : <p className={`m-0 ${MUTED}`}>{block.reason}</p>;
+  } else {
+    const rows = assignRows(block.value?.agents, skill, personaOf);
+    body = !rows.length ? <p className={`m-0 ${MUTED}`}>No agent on a Team you edit yet.</p> : (
+      <>
+        <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid="skill-your-agents-line">{yourAgentsLine(block.value?.counts)}</span>
+        {rows.map((a) => {
+          const e = eligibilityOf(a);
+          const why = eligibilityWhy(e, { who: 'its sponsor' });
+          return (
+            <div key={a.uid} className="flex items-start gap-2 border-t border-axal-hairline py-1.5 dark:border-gray-800" data-testid={`skill-your-agent-${a.uid}`}>
+              <AgentTile size={24} />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{a.name}</span>
+                  <EligibilityChip e={e} />
+                  {e.fit ? <span className={MUTED}>Natural fit</span> : null}
+                </span>
+                <span className={MUTED}>{scopeLine(a.scope)}</span>
+                {why && e.state !== 'attached' ? <span className="text-[12px] text-amber-800 dark:text-amber-200">{why}</span> : null}
+              </span>
+            </div>
+          );
+        })}
+      </>
+    );
+  }
+  return (
+    <section className={`${SECTION} flex flex-col`} data-testid="skill-your-agents">
+      <span className={EYEBROW}>Your agents</span>
+      {body}
+    </section>
+  );
+}
+
 /** SK2: one skill's page. */
 /**
  * D8768 (TMS03): why a skill cannot be attached at all, from the Worker's `attach_refusal`, and its published
@@ -244,7 +302,7 @@ export function AttachRefusal({ s, onOpenSkill }) {
   );
 }
 
-export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign, companyUid = null, companyName = null, canExtend = false, onExtend, onOpenSkill }) {
+export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign, companyUid = null, companyName = null, canExtend = false, onExtend, onOpenSkill, personaOf }) {
   const [copied, setCopied] = useState('');
   if (!block) return <Loading />;
   if (!block.available) return block.unreadable ? <SkillsUnreadable what="This skill" onRetry={onRetry} /> : <HonestBlock>{block.reason}</HonestBlock>;
@@ -314,6 +372,7 @@ export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetr
               </div>
             )) : <p className={`m-0 mt-1 ${MUTED}`}>Not published yet.</p>}
           </section>
+          {can ? <YourAgents skill={s} personaOf={personaOf} /> : null}
           <section className={`${SECTION} flex flex-col`}>
             <span className={EYEBROW}>Agents using it</span>
             <UsingAgents block={agentsBlock} />
@@ -372,7 +431,7 @@ export default function SkillsTab({ scope, agentsBlock }) {
       companyUid={scope.kind === 'company' ? companyUid : null} companyName={companyName} canExtend={scope.kind === 'company' && !!companyUid && !!value?.can_edit}
       onExtend={(s) => setSheet({ kind: 'extend', skill: s })}
       onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })} onOpenSkill={(uid) => go({ skill: uid })}
-      onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} />;
+      onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} personaOf={personaOf} />;
   } else if (!lib) {
     body = <Loading />;
   } else if (lib.unreadable) {

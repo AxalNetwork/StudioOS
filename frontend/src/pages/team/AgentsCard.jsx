@@ -5,7 +5,7 @@ import { AgentArchetypeBadge, AgentAvatar } from './AgentCard.jsx';
 import { AgentTile } from './AgentMark.jsx';
 import SkillsLink from './SkillsLink.jsx';
 import ActionMenu from '../admin/productTesting/ActionMenu.jsx';
-import { actionItems, agentReadiness, engineNote, moreActionsLabel, rowOpenLabel, whatItDoes } from './agentChoiceModel.js';
+import { actionItems, addSkillsLabel, agentReadiness, engineNote, moreActionsLabel, rowOpenLabel, whatItDoes } from './agentChoiceModel.js';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
@@ -51,6 +51,11 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  * "More actions for {name}" and opens a real menu (`ActionMenu`): the
  * profile, and for a manager a paused row's one fix. Neither is named by the
  * persona's motto.
+ *
+ * D8769 part 3 (TMM07 A and B): a manager's menu is the canvas's whole list
+ * (`actionItems`: Add skills, Edit cap, Change sponsor, Pause or Resume, each
+ * opening the profile on that action), and a no-skills row carries its one
+ * fix, "Add skills for {name}", which opens the profile on Add skills.
  */
 
 /** TM9c4: the plan lock, from a 403 `plan_required` or the list's `plan_ok: false` (#3840). */
@@ -118,6 +123,7 @@ function AgentRow({ row, agent, canManage, onOpen, onAssign }) {
         <span className={`block ${MUTED}`}>{ready.key === 'paused' && row.pause ? row.pause.reason : ready.line}</span>
         {ready.key === 'paused' && row.pause?.hint ? <span className={`block ${MUTED}`}>{row.pause.hint}</span> : null}
         {ready.key === 'paused' && row.pause?.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, row.pause.action || null); }} data-testid={`agent-fix-${row.uid}`}>{row.pause.fix}</button> : null}
+        {ready.key === 'no_skills' && canManage ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, 'skills'); }} data-testid={`agent-add-skills-${row.uid}`}>{addSkillsLabel(row.name)}</button> : null}
       </span>
       <span role="cell" className="hidden truncate text-[13px] text-axal-ink md:block dark:text-gray-200">{row.sponsor || <Unrecorded />}</span>
       <span role="cell" className="hidden md:block">

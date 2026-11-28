@@ -157,14 +157,14 @@ test('⋯ opens a real menu: the profile for everyone, and a paused row\'s fix f
   // Mutations checked: actionItems ignoring canManage → the reader's menu has the fix and fails; the fix picked without its action → onOpen gets null and fails.
   const paused = AGENT('a2', { persona: persona('vesta', 'Vesta', '[Read the clause twice.]'), status: 'paused', paused_reason: 'cap' });
   assert.deepEqual(actionItems({ name: 'Vesta', pause: { fix: 'Raise the cap', action: 'cap' } }, false).map((i) => i.label), ['Open Vesta’s profile']);
-  assert.deepEqual(actionItems({ name: 'Vesta', pause: { fix: 'Raise the cap', action: 'cap' } }, true).map((i) => [i.label, i.action ?? null]), [['Open Vesta’s profile', null], ['Raise the cap', 'cap']]);
+  assert.deepEqual(actionItems({ name: 'Vesta', pause: { fix: 'Raise the cap', action: 'cap' } }, true).map((i) => [i.label, i.action ?? null]), [['Open Vesta’s profile', null], ['Raise the cap', 'cap'], ['Add skills for Vesta', 'skills'], ['Change Vesta’s sponsor', 'sponsor']], 'part 3: the fix stands for Edit cap, which is not repeated');
   const opened = [];
   const v = await mount(h(AgentsCard, { block: { available: true, value: { can_manage: true, agents: [paused] } }, kind: 'project', companyName: 'x', onOpen: (row, action) => opened.push([row.uid, action ?? null]) }), () => response({}));
   try {
     assert.equal(v.has('agent-menu-a2-items'), false, 'closed until pressed');
     await v.click('agent-menu-a2');
     assert.equal(v.prop('agent-menu-a2', 'aria-expanded'), true);
-    assert.equal(v.textOf('agent-menu-a2-items'), 'Open Vesta’s profileRaise the cap');
+    assert.equal(v.textOf('agent-menu-a2-items'), 'Open Vesta’s profileRaise the capAdd skills for VestaChange Vesta’s sponsor');
     assert.equal(v.prop('agent-menu-a2-items', 'role'), 'menu');
     await v.click('agent-menu-a2-fix');
     await v.click('agent-menu-a2');
