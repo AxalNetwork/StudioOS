@@ -35,7 +35,7 @@
 # ---------------------------------------------------------------------------
 name = "studioos-pr-preview"
 main = "scripts/pr-preview-worker.mjs"
-compatibility_date = "2026-04-01"
+compatibility_date = "2026-11-12"
 workers_dev = true
 preview_urls = false
 

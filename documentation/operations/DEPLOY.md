@@ -327,6 +327,35 @@ which the owner grants in the Cloudflare dashboard. The step writes a table of
 states to the job summary. It never prints the token, the account id or what
 Cloudflare answered.
 
+### 2.4 The main Worker's compatibility date is refreshed each quarter (#9208)
+
+`compatibility_date` in `wrangler.toml` decides which runtime behaviour changes
+the production Worker gets; `wrangler.pr-preview.toml` carries the same date so
+the preview runs what production runs. It stood at `2026-04-01` for eight months
+until #9208 moved both to `2026-11-12`.
+
+The rule:
+
+- **Once a quarter**, in the first week of January, April, July and October,
+  move both files to one new date: no later than the date of the `workerd`
+  pinned in `package-lock.json` (its version is `1.YYYYMMDD.n`), so the local
+  suite runs on the date that ships.
+- In that PR, read the flags in workerd's `compatibility-date.capnp` whose
+  `compatEnableDate` falls after the old date and on or before the new one,
+  and list each with whether the Worker's code is affected and why.
+- Run the Worker suite and a PR preview (`scripts/check-spa-live.mjs` and the
+  preview e2e) on the new date before the PR is marked ready.
+- A move outside the quarter is fine when a sibling Worker needs it (below);
+  it follows the same three steps.
+
+`frontend/test/compat_date_9208.test.mjs` reads every root `wrangler*.toml` and
+fails when `wrangler.toml` and `wrangler.pr-preview.toml` differ, or when the
+main Worker's date is older than the oldest sibling Worker's
+(`wrangler.meeting-bot.toml`, `wrangler.merge-control.toml`,
+`wrangler.agent-compute.toml`). It compares the files only, never today's date,
+so it cannot turn red on its own. It turns red in the PR that moves the oldest
+sibling past the main Worker, and the fix is this refresh in the same PR.
+
 ---
 
 ## 3. Capture a rollback point first
