@@ -28,7 +28,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, requireAuth } from '../auth';
-import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, isUnauthenticated, stepUpRefusalBody, unauthenticatedBody } from '../util/authErrors';
 import { HQ_ONLY, branchOf } from '../util/branch';
 import { refuse } from '../util/refusal';
 import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, isSupportSession } from '../services/fundAdminAccess';
@@ -48,6 +48,8 @@ r.onError((error: any, c) => {
   if (error instanceof Response) return error;
   if (error instanceof NoticeRefusal) return refuse(c, error.status, { code: error.code, message: error.publicMessage, extra: error.extra });
   if (error?.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error), 403);
+  // D9192: no session is not "this account cannot" — the caller has no account here yet.
+  if (isUnauthenticated(error)) return c.json(unauthenticatedBody(), 401);
   const status = AUTH_ERROR_STATUSES[error?.message];
   if (status) {
     const sentence = error?.message === HQ_ONLY

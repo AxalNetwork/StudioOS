@@ -325,15 +325,18 @@ function makeStubDB() {
   };
 }
 
-test('/google/start: missing secret → typed 500 oauth_config_missing', async () => {
+// D9192: not configured answers 503 with our sentence; no setting name reaches the body.
+const SETTING_NAMES = /GOOGLE_|MICROSOFT_|JWT_SECRET|PUBLIC_BASE_URL|_CAL_|CLIENT_(ID|SECRET)/;
+
+test('/google/start: missing secret → 503 oauth_config_missing, no setting names', async () => {
   const env: EnvShape = { ...FULL_GOOGLE };
   delete env.GOOGLE_CLIENT_SECRET;
   const { status, body } = await buildGoogleOAuthStartResponse(env as any, 42);
-  assert.equal(status, 500);
+  assert.equal(status, 503);
   assert.equal(body.error.code, 'oauth_config_missing');
-  assert.ok(Array.isArray(body.error.missing));
-  assert.ok(body.error.missing.includes('GOOGLE_CAL_CLIENT_SECRET'));
-  assert.ok(/not fully configured/.test(body.error.message));
+  assert.equal(body.error.missing, undefined);
+  assert.equal(body.error.message, "Connecting Google Calendar isn't set up on Axal yet.");
+  assert.doesNotMatch(JSON.stringify(body), SETTING_NAMES);
 });
 
 test('/google/start: healthy → 200 with redirect_url to accounts.google.com', async () => {
@@ -365,13 +368,15 @@ test('preserved Meet consent carries the retained Google identity in signed Buil
   assert.equal(returnFromNonce(nonce), 'build:42');
 });
 
-test('/outlook/start: missing secret → typed 500 oauth_config_missing', async () => {
+test('/outlook/start: missing secret → 503 oauth_config_missing, no setting names', async () => {
   const env: EnvShape = { ...FULL_MICROSOFT };
   delete env.MICROSOFT_CLIENT_ID;
   const { status, body } = await buildMicrosoftOAuthStartResponse(env as any, 42);
-  assert.equal(status, 500);
+  assert.equal(status, 503);
   assert.equal(body.error.code, 'oauth_config_missing');
-  assert.ok(body.error.missing.includes('MICROSOFT_CAL_CLIENT_ID'));
+  assert.equal(body.error.missing, undefined);
+  assert.equal(body.error.message, "Connecting Outlook Calendar isn't set up on Axal yet.");
+  assert.doesNotMatch(JSON.stringify(body), SETTING_NAMES);
 });
 
 test('/outlook/start: healthy → 200 with redirect_url to login.microsoftonline.com', async () => {
