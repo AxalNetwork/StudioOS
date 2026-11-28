@@ -12,6 +12,7 @@ import {
   itemStatus, itemOwner, checklistSummary, paperRows, conditionRows,
   transferHold, transferRows, auditRows, closeRules, workspaceTabs, itemPatch,
   phoneCell, portfolioRows, companyHref, afterCloseFigures, captableCard,
+  myClosingRoomHref,
 } from './closingWorkspaceModel';
 import { CLOSING_RECORD_NOT_READ } from './closingSeatModel';
 
@@ -25,7 +26,9 @@ import { CLOSING_RECORD_NOT_READ } from './closingSeatModel';
  *
  * WHO ACTS. An Admin records transfers and reads the Audit tab; the round's
  * lead (role partner, the route's canMoveRound) or an Admin edits the
- * checklist; an investor reads, has no Audit tab and acts nowhere here.
+ * checklist; an investor reads, has no Audit tab and acts nowhere here: their
+ * one action, Open my closing room on their own line (D8838), leaves for the
+ * deal page's Closing tab, where the room is.
  *
  * D9072 (#9072, D6158 Q1 = A): a partner reaches this workspace only for a
  * round they lead (ClosingZone refuses any other, as the Worker refuses the
@@ -54,6 +57,20 @@ export function StatusWord({ status, testid }) {
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TONE[status.key] || NEUTRAL}`} data-testid={testid}>
       <i aria-hidden="true" className="not-italic">{status.glyph}</i>{status.word}
     </span>
+  );
+}
+
+/**
+ * D8838 (DX22, board DCL24): the investor's one primary action, on their own
+ * line only. It opens their room, the deal page's Closing tab. Nothing is
+ * drawn without an href (not an investor, or not their line).
+ */
+export function OpenMyClosingRoom({ href }) {
+  if (!href) return null;
+  return (
+    <Link to={href} className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-axal-violet-deep px-4 text-[12px] font-bold text-white hover:bg-axal-violet dark:bg-violet-500 dark:hover:bg-violet-400 sm:w-auto md:min-h-[32px]" data-testid="closing-workspace-open-my-room">
+      Open my closing room
+    </Link>
   );
 }
 
@@ -177,7 +194,11 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
             </dd>
           </div>
           {investor && closingRec && Array.isArray(closingRec.lines) && closingRec.lines[0] ? (
-            <div><dt className="text-gray-500 dark:text-gray-400">Your line</dt><dd><b className="font-mono">{money(Number(closingRec.lines[0].amount_cents) || 0, currency)}</b> · {closingRec.lines[0].status}</dd></div>
+            <div data-testid="closing-workspace-your-line">
+              <dt className="text-gray-500 dark:text-gray-400">Your line</dt>
+              <dd><b className="font-mono">{money(Number(closingRec.lines[0].amount_cents) || 0, currency)}</b> · {closingRec.lines[0].status}</dd>
+              <dd><OpenMyClosingRoom href={myClosingRoomHref({ role, userId: user?.id, line: closingRec.lines[0], dealId })} /></dd>
+            </div>
           ) : null}
         </dl>
         <nav className="mt-3 flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-800" role="tablist" aria-label="Closing workspace" data-testid="closing-workspace-tabs">
