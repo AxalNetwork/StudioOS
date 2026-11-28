@@ -16,7 +16,7 @@ import { getSource } from '../services/market_intel/registry';
 import '../services/market_intel/sources/index';
 import { listCountries, listMarketSectors, mapCompanyCountry, mapFundFocus, mapSignalTags } from '../services/researchTaxonomy';
 import { companyGroups, companyPage, type CompanyGroup } from '../services/researchDirectoryReads';
-import { presentFund, SERVED_FUNDS, type DirectoryRow } from '../services/researchFundDirectory';
+import { directoryColumns, presentFund, SERVED_FUNDS, type DirectoryRow } from '../services/researchFundDirectory';
 
 const researchSectors = new Hono<{ Bindings: Env }>();
 /** D7708 — what a source mix is, as the sector read returns it. */
@@ -92,9 +92,8 @@ async function directory(env: Env) {
   const [marketRows, mappings, { groups, overrides }, fundRows, countries] = await Promise.all([
     env.DB.prepare('SELECT slug, name, company_count AS supplied_count, as_of FROM research_market_directory').all<{ slug: string; name: string; supplied_count: number; as_of: string }>(),
     listMarketSectors(env), companyGroups(env),
-    env.DB.prepare(`SELECT uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-      fund_date, quarter, fund_year, sector_focus, notable_lps, eif_flag, eifo_flag,
-      source_name, source_url, as_of FROM ${SERVED_FUNDS} AS f`).all<DirectoryRow>(),
+    // D7744: the directory's column list, with each row's own size currency.
+    env.DB.prepare(`SELECT ${directoryColumns()} FROM ${SERVED_FUNDS} AS f`).all<DirectoryRow>(),
     listCountries(env),
   ]);
   const marketSector = new Map(mappings.map((m) => [m.market_slug, m.mi_sector]));

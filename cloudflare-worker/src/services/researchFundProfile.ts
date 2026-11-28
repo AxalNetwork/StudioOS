@@ -23,7 +23,7 @@
  * counted, never charted, because it may belong to another vehicle.
  */
 import type { Env } from '../types';
-import { presentFund, type DirectoryRow, type FundSourceRow } from './researchFundDirectory';
+import { directoryColumns, presentFund, type DirectoryRow, type FundSourceRow } from './researchFundDirectory';
 
 export const PROPOSED_FIELDS = ['manager_name', 'investment_stage', 'investment_geography', 'initial_cheque'] as const;
 export type ProposedField = typeof PROPOSED_FIELDS[number];
@@ -143,8 +143,8 @@ export async function vehicleHistory(env: Env, row: DirectoryRow, manager: Propo
   } else {
     try {
       const r = await env.DB.prepare(
-        `SELECT d.uid, d.name, d.website, d.linkedin, d.hq, d.fund_number, d.fund_size_cents, d.fund_date, d.quarter, d.fund_year,
-                d.sector_focus, d.notable_lps, d.eif_flag, d.eifo_flag, d.source_name, d.source_url, d.as_of
+        // D7744: the directory's column list (with each row's size currency), a literal of researchFundDirectory.ts.
+        `SELECT ${directoryColumns('d')}
            FROM research_fund_directory d
            JOIN research_fund_vehicle_facts v ON v.fund_uid = d.uid AND v.field = 'manager_name'
           WHERE LOWER(TRIM(v.value_text)) = LOWER(TRIM(?))
@@ -176,15 +176,16 @@ export async function vehicleHistory(env: Env, row: DirectoryRow, manager: Propo
   }
   try {
     const r = await env.DB.prepare(
-      `SELECT period, report_date, fund_size_cents, source_url, vehicle_label
+      `SELECT period, report_date, fund_size_cents, fund_size_currency, source_url, vehicle_label
          FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY report_date ASC, period ASC`,
-    ).bind(row.uid).all<{ period: string; report_date: string | null; fund_size_cents: number | null; source_url: string; vehicle_label: string | null }>();
+    ).bind(row.uid).all<{ period: string; report_date: string | null; fund_size_cents: number | null; fund_size_currency: string | null; source_url: string; vehicle_label: string | null }>();
     let unlabelled = 0;
     for (const x of r.results || []) {
       if (!label(x.vehicle_label)) { unlabelled += 1; continue; }
       if (!mine || label(x.vehicle_label) !== mine) continue;
       if (observations.some((o) => o.reported_on === x.report_date && o.fund_size_cents === x.fund_size_cents)) continue;
-      const p = presentFund({ ...row, fund_size_cents: x.fund_size_cents });
+      // D7744: a report row shows its own currency, not the fund row's.
+      const p = presentFund({ ...row, fund_size_cents: x.fund_size_cents, fund_size_currency: x.fund_size_currency });
       if (p.fund_size_cents == null || !p.size_currency) continue;
       observations.push({
         period: x.period, reported_on: text(x.report_date), fund_size_cents: p.fund_size_cents, size_currency: p.size_currency,

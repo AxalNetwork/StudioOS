@@ -49,6 +49,7 @@ import {
 } from '../mappings/salesforce_fields';
 import { acquireRefreshLease } from '../refreshLease';
 import { runSystemMove } from '../../services/dealTransitions';
+import { dealHiddenFrom, hiddenDealIds, hiddenJson } from '../../services/dealPreparation';
 import { ownerDealsChangedSinceSql, ownerDealByCrmIdSql, SF_OWNER_DEAL_SQL, SF_OWNER_PROJECT_SQL } from '../crmDealScope';
 
 const PROVIDER_KEY = 'salesforce';
@@ -339,9 +340,23 @@ function escapeSoql(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/**
+ * D5454 (#5454, R4): a push is an export to the company's own CRM, and the deals it sends are the integration
+ * company's own ventures' (`projectEnabled`), so it reads as the venture's owner, in `transactional` mode. A deal whose
+ * preparation is never released or unknown is not sent or previewed, for anyone, and answers as a deal that does not
+ * exist; a withdrawn or archived release is still sent to its own company's CRM. A guard failure throws, so nothing
+ * is sent past it. One indexed read per pushed id; `sync` filters its batch in SQL instead.
+ */
+async function refuseHiddenDeal(env: Env, dealId: unknown): Promise<void> {
+  if (await dealHiddenFrom(env, Number(dealId), 'transactional')) throw new Error(`deal_not_found: ${Number(dealId)}`);
+}
+
 async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow, payload: unknown): Promise<PushResult> {
   const p = (payload || {}) as PushPayload;
-  if (p.deal_id) return pushDeal(c.env, row, p.deal_id);
+  if (p.deal_id) {
+    await refuseHiddenDeal(c.env, p.deal_id);
+    return pushDeal(c.env, row, p.deal_id);
+  }
   if (p.project_id) return pushProjectAccount(c.env, row, p.project_id);
   throw new Error('salesforce_push_requires_deal_id_or_project_id');
 }
@@ -355,6 +370,7 @@ async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: Integrat
 async function previewOne(env: Env, row: IntegrationRow, payload: unknown): Promise<PushPreview> {
   const p = (payload || {}) as PushPayload;
   if (p.deal_id) {
+    await refuseHiddenDeal(env, p.deal_id);
     const { deal, body } = await opportunityContent(env, row, p.deal_id);
     return {
       target: `${deal.sf_opportunity_id ? 'Update' : 'New'} Salesforce opportunity "${deal.project_name || `StudioOS deal ${p.deal_id}`}"`,
@@ -582,9 +598,11 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
   const stageMaps = loadStageMaps(config);
 
   // ── outbound: push StudioOS deals modified since last sync that belong to this user.
+  // D5454 (#5454, R4): less what `refuseHiddenDeal` refuses, bound before the LIMIT; a guard failure fails the sync.
+  const hidden = hiddenJson(await hiddenDealIds(c.env, 'transactional'));
   const localDeals = await c.env.DB.prepare(
-    ownerDealsChangedSinceSql('sf_opportunity_id'),
-  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id).all<{
+    ownerDealsChangedSinceSql('sf_opportunity_id', true),
+  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id, hidden).all<{
     id: number; status: string; sf_opportunity_id: string | null;
   }>();
   for (const d of (localDeals.results || [])) {

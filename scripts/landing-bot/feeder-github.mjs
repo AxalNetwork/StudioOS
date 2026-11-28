@@ -277,6 +277,11 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
       if (!slotCache.has(n)) slotCache.set(n, get(`issues/${n}`).then(issue => owningSlot(pull.body, issue) ?? ''));
       return slotCache.get(n);
     },
+    /** #6481 (D6481-p2): the landing rules issue's state; scheduled sweeps wait until it is closed as completed. */
+    async readRulesIssue() {
+      const issue = await get('issues/6480');
+      return {number: issue?.number, state: issue?.state, state_reason: issue?.state_reason ?? null};
+    },
     async readCandidate(number) {
       if (!positive(number)) throw new Error('Invalid pull request number');
       const pull = await get(`pulls/${number}`);
@@ -297,7 +302,11 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
         if (typeof f.filename !== 'string' || !f.filename) throw new Error('Unreadable PR file');
         return {path: f.filename, previousPath: f.previous_filename};
       });
-      return {pull, files, commits, headSha, number, fullSuitePassed, modelRepaired: repairStatus(commits, {botLogin}),
+      // #6481 (D6481-p2): a pull_request run executes the PR's own ci.yml, so its job names prove nothing when the PR
+      // edits that file. Only a run of the unchanged workflow counts as full-suite proof.
+      const ciEdited = files.some(f => f.path === CI_PATH || f.previousPath === CI_PATH);
+      return {pull, files, commits, headSha, number, fullSuitePassed: fullSuitePassed && !ciEdited,
+        modelRepaired: repairStatus(commits, {botLogin}),
         alreadyQueued: history.isInMergeQueue || Boolean(pull.auto_merge), priorQueueEntry: history.timelineItems.totalCount > 0};
     },
   };
