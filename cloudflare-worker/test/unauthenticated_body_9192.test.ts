@@ -13,8 +13,9 @@ const app = new Hono<any>()
   .route('/api/events', events)
   .route('/api/jobs', jobs)
   .route('/api/fund-notices', fundNotices);
+const SECRET = 'test'.repeat(16);
 const env: any = {
-  JWT_SECRET: 'synthetic-9192-secret',
+  JWT_SECRET: SECRET,
   ENVIRONMENT: 'development',
   DB: { prepare() { throw new Error('an anonymous request must not reach the database'); } },
 };
