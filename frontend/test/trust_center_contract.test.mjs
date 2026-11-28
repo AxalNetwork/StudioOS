@@ -39,6 +39,12 @@ const CODE = codeOnly(PAGE);
 const API = read('frontend/src/lib/api.js');
 const WORKER = read('cloudflare-worker/src/routes/trust.ts');
 const WORKER_SVC = read('cloudflare-worker/src/services/trust.ts');
+// D6139 part 1: accreditation evidence has its own router; its statuses reach the page too.
+const ACCREDITATION = read('cloudflare-worker/src/routes/trust_accreditation.ts');
+const ACCREDITATION_SVC = read('cloudflare-worker/src/services/accreditationEvidence.ts');
+const ACCREDITATION_UI = read('frontend/src/pages/trust/AccreditationEvidence.jsx');
+const ACCREDITATION_API = read('frontend/src/lib/api/trustAccreditation.js');
+const MIGRATION_6139 = read('cloudflare-worker/sql/migrations/202611272256_6139_accreditation_evidence.sql');
 const BASELINE = JSON.parse(read('scripts/api-drift-baseline.json'));
 
 /** Every path routes/trust.ts actually declares. */
@@ -131,14 +137,32 @@ test('signing goes through the envelope route that exists, via the method alread
   assert.match(card, /signing_url/);
 });
 
-test('accreditation states the limit instead of drawing an upload that cannot POST', () => {
-  assert.match(PAGE, /Evidence upload is not available here/);
-  assert.doesNotMatch(PAGE, /type="file"/, 'no file input may survive without a route to POST to');
-  // The premise: no accreditation route on either side.
-  assert.doesNotMatch(WORKER, /trust\.(get|post)\('\/accreditation/,
-    'an accreditation route now exists — the stated limit should become a control');
+test('accreditation draws the upload now that a route accepts it (D6139)', () => {
+  // The premise this test used to pin — no accreditation route on either side —
+  // ended with D6139. The stated limit became a control, through routes that exist.
+  assert.doesNotMatch(PAGE, /Evidence upload is not available here/, 'the old limit outlived the route');
+  assert.match(ACCREDITATION, /member\.post\('\/evidence'/);
+  assert.match(ACCREDITATION, /member\.get\('\/evidence\/mine'/);
+  assert.match(ACCREDITATION, /\{ path: '\/api\/trust\/accreditation', router: member \}/);
+  assert.match(ACCREDITATION_API, /request\('\/trust\/accreditation\/evidence\/mine'\)/);
+  assert.match(ACCREDITATION_API, /request\('\/trust\/accreditation\/evidence', \{ method: 'POST', body: fd \}\)/);
+  // The page draws the component, and the component is the only file input.
+  assert.match(CODE, /<AccreditationEvidence onChanged=\{load\} \/>/);
+  assert.doesNotMatch(PAGE, /type="file"/, 'the page itself draws no file input; the upload lives in AccreditationEvidence');
+  assert.match(ACCREDITATION_UI, /type="file" accept="application\/pdf,image\/png,image\/jpeg"/);
+  assert.match(ACCREDITATION_UI, /trustAccreditationApi\.upload\(\{ basis, file \}\)/);
+  // The dead first-generation routes stay dead.
+  assert.doesNotMatch(WORKER + ACCREDITATION, /accreditation\/upload|\/badge\/:id/);
 });
 
+test('the accreditation list never carries the file', () => {
+  // EVIDENCE_COLUMNS is what every read selects; no key, digest or bytes in it.
+  const cols = ACCREDITATION_SVC.slice(ACCREDITATION_SVC.indexOf('export const EVIDENCE_COLUMNS'), ACCREDITATION_SVC.indexOf('export interface EvidenceRow'));
+  assert.ok(cols.length > 100, 'could not read EVIDENCE_COLUMNS');
+  assert.doesNotMatch(cols, /file_key|sha256/);
+  const member = ACCREDITATION_SVC.slice(ACCREDITATION_SVC.indexOf('export function memberEvidence'));
+  assert.doesNotMatch(member, /file_key|sha256/);
+});
 test('the page keeps the three things the canvas has no concept of', () => {
   // Server-derived tabs, server-derived role, partial-failure resilience.
   assert.match(PAGE, /function tabsForRole\(role, obligations\)/);
@@ -172,8 +196,16 @@ test('every status the WORKER writes has a tone', () => {
   // canvas this came from has the same hole. Parsing the WORKER is what fixes
   // it, so this test reads trust.ts rather than trusting either list.
   const written = new Set();
-  // `status = 'x'` (SQL SET), `status: 'x'` (JSON out), `status === 'x'` (branch)
-  for (const m of WORKER.matchAll(/status\s*(?:=|:|===|!==)\s*'([a-z_]+)'/g)) written.add(m[1]);
+  // `status = 'x'` (SQL SET), `status: 'x'` (JSON out), `status === 'x'` (branch).
+  // D6139: the accreditation router writes a letter's statuses, and the
+  // migration's CHECK lists them all, so a status added there needs a tone here.
+  for (const src of [WORKER, ACCREDITATION]) {
+    for (const m of src.matchAll(/status\s*(?:=|:|===|!==)\s*'([a-z_]+)'/g)) written.add(m[1]);
+  }
+  const check = MIGRATION_6139.match(/CHECK \(status IN \(([^)]+)\)\)/);
+  assert.ok(check, 'could not read the accreditation_evidence status CHECK');
+  for (const m of check[1].matchAll(/'([a-z_]+)'/g)) written.add(m[1]);
+  for (const k of ['submitted', 'accepted', 'sent_back']) assert.ok(written.has(k), `${k} was not parsed from the accreditation sources`);
   assert.ok(written.size >= 5, `parsed only ${written.size} statuses out of trust.ts`);
 
   const block = PAGE.slice(
@@ -192,6 +224,9 @@ test('every status the WORKER writes has a tone', () => {
     // the /score answer, drawn by TrustScoreBadge, never a pill on a row.
     'recorded',
     'not_recorded',
+    // D6139: the review list's `?status=open|all` filter, a query word and not a letter's status.
+    'open',
+    'all',
   ]);
 
   const unmapped = [...written].filter(s => !mapped.has(s) && !NOT_A_PILL.has(s));

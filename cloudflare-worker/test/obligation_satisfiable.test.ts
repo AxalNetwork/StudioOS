@@ -1,5 +1,7 @@
 /** Required obligations need a working satisfier or an explicitly recorded gap.
- * D1231 closes KYB through approved account business cases; accreditation remains.
+ * D1231 closes KYB through approved account business cases; D6139 closes
+ * accreditation through the fund team accepting a verification letter
+ * (`routes/trust_accreditation.ts`, owner answer A on #6139).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,6 +21,8 @@ const read = (rel: string) => readFileSync(resolve(root, rel), 'utf8');
 const TRUST_SVC = read('cloudflare-worker/src/services/trust.ts');
 const PARTNER_DEALS = read('cloudflare-worker/src/services/partnerDeals.ts');
 const TRUST_ROUTES = read('cloudflare-worker/src/routes/trust.ts');
+// D6139: the one writer of accreditation_v1 = 'satisfied' (the accept decision).
+const ACCREDITATION_ROUTES = read('cloudflare-worker/src/routes/trust_accreditation.ts');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 
 /* ------------------------------------------------------------------ *
@@ -85,6 +89,7 @@ function writeSites(): { writes: Map<string, Set<string>>; sites: number } {
     ['cloudflare-worker/src/services/trust.ts', TRUST_SVC],
     ['cloudflare-worker/src/services/partnerDeals.ts', PARTNER_DEALS],
     ['cloudflare-worker/src/routes/trust.ts', TRUST_ROUTES],
+    ['cloudflare-worker/src/routes/trust_accreditation.ts', ACCREDITATION_ROUTES],
   ] as const) {
     let from = 0;
     for (;;) {
@@ -191,15 +196,10 @@ const UNSATISFIABLE_TODAY: Record<string, Gap> = {
   // the `declaredKeys` parsers above and proven behaviourally by
   // `obligation_signature_satisfier.test.ts` and `terms_acceptance.test.ts`.
   //
-  // What is left is exactly the two nobody can close without a decision.
-  // Has a legal template and an e-sign doc_type, so it looks wired; it is not.
-  // required:1 for EVERY investor, which makes this the widest of the seven.
-  // Waiving it is a securities question, not a code change.
-  accreditation_v1: {
-    satisfier: 'none',
-    why: 'no write site at all, and required for every investor — needs counsel before any waive',
-  },
-
+  // What was left were the two nobody could close without a decision. KYB went with
+  // D1231; accreditation_v1 went with D6139 (owner answer A on #6139: a
+  // verification letter, accepted by the fund team in `routes/trust_accreditation.ts`).
+  // The set is empty and may only stay so: a new entry is a new recorded gap.
 };
 
 /* ------------------------------------------------------------------ *
@@ -365,15 +365,15 @@ test('the parsers found both sides, so the comparison above is not vacuous', () 
   for (const k of ['tos_v1', 'privacy_v1', 'kyb_v1', 'accreditation_v1', 'partner_msa_v1']) {
     assert.ok(required.has(k), `${k} is required somewhere but the parser missed it`);
   }
-  assert.equal(sites, 6,
-    `expected exactly 6 writes of status='satisfied' across the three files, found ${sites} — `
+  assert.equal(sites, 7,
+    `expected exactly 7 writes of status='satisfied' across the four files, found ${sites} — `
     + 'a new one means a new satisfier; update UNSATISFIABLE_TODAY and this count together');
-  // Three of the six name their key in SQL. The other three —
+  // Four of the seven name their key in SQL. The other three —
   // `satisfyObligationFromEnvelope`, `recordTermsAcceptance` and `seedObligations`'
   // insert from a recorded acceptance (D9200, `SATISFIABLE_BY_CLICKWRAP` keys only)
   // — bind it, so they are deliberately absent here and accounted for by
   // `declaredSatisfiableKeys()`.
-  assert.deepEqual([...writes.keys()].sort(), ['kyb_v1', 'kyc_v1', 'partner_msa_v1'],
+  assert.deepEqual([...writes.keys()].sort(), ['accreditation_v1', 'kyb_v1', 'kyc_v1', 'partner_msa_v1'],
     'the set of keys a satisfied-write is attributed to changed');
   assert.deepEqual([...declaredSatisfiableKeys()].sort(), [
     'founder_nda_v1', 'investor_nda_v1', 'mentor_disclaimer_v1',
@@ -382,14 +382,14 @@ test('the parsers found both sides, so the comparison above is not vacuous', () 
     + 'UNSATISFIABLE_TODAY entry and prove it behaviourally; accreditation_v1 in '
     + 'particular must not appear here without counsel');
   // The number this file exists to move: obligations with a satisfier that can
-  // actually run. It was 2 when the measurement landed; it is 8 now, and the two
-  // that remain are the two nobody can close without a policy decision.
+  // actually run. It was 2 when the measurement landed; it is 10 now (D6139 added
+  // accreditation_v1, the last one waiting on a policy decision).
   const working = [
     ...[...writes.keys()].filter((k) => UNSATISFIABLE_TODAY[k]?.satisfier !== 'inert'),
     ...declaredSatisfiableKeys(),
   ].sort();
   assert.deepEqual(working, [
-    'founder_nda_v1', 'investor_nda_v1', 'kyb_v1', 'kyc_v1', 'mentor_disclaimer_v1',
+    'accreditation_v1', 'founder_nda_v1', 'investor_nda_v1', 'kyb_v1', 'kyc_v1', 'mentor_disclaimer_v1',
     'mentor_nda_v1', 'partner_msa_v1', 'privacy_v1', 'tos_v1',
   ], 'the set of obligations with a satisfier that can actually run changed');
 });

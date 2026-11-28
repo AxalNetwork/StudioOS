@@ -19,7 +19,7 @@ export default function RequirementDialog({ row, onClose, action, status, unread
         <section><h3 className="font-semibold">What this is</h3><p className={SUB}>{info?.[1] || 'Not recorded: no explanation is recorded for this requirement.'}</p></section>
         <section><h3 className="font-semibold">Why you are asked</h3><p className={SUB}>{row.required ? info?.[2] || 'The platform marks this requirement as required.' : 'Not required for your account today.'}</p></section>
         <section><h3 className="font-semibold">Where it stands</h3><dl className="grid grid-cols-2 gap-2 text-sm"><dt>Asked on</dt><dd>{day(row.created_at)}</dd><dt>Done on</dt><dd>Not recorded: a completion date is not returned here.</dd><dt>Updated on</dt><dd>{day(row.updated_at)}</dd><dt>Expires on</dt><dd>{day(row.expires_at)}</dd><dt>State from</dt><dd>{row.source || 'Not recorded: no evidence source was returned.'}</dd></dl></section>
-        {row.obligation_key === 'accreditation_v1' && <p className={SUB}>Evidence upload is not available here. The fund team tells you what evidence they need.</p>}
+        {row.obligation_key === 'accreditation_v1' && <p className={SUB}>Upload a verification letter from a CPA, attorney, broker-dealer or registered adviser on the Verifications tab. The fund team reviews it.</p>}
       </>}
     </div>
   </Sheet>;

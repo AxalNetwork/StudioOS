@@ -171,9 +171,37 @@ export function commitmentBar(row) {
  * @param {{ kyc: {loaded: boolean, status?: string|null}, application: object|null,
  *   applicationLoaded: boolean, holdings: Array<{lpa_signed?: boolean}> }} ctx
  */
+const utcDay = (iso) => {
+  const at = iso ? new Date(iso) : null;
+  return at && !Number.isNaN(at.getTime()) ? at.toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }) : 'a date not recorded';
+};
+
+/**
+ * D6139: the LP onboarding row for a recorded accreditation letter, or null when
+ * there is none (no letter, not asked, or the read failed), so the row falls
+ * back to the application's self-certification. `accreditation` is
+ * `{ loaded, state }` with `state` from `accreditationState`.
+ */
+export function accreditationRowStatus(accreditation) {
+  if (!accreditation?.loaded) return null;
+  switch (accreditation.state?.key) {
+    case 'accepted': return ['green', `Verified until ${utcDay(accreditation.state.expiresAt)}`];
+    case 'in_review': return ['amber', 'Letter in review'];
+    case 'sent_back': return ['amber', 'Letter sent back · upload in Trust'];
+    case 'expired': return ['amber', 'Expired · upload in Trust'];
+    default: return null;
+  }
+}
+
 export function onboardingStatus(requirement, ctx) {
   switch (requirement) {
     case 'Accredited status': {
+      // D6139: once a verification letter is on record, its review is the
+      // status (the same state /trust/me draws, `accreditationState`). With no
+      // letter, the application's self-certification, which is never a
+      // verification.
+      const letter = accreditationRowStatus(ctx.accreditation);
+      if (letter) return letter;
       if (!ctx.applicationLoaded) return ['gray', 'Not read'];
       const accredited = ctx.application && (ctx.application.accredited === true || Number(ctx.application.accredited) === 1);
       return accredited ? ['amber', 'Self-certified, not verified'] : ['gray', 'Not certified'];

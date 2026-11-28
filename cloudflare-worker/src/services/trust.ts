@@ -708,7 +708,8 @@ export async function renewalPeriods(env: Env): Promise<Record<RenewalPeriodKey,
  * AN ALLOWLIST, NOT A CONVENIENCE. `templateKeyForDocType` also resolves
  * `accreditation_v1`, `partner_msa_v1` and `nda_3way_founder_investor_axal_v1`,
  * and none of those may be satisfied here: accreditation is required of every
- * investor and waiving or granting it is a securities question for counsel;
+ * investor and is satisfied only by the fund team accepting a verification
+ * letter (D6139, `routes/trust_accreditation.ts`, its one writer);
  * `partner_msa_v1` already has its own satisfier at deal signature
  * (`services/partnerDeals.ts`) and a second writer would race it; and the 3-way
  * NDA is not an obligation key at all — it settles a `pairwise_ndas` row.
@@ -1042,6 +1043,8 @@ export function obligationSource(row: any): string | null {
     // parameter there, an entry here) the Trust Center would have said
     // "Accepted at signup" over an act that happened years after the signup.
     reacceptance_interstitial: 'Re-accepted in the app',
+    // D6139: written by the accept decision in `routes/trust_accreditation.ts`.
+    accreditation_evidence: 'Accepted from your verification letter',
   };
   return LABEL[src] || `Synced from ${src.replace(/_/g, ' ')}`;
 }

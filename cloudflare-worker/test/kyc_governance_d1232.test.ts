@@ -101,8 +101,8 @@ test('periods: any admin reads them; only a stepped-up Super Admin at HQ changes
     const read = await call(env, ADMIN, '/admin/periods');
     assert.equal(read.status, 200);
     assert.equal(read.body.can_change, false);
-    assert.deepEqual(read.body.periods.map((p: any) => [p.key, p.months, p.set_by_hq, p.applied]), [['kyc_v1', 24, false, true], ['kyb_v1', 24, false, true], ['accreditation_v1', 12, false, false]]);
-    assert.match(read.body.periods[2].reason, /No route approves accreditation evidence yet/);
+    // D6139: accepting an accreditation letter applies its period, so all three are applied and none carries a reason.
+    assert.deepEqual(read.body.periods.map((p: any) => [p.key, p.months, p.set_by_hq, p.applied, p.reason ?? null]), [['kyc_v1', 24, false, true, null], ['kyb_v1', 24, false, true, null], ['accreditation_v1', 12, false, true, null]]);
     assert.equal((await call(env, SUPER, '/admin/periods')).body.can_change, true);
     for (const [id, jti, extra] of [[ADMIN, 'fresh', {}], [SUPER, 'stale', {}], [SUPER, 'fresh', { BRANCH_CODE: 'lisbon' }], [null, undefined, {}]] as const) {
       const r = await call(env, id, '/admin/periods', { method: 'PUT', jti, body: { periods: { kyc_v1: 12 } }, env: extra });

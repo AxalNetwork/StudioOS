@@ -1,11 +1,13 @@
 import React from 'react';
 import { CARD, LBL, ONBOARDING, MONO, SectionLabel, Chip } from './FundWorkspaceSupport';
-import { onboardingStatus } from '../../../lib/lpCommitmentModel';
+import { accreditationRowStatus, onboardingStatus } from '../../../lib/lpCommitmentModel';
 import { ShieldCheck, Lock, FileText } from 'lucide-react';
 
 export default function FundOnboardingSection({
-  kyc, application, applicationLoaded, portal
+  kyc, application, applicationLoaded, portal, accreditation = null
 }) {
+// D6139: a verification letter on record replaces the self-certification line.
+const letterOnRecord = Boolean(accreditationRowStatus(accreditation));
 return (
 <section id="apply" aria-label="Apply and onboarding" tabIndex={-1} className="space-y-6 scroll-mt-6">
       {/* onboarding */}
@@ -28,7 +30,7 @@ return (
                 // from the access ladder, which marked KYC complete for anyone
                 // with a commitment.
                 const status = onboardingStatus(name, {
-                  kyc, application, applicationLoaded, holdings: portal?.lp_holdings || [],
+                  kyc, application, applicationLoaded, accreditation, holdings: portal?.lp_holdings || [],
                 });
                 return (
                   <tr key={name} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
@@ -49,8 +51,12 @@ return (
           The fund’s policy is that no capital moves before subscription documents are countersigned;
           the platform keeps no subscription-document record, so this table cannot show yours. Identity
           verification is submitted in Trust: your ID document is kept in the platform’s private
-          document store and reviewed by the fund team. Accreditation is self-certified on your
-          application and is not verified here.
+          document store and reviewed by the fund team.{' '}
+          {letterOnRecord
+            ? 'Accreditation is verified from the letter you uploaded in Trust, reviewed by the fund team.'
+            : accreditation && !accreditation.loaded
+              ? 'Your accreditation letter could not be read just now, so this row shows your application’s self-certification.'
+              : 'Accreditation is self-certified on your application until you upload a verification letter in Trust; it is not verified here.'}
         </p>
       </div>
 
