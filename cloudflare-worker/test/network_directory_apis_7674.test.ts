@@ -127,8 +127,11 @@ test('a member read never carries account links, private source cells, source ro
   assert.doesNotMatch(text, new RegExp(MARKER));
   assert.doesNotMatch(text, /linked_user_id|linked_company_id|link_verified|source_external_id|ext-person|rec-\d|rev-dup|synthetic_duplicate|example\.test|publication_status/);
   const ada = one.body.entry;
-  assert.equal(ada.currently_investing, false);
-  assert.equal((await f.call('/entries/person-cy')).body.entry.currently_investing, null, 'unknown stays unknown');
+  assert.equal(ada.currently_investing, undefined, 'a person’s projection carries no investing status (D7674 part 4)');
+  f.db.exec("UPDATE network_directory_entries SET currently_investing=0 WHERE uid='org-alpha'");
+  assert.equal((await f.call('/entries/org-alpha')).body.entry.currently_investing, false);
+  f.db.exec("UPDATE network_directory_entries SET currently_investing=NULL WHERE uid='org-alpha'");
+  assert.equal((await f.call('/entries/org-alpha')).body.entry.currently_investing, null, 'unknown stays unknown');
   assert.deepEqual(ada.source, { name: 'Synthetic source A', observed_at: '2026-11-19T12:00:00.000Z' });
 });
 
@@ -148,7 +151,7 @@ test('detail lists sourced associations to visible entries only, with unknown cu
 test('an overlay is the caller’s alone, on a published person, and creates no relationship', async () => {
   const f = fixture();
   const before = sideEffects(f);
-  assert.deepEqual((await f.call('/entries/person-ada/overlay')).body, { overlay: null });
+  assert.deepEqual((await f.call('/entries/person-ada/overlay')).body, { overlay: null, merged_overlays: [] });
   const put = await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: true, private_note: '  Met at a synthetic event.  ' });
   assert.equal(put.status, 200, JSON.stringify(put.body));
   assert.equal(put.body.overlay.saved, true);
@@ -156,7 +159,7 @@ test('an overlay is the caller’s alone, on a published person, and creates no 
   const partial = await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: false });
   assert.equal(partial.body.overlay.private_note, 'Met at a synthetic event.', 'a partial change keeps the other field');
   assert.equal(partial.body.overlay.saved, false);
-  assert.deepEqual((await f.call('/entries/person-ada/overlay', 'GET', 2)).body, { overlay: null }, 'member two never reads member one’s note');
+  assert.deepEqual((await f.call('/entries/person-ada/overlay', 'GET', 2)).body, { overlay: null, merged_overlays: [] }, 'member two never reads member one’s note');
   assert.doesNotMatch(JSON.stringify((await f.call('/entries/person-ada', 'GET', 2)).body), /synthetic event/);
   assert.equal((await f.call('/entries/person-ada/overlay', 'GET', 1, undefined, { impersonated_by: 9 })).status, 403);
   assert.equal((await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: true }, { impersonated_by: 9 })).status, 403);
@@ -177,8 +180,8 @@ test('operators read readiness and review items without raw source cells; member
   }
   const staged = await f.call('/admin/entries', 'GET', 9);
   assert.equal(staged.status, 200, JSON.stringify(staged.body));
-  assert.deepEqual(staged.body.entries.map((e: any) => [e.uid, e.readiness.blockers, e.people_publication_held]),
-    [['org-beta', ['open_review'], false], ['person-bo', ['open_review'], true]]);
+  assert.deepEqual(staged.body.entries.map((e: any) => [e.uid, e.readiness.blockers]),
+    [['org-beta', ['open_review']], ['person-bo', ['open_review']]]);
   const reviews = await f.call('/admin/reviews', 'GET', 9);
   assert.equal(reviews.body.total, 1);
   assert.equal(reviews.body.reviews[0].reason, 'synthetic_shared_channel');
@@ -218,13 +221,18 @@ test('publishing an organisation is write-barred, idempotent, audited and read b
   assert.deepEqual(sideEffects(f), before);
 });
 
-test('a person is never published here: the people-record import is held', async () => {
+test('a ready person is published through the same reviewed action, and members read the professional projection (D7674 part 4)', async () => {
   const f = fixture();
-  const r = await f.call('/admin/entries/person-bo/publish', 'POST', 9, { idempotency_key: key('bo'), reason: 'Attempted person publication.' });
-  assert.equal(r.status, 409);
-  assert.equal(r.body.error, 'people_publication_held');
-  assert.equal((f.db.prepare("SELECT publication_status FROM network_directory_entries WHERE uid='person-bo'").get() as any).publication_status, 'staged');
-  assert.equal(f.n('SELECT COUNT(*) AS n FROM network_directory_publication_events'), 0);
+  const r = await f.call('/admin/entries/person-bo/publish', 'POST', 9, { idempotency_key: key('bo'), reason: 'Reviewed synthetic person.' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal((f.db.prepare("SELECT publication_status FROM network_directory_entries WHERE uid='person-bo'").get() as any).publication_status, 'published');
+  assert.deepEqual(Object.keys((await f.call('/entries/person-bo')).body.entry).sort(),
+    ['first_name', 'geography', 'kind', 'last_name', 'name', 'profile_url', 'sectors', 'source', 'uid', 'verification']);
+  const held = fixture();
+  held.record(null, null, 'review', '2026-11-20T09:00:00.000Z', 'person-bo');
+  const refused = await held.call('/admin/entries/person-bo/publish', 'POST', 9, { idempotency_key: key('bo'), reason: 'Should be refused.' });
+  assert.equal(refused.body.error, 'publication_not_ready', 'a person is held to the same readiness as an organisation');
+  assert.equal(held.n('SELECT COUNT(*) AS n FROM network_directory_publication_events'), 0);
 });
 
 test('the latest observation decides: a later hold, a same-time conflict or an open review blocks publication', async () => {

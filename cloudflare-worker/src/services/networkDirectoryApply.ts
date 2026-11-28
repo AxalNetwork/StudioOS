@@ -14,6 +14,9 @@
  * (published, suppressed, archived, reviewed, verified, withdrawn or account/company-linked) are fingerprinted before
  * and after, so a change to one is a mismatch, not a completion. Entries stay `staged`; nothing here publishes.
  *
+ * The re-plan check, the apply and the read-back (`replanReviewed`, `applyPlan`, `readBack`) are shared with the
+ * people-only contract (D7674 part 4, `networkDirectoryPeopleApply.ts`), which has its own envelope and route.
+ *
  * This file counts rows of `network_directory_private_sources` and never selects a cell from it. It creates no
  * account, membership, relationship, notice or outreach, and it writes no Research row.
  */
@@ -54,13 +57,13 @@ export const ORGANISATION_FIELDS: Readonly<Record<string, readonly string[]>> = 
 const UPLOAD_KEYS = new Set(['contract', 'target_environment', 'schema', 'planner_version', 'snapshot', 'plan', 'manifest', 'records', 'max_batches']);
 /** A plan's executable parts. The server builds its own; an upload that carries them is refused, not ignored. */
 const SQL_KEYS = new Set(['batches', 'statements', 'sql', 'params']);
-const RECORD_KEYS = new Set(['source', 'source_record_id', 'observed_at', 'raw_fields']);
-const MANIFEST_KEYS = new Set(['version', 'rows', 'duplicate_channel_groups', 'source_snapshot_sha256', 'organizations']);
-const ROW_KEYS = new Set(['source', 'source_record_id', 'entity_kind', 'disposition', 'reasons', 'linkedin_disposition']);
+export const RECORD_KEYS = new Set(['source', 'source_record_id', 'observed_at', 'raw_fields']);
+export const MANIFEST_KEYS = new Set(['version', 'rows', 'duplicate_channel_groups', 'source_snapshot_sha256', 'organizations']);
+export const ROW_KEYS = new Set(['source', 'source_record_id', 'entity_kind', 'disposition', 'reasons', 'linkedin_disposition']);
 /** Manifest keys that only a person's row carries (affiliation and title review). */
-const PERSON_ROW_KEYS = new Set(['affiliation_disposition', 'title', 'title_disposition']);
-const CONTACT_FIELD = /e-?mail|phone|mobile|\btel\b|whats\s?app|telegram|twitter|contact|address|\bcell\b/i;
-const EMAIL_VALUE = /[^\s@<>"']+@[^\s@<>"']+\.[a-z]{2,}/i;
+export const PERSON_ROW_KEYS = new Set(['affiliation_disposition', 'title', 'title_disposition']);
+export const CONTACT_FIELD = /e-?mail|phone|mobile|\btel\b|whats\s?app|telegram|twitter|contact|address|\bcell\b/i;
+export const EMAIL_VALUE = /[^\s@<>"']+@[^\s@<>"']+\.[a-z]{2,}/i;
 const PERSONAL_PROFILE = /linkedin\.com\/in\//i;
 /** The eight #7672 tables the plan writes, spelled out so the schema probe binds nothing. */
 const SCHEMA_PROBE = `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (
@@ -71,7 +74,7 @@ const SCHEMA_TABLES = 8;
 const refuse = (status: number, code: string, sentence: string, extra: Record<string, unknown> = {}) =>
   new DirectoryRefusal(status, code, sentence, extra);
 
-const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+export const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export type ApplyEnvelope = {
   target_environment: string;
@@ -83,7 +86,7 @@ export type ApplyEnvelope = {
 };
 
 /** Every string anywhere in a value, for the contact and personal-profile scan. */
-function strings(value: unknown, out: string[] = []): string[] {
+export function strings(value: unknown, out: string[] = []): string[] {
   if (typeof value === 'string') out.push(value);
   else if (Array.isArray(value)) for (const v of value) strings(v, out);
   else if (isObject(value)) for (const [k, v] of Object.entries(value)) { out.push(k); strings(v, out); }
@@ -97,11 +100,15 @@ function contactScan(where: unknown) {
   }
 }
 
-/** The envelope, the organisation-only rule and the contact rule. Pure: reads no database. */
-export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENVIRONMENT'>): ApplyEnvelope {
+/**
+ * The envelope checks both apply contracts share (D7674 parts 2 and 4), in order: no submitted SQL, no unknown
+ * field, the contract, the target environment, the production hold, the schema, the mapping version and the
+ * shapes. Pure: reads no database. `noun` names the records in the refusal sentence.
+ */
+export function envelopeBase(body: Record<string, unknown>, env: Pick<Env, 'ENVIRONMENT'>, contract: string, noun: string) {
   if (Object.keys(body).some(k => SQL_KEYS.has(k))) throw refuse(400, 'submitted_sql_refused', 'An upload carries records and a review manifest only; the server builds every statement. Nothing was written.');
   if (Object.keys(body).some(k => !UPLOAD_KEYS.has(k))) throw refuse(400, 'upload_field_unknown', 'The upload carries a field this contract does not take. Nothing was written.');
-  if (body.contract !== APPLY_CONTRACT) throw refuse(400, 'contract_unknown', `Send an upload under the ${APPLY_CONTRACT} contract.`);
+  if (body.contract !== contract) throw refuse(400, 'contract_unknown', `Send an upload under the ${contract} contract.`);
   const target = typeof body.target_environment === 'string' ? body.target_environment : '';
   if (!env.ENVIRONMENT || target !== env.ENVIRONMENT) {
     throw refuse(409, 'wrong_target_environment', 'This upload was reviewed for another environment than the one it was sent to. Nothing was written.');
@@ -120,7 +127,7 @@ export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENV
     throw refuse(400, 'plan_invalid', 'Give the reviewed plan’s run id and review manifest hash, as the offline planner printed them.');
   }
   if (!Array.isArray(records) || !records.length || records.length > APPLY_LIMITS.MAX_RECORDS) {
-    throw refuse(400, 'records_invalid', `Send 1 to ${APPLY_LIMITS.MAX_RECORDS} organisation records.`);
+    throw refuse(400, 'records_invalid', `Send 1 to ${APPLY_LIMITS.MAX_RECORDS} ${noun} records.`);
   }
   if (!isObject(manifest) || manifest.version !== 1 || !Array.isArray(manifest.rows) || Object.keys(manifest).some(k => !MANIFEST_KEYS.has(k))) {
     throw refuse(400, 'manifest_invalid', 'The review manifest is not a version 1 manifest in the expected shape. Nothing was written.');
@@ -132,6 +139,13 @@ export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENV
     }
     maxBatches = body.max_batches as number;
   }
+  return { target, snapshot: snapshot as ApplyEnvelope['snapshot'], plan: plan as ApplyEnvelope['plan'], records: records as Record<string, any>[],
+    manifest: manifest as Record<string, any>, max_batches: maxBatches };
+}
+
+/** The envelope, the organisation-only rule and the contact rule. Pure: reads no database. */
+export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENVIRONMENT'>): ApplyEnvelope {
+  const { target, snapshot, plan, records, manifest, max_batches: maxBatches } = envelopeBase(body, env, APPLY_CONTRACT, 'organisation');
   contactScan(records);
   contactScan(manifest);
   if (Array.isArray(manifest.organizations) ? manifest.organizations.length : manifest.organizations !== undefined) {
@@ -170,11 +184,11 @@ export function applyEnvelope(body: Record<string, unknown>, env: Pick<Env, 'ENV
   for (const k of decisions.keys()) {
     if (!identities.has(k)) throw refuse(400, 'manifest_invalid', 'The review manifest is not a version 1 manifest in the expected shape. Nothing was written.');
   }
-  return { target_environment: target, records: records as Record<string, any>[], manifest, snapshot: snapshot as ApplyEnvelope['snapshot'], plan: plan as ApplyEnvelope['plan'], max_batches: maxBatches };
+  return { target_environment: target, records, manifest, snapshot, plan, max_batches: maxBatches };
 }
 
-/** Re-plan on the server, then hold the result to what was reviewed. */
-export async function replan(input: ApplyEnvelope): Promise<DirectoryPlan> {
+/** Re-plan on the server, then hold the result to what was reviewed (both contracts). */
+export async function replanReviewed(input: ApplyEnvelope): Promise<DirectoryPlan> {
   if (input.snapshot.record_count !== input.records.length || (await recordsDigest(input.records)) !== input.snapshot.records_sha256) {
     throw refuse(409, 'snapshot_mismatch', 'These records are not the reviewed snapshot: the count or digest differs. Nothing was written.');
   }
@@ -185,6 +199,12 @@ export async function replan(input: ApplyEnvelope): Promise<DirectoryPlan> {
   if (plan.summary.run_uid !== input.plan.run_uid || plan.summary.review_manifest_hash !== input.plan.review_manifest_hash) {
     throw refuse(409, 'plan_stale', 'The server’s plan for this upload differs from the reviewed plan. Re-plan and review again; nothing was written.');
   }
+  return plan;
+}
+
+/** The organisation contract's re-plan: the reviewed plan, holding no person, affiliation or derived organisation. */
+export async function replan(input: ApplyEnvelope): Promise<DirectoryPlan> {
+  const plan = await replanReviewed(input);
   if (plan.summary.people !== 0 || plan.summary.affiliations !== 0 || plan.summary.derived_organizations.input !== 0) {
     throw refuse(422, 'people_records_refused', 'Only organisation records are applied here. A row about a person, or one not reviewed as an organisation, is never uploaded (#7739 Q3 B).');
   }
@@ -253,7 +273,8 @@ export async function readBack(env: Env, plan: DirectoryPlan): Promise<ReadBack>
   const expected = {
     checkpoints: s.all_staged_records.input, accepted: s.all_staged_records.accepted, review: s.all_staged_records.review,
     skipped: s.all_staged_records.skipped, private_sources: s.all_staged_records.input, organizations: s.organizations,
-    people: 0, affiliations: 0, review_records_without_item: 0,
+    // Zero for an organisation upload (its re-plan refuses any); the people contract's plan names its own (D7674 part 4).
+    people: s.people, affiliations: s.affiliations, review_records_without_item: 0,
   };
   const byDisposition = (await env.DB.prepare(
     `SELECT r.disposition AS disposition, COUNT(*) AS n,
@@ -336,7 +357,7 @@ export type ApplyResult = {
 function summaryOut(plan: DirectoryPlan) {
   const s = plan.summary;
   return { planner_version: s.planner_version, run_uid: s.run_uid, review_manifest_hash: s.review_manifest_hash, records: s.all_staged_records,
-    organizations: s.organizations, duplicate_identity_groups: s.duplicate_identity_groups, atomic_batches: s.atomic_batches, statements: s.statements };
+    organizations: s.organizations, people: s.people, affiliations: s.affiliations, duplicate_identity_groups: s.duplicate_identity_groups, atomic_batches: s.atomic_batches, statements: s.statements };
 }
 
 const mismatch = (rb: ReadBack, extra: Record<string, unknown>) => refuse(409, 'read_back_mismatch',
@@ -350,7 +371,11 @@ const mismatch = (rb: ReadBack, extra: Record<string, unknown>) => refuse(409, '
  * applied and `wrote`, so the route can audit it.
  */
 export async function applyOrganisationManifest(rawEnv: Env, input: ApplyEnvelope): Promise<ApplyResult> {
-  const plan = await replan(input);
+  return applyPlan(rawEnv, input, await replan(input));
+}
+
+/** The shared apply of an already re-planned, reviewed plan (organisation and people contracts alike). */
+export async function applyPlan(rawEnv: Env, input: ApplyEnvelope, plan: DirectoryPlan): Promise<ApplyResult> {
   const { env, meter } = metered(rawEnv);
   const budget = APPLY_LIMITS.STATEMENT_BUDGET;
   const runUid = plan.summary.run_uid;
@@ -369,7 +394,7 @@ export async function applyOrganisationManifest(rawEnv: Env, input: ApplyEnvelop
     return { ...base, status: 'complete', replayed: true, wrote: false, applied_batches: 0, pending_batches: 0, statements_run: meter.used, read_back: rb };
   }
   for (const [uid, e] of before) {
-    if (e.kind !== planned.get(uid)!.kind) throw refuse(409, 'entity_kind_conflict', 'A planned organisation already exists as a person entry. Review the identity; nothing was written.');
+    if (e.kind !== planned.get(uid)!.kind) throw refuse(409, 'entity_kind_conflict', 'A planned entry already exists as the other kind (a person or an organisation). Review the identity; nothing was written.');
   }
   const stale = await staleRows(env, input.records);
   if (stale) throw refuse(409, 'manifest_stale', 'The directory already holds a newer observation of a row in this upload, so its review is stale. Re-plan from the newer source.', { stale_rows: stale });
