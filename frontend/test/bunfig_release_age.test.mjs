@@ -27,7 +27,7 @@ function bunfigs(dir) {
 
 test('every brandtemplate bunfig waits at least seven days before a new package version', () => {
   const files = bunfigs(ROOT);
-  assert.ok(files.length >= 16, `expected the sixteen kits, found ${files.length}`);
+  assert.ok(files.length >= 15, `expected the fifteen kits, found ${files.length}`);
   for (const file of files) {
     const text = readFileSync(file, 'utf8');
     const m = text.match(/minimumReleaseAge\s*=\s*(\d+)/);

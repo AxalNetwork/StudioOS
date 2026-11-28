@@ -237,6 +237,7 @@ function humanizeOAuthReason(reason) {
   if (reason === 'email_mismatch') return "that Google account doesn't match your StudioOS email";
   if (reason === 'email_unverified') return 'Google reports that account as unverified';
   if (reason === 'invalid_state') return 'the sign-in link expired, please try again';
+  if (reason === 'calendar_scope_missing') return 'Microsoft did not grant calendar access, so nothing was saved (try again and accept the calendar permission)';
   if (reason === 'no_refresh_token') return 'the provider did not return a refresh token (revoke access and reconnect)';
   if (reason === 'oauth_unavailable') return 'the server is missing OAuth credentials';
   if (reason === 'db_write') return 'the server could not save the connection';

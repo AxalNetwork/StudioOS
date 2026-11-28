@@ -20,7 +20,7 @@ canonical entity map.
 | `engineering-notifications/` | D5664: inactive independent GitHub metadata capture and reconciliation proposal. |
 | `engineering-slack/` | D5665: inactive independent Slack batching and durable delivery proposal. |
 | `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
-| `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
+| `attached_assets/`  | Design specs, methodology PDFs, legal templates, research data         |
 | `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
 | [LICENSE](./LICENSE) | The existing proprietary project notice, also stated below. |
 

@@ -20,7 +20,7 @@ import { wellbeingReflectionsApi } from '../../lib/api/wellbeingReflections';
 import { BTN, FIELD, ScoreDots } from './WellbeingParts';
 import {
   FOUR_WEEKS_FOOT, LEFT_OUT, MONTH_PROMPTS, PRIVATE_LINE, QUESTIONS, RETENTION_LINE, SAVES_ONLY, TAB_WORDS, TEXT_MAX,
-  WEEK_TOPICS, deviceTimezone, draftEmpty, draftFrom, fourWeekTable, historyLabel, historyLine, historyNote, isChanged, monthName,
+  WEEK_TOPICS, deviceTimezone, draftEmpty, draftFrom, earlierHeldLine, fourWeekTable, historyLabel, historyLine, historyNote, isChanged, monthName,
   newRequestId, periodHref, periodLabel, periodState, saveBody, saveRefusal, summaryLines, toggleTopic,
 } from './reflectionsModel';
 
@@ -353,7 +353,8 @@ function EarlierCheckins() {
         <ul className="mt-2 divide-y divide-stone-200 dark:divide-gray-800">
           {read.value.map((x) => (
             <li key={x.uid} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm" data-testid={`reflection-earlier-${x.uid}`}>
-              <span><b className="text-stone-900 dark:text-gray-100">{periodLabel('day', x.day, x.day) || x.day}</b> <span className="text-stone-600 dark:text-gray-400">· {x.label || 'Earlier check-in'}</span></span>
+              <span><b className="text-stone-900 dark:text-gray-100">{periodLabel('day', x.day, x.day) || x.day}</b> <span className="text-stone-600 dark:text-gray-400">· {x.label || 'Earlier check-in'}</span>
+                {earlierHeldLine(x.held) ? <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid={`reflection-earlier-held-${x.uid}`}>{earlierHeldLine(x.held)}</span> : null}</span>
               <button type="button" className={BTN.ghost} onClick={() => remove(x.uid)}>Delete</button>
             </li>
           ))}

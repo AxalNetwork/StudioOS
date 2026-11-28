@@ -8,13 +8,16 @@
  * the masked `payment`, or its refusal's sentence; the usage reports, with
  * "Send now" only where the Worker says a send is possible (a branch); and
  * "Dispute a line", a request to HQ that never writes the statement.
- * "Annual licence fee invoices" are D802's (`fee_invoices`): drawn when the
- * answer carries them, and said to be missing when it does not.
+ * D9112 (L46) separates the one-off initial invoice from D802's annual
+ * rows and reports a failed invoice read without hiding the statements.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { licenceAccountApi } from '../../../lib/api/licenceAccount';
 import { reportError } from '../../../lib/log';
+import { Pill } from '../../../ui';
+import { DataState } from '../../../ui/Honesty';
+import { dayLabel, initialInvoiceState, money, splitInvoices, STATUS_TONE as INVOICE_TONE, STATUS_WORDS } from '../../admin/licenceFeeInvoicesModel';
 import { canSendNow, disputeCents, payRows, statementRows, usageRows } from './licenceTabsModel';
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
@@ -110,25 +113,121 @@ function HowToPay({ payment }) {
   );
 }
 
+const INVOICE_TEXT = 'text-gray-900 dark:text-gray-100';
+const INVOICE_MUTED = 'text-gray-600 dark:text-gray-400';
+const INVOICE_DIVIDER = 'border-gray-200 dark:border-gray-700';
+const PDF_LINK = 'inline-flex min-h-[44px] items-center break-all font-semibold text-indigo-700 underline dark:text-indigo-300';
+const INVOICE_UNAVAILABLE = 'Your fee invoices could not be read. Try again in a moment.';
+
+function InvoiceLines({ invoice, voided }) {
+  const { currency } = invoice;
+  return (
+    <dl className={`text-sm ${INVOICE_TEXT}`}>
+      <div className={`flex justify-between gap-3 border-b py-2 ${INVOICE_DIVIDER}`}>
+        <dt>Initial licence fee</dt>
+        <dd className="font-mono">{money(invoice.initial_fee_cents, currency)}</dd>
+      </div>
+      {invoice.regulatory_surcharge_cents > 0 && (
+        <div className={`flex justify-between gap-3 border-b py-2 ${INVOICE_DIVIDER}`}>
+          <dt>Regulatory surcharge</dt>
+          <dd className="font-mono">{money(invoice.regulatory_surcharge_cents, currency)}</dd>
+        </div>
+      )}
+      <div className="flex justify-between gap-3 py-2 font-semibold">
+        <dt>{voided ? 'Total · void, nothing owed' : 'Total'}</dt>
+        <dd className="font-mono">{voided
+          ? <s>{money(invoice.amount_cents, currency)}</s>
+          : money(invoice.amount_cents, currency)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function InitialInvoiceCard({ invoice }) {
+  const { state, chip } = initialInvoiceState(invoice, new Date().toISOString().slice(0, 10));
+  const voided = state === 'void';
+  const { currency, reference } = invoice;
+  const paid = `${money(invoice.paid_cents, currency)} of ${money(invoice.amount_cents, currency)}`;
+  const pdf = voided ? 'Hidden · a void invoice prints nothing'
+    : invoice.pdf_url ? <a className={PDF_LINK} href={invoice.pdf_url}>{reference ? `${reference}.pdf` : 'Invoice PDF'}</a>
+      : 'Not recorded';
+  const meta = [
+    ['Reference', reference || 'Not recorded'],
+    ['Issued', dayLabel(invoice.issued_at) || 'Not recorded'],
+    ['Due', dayLabel(invoice.due_at) || 'Not recorded'],
+    ['Paid so far', voided ? '—' : paid],
+    ['PDF', pdf],
+  ];
+  return (
+    <section className={CARD} data-testid="initial-invoice">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className={`text-sm font-semibold ${INVOICE_TEXT}`}>Initial invoice · one-off</h3>
+        <Pill tone={chip.tone}>{voided ? <s>{chip.word}</s> : chip.word}</Pill>
+      </header>
+      <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
+        <InvoiceLines invoice={invoice} voided={voided} />
+        <dl className={`text-sm ${INVOICE_TEXT}`}>
+          {meta.map(([label, value]) => (
+            <div key={label} className={`grid gap-1 border-b py-2 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-2 ${INVOICE_DIVIDER}`}>
+              <dt className={INVOICE_MUTED}>{label}</dt>
+              <dd className="min-w-0 break-words">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <p className={`mt-3 text-xs ${INVOICE_MUTED}`}>One-off invoice for the initial licence fee and the regulatory surcharge. The amounts are fixed as issued.</p>
+    </section>
+  );
+}
+
 function FeeInvoices({ invoices }) {
   return (
-    <section className={CARD} data-testid="fee-invoices">
-      <h3 className={H}>Annual licence fee invoices</h3>
-      {!Array.isArray(invoices)
-        ? <p className="text-xs text-gray-500">Annual fee invoices are not on this page yet: HQ does not issue them here yet.</p>
-        : invoices.length === 0
-          ? <p className="text-xs text-gray-500">No annual fee invoice has been issued.</p>
-          : (
-            <ul className="space-y-1.5 text-xs">
-              {invoices.map((v) => (
-                <li key={v.uid || v.title} className="flex items-center justify-between gap-2">
-                  <span><span className="font-medium text-gray-900 dark:text-gray-100">{v.title}</span><span className="block text-gray-500">{String(v.issued_on || '').slice(0, 10)}{v.amount ? ` · ${v.amount}` : ''}</span></span>
-                  <span className="flex items-center gap-2"><span className="text-gray-600">{v.status}</span>{v.pdf_url && <a className={BTN} href={v.pdf_url}>PDF</a>}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+    <section className={`${CARD} min-w-0`} data-testid="fee-invoices">
+      <h3 className={H}>Annual licence-fee invoices <span className={`font-normal ${INVOICE_MUTED}`}>· per licence year</span></h3>
+      {invoices.length === 0
+        ? <p className={`text-xs ${INVOICE_MUTED}`}>No annual fee invoice has been issued.</p>
+        : (
+          <div className="overflow-x-auto">
+            <table className={`w-full min-w-[620px] text-left text-sm ${INVOICE_TEXT}`}>
+              <thead className={`text-xs ${INVOICE_MUTED}`}>
+                <tr>
+                  {['Licence year', 'Reference', 'Amount', 'Due', 'Status', 'PDF'].map((label) =>
+                    <th key={label} scope="col" className="px-2 py-1.5">{label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.uid} className={`border-t ${INVOICE_DIVIDER}`}>
+                    <th scope="row" className="px-2 py-2 font-semibold">{invoice.period_label}</th>
+                    <td className="px-2 py-2 font-mono text-xs">{invoice.reference}</td>
+                    <td className="px-2 py-2 font-mono">{money(invoice.amount_cents, invoice.currency)}</td>
+                    <td className="px-2 py-2">{dayLabel(invoice.due_at) || 'Not recorded'}</td>
+                    <td className="px-2 py-2"><Pill tone={INVOICE_TONE[invoice.status]}>{STATUS_WORDS[invoice.status] || 'Not recorded'}</Pill></td>
+                    <td className="px-2 py-2">{invoice.pdf_url && <a className={PDF_LINK} href={invoice.pdf_url}>PDF</a>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
     </section>
+  );
+}
+
+function InvoiceSections({ answer, onReload }) {
+  if (!Array.isArray(answer?.fee_invoices)) {
+    return (
+      <DataState as="section" state="unavailable" size="block" data-testid="fee-invoices-unavailable"
+        reason={`${answer?.fee_invoices_reason || INVOICE_UNAVAILABLE} Statements below still show.`}
+        onRetry={onReload} retryLabel="Try again" />
+    );
+  }
+  const { initial, annual } = splitInvoices(answer.fee_invoices);
+  return (
+    <>
+      {initial && <InitialInvoiceCard invoice={initial} />}
+      <FeeInvoices invoices={annual} />
+    </>
   );
 }
 
@@ -224,15 +323,18 @@ export function StatementsView({ answer, onReload }) {
   const rows = statementRows(answer?.statements);
   return (
     <div className="space-y-4" data-testid="statements-tab">
-      <section className={CARD}><StatementTable rows={rows} onDispute={(r) => { setSent(''); setDisputing(r); }} /></section>
+      <InvoiceSections answer={answer} onReload={onReload} />
+      <section className={`${CARD} min-w-0`} data-testid="royalty-statements">
+        <h3 className={H}>Royalty statements</h3>
+        <StatementTable rows={rows} onDispute={(r) => { setSent(''); setDisputing(r); }} />
+      </section>
       {sent && <p className="text-sm text-emerald-700 dark:text-emerald-300" role="status">{sent}</p>}
       {disputing && (
         <DisputeForm row={disputing} onCancel={() => setDisputing(null)}
           onDone={(r) => { setDisputing(null); setSent(`Sent to HQ. HQ answers by ${String(r?.escalation?.due_at || '').slice(0, 10) || 'its response time'}.`); onReload?.(); }} />
       )}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <HowToPay payment={answer?.payment} />
-        <FeeInvoices invoices={answer?.fee_invoices} />
         <UsageReports usage={answer?.usage} />
       </div>
     </div>
@@ -241,10 +343,14 @@ export function StatementsView({ answer, onReload }) {
 
 export default function StatementsTab() {
   const [answer, setAnswer] = useState(undefined);
+  const reading = useRef(false);
   const load = useCallback(() => {
+    if (reading.current) return;
+    reading.current = true;
     licenceAccountApi.statements()
       .then(setAnswer)
-      .catch((e) => { reportError('licence_statements_load_failed', e); setAnswer(null); });
+      .catch((e) => { reportError('licence_statements_load_failed', e); setAnswer(null); })
+      .finally(() => { reading.current = false; });
   }, []);
   useEffect(load, [load]);
   if (answer === undefined) return <p className="text-sm text-gray-500">Loading…</p>;

@@ -96,7 +96,7 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
   }, []);
 
   useEffect(() => {
-    document.title = 'Deals — axal';
+    document.title = 'Deal flow · Axal VC'; // D8681: as Deals' own root title (dealFlowModel.js)
     load().catch((cause) => {
       reportError('InvestorDealsWorkspace:load', cause);
       setError('Deal data could not be loaded. Your access has not changed.');

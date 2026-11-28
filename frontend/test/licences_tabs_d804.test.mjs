@@ -192,10 +192,17 @@ test('Send now is hidden on HQ and shown where the Worker says a send is possibl
   assert.deepEqual(usageRows(STATEMENTS.usage).map((u) => [u.m, u.st, u.late]), [['2026-Q3', 'Late', true], ['2026-Q2', 'Sent 2026-07-04', false]]);
 });
 
-test('annual fee invoices are D802\'s: listed when the answer carries them, said to be missing when it does not', () => {
-  assert.ok(text(StatementsView, { answer: STATEMENTS }).includes('Annual fee invoices are not on this page yet'));
-  const withInvoices = text(StatementsView, { answer: { ...STATEMENTS, fee_invoices: [{ uid: 'i1', title: 'Annual licence fee 2026–27', issued_on: '2026-03-01', amount: '€90,000.00', status: 'Issued', pdf_url: '/x.pdf' }] } });
-  assert.ok(withInvoices.includes('Annual licence fee 2026–27') && withInvoices.includes('PDF'));
+test('annual fee invoices use D802 fields and an omitted read offers Try again', () => {
+  const missing = text(StatementsView, { answer: STATEMENTS, onReload() {} });
+  assert.match(missing, /Your fee invoices could not be read\. Try again in a moment\./);
+  assert.match(missing, /Statements below still show\.\s+Try again/);
+  const withInvoices = text(StatementsView, { answer: { ...STATEMENTS, fee_invoices: [{
+    uid: 'i1', kind: 'annual', period_label: '2026–27', period_start: '2026-03-01', period_end: '2027-02-28',
+    reference: 'AXL-XX-001-2026', issued_at: '2026-03-01', due_at: '2026-04-01',
+    amount_cents: 9_000_000, paid_cents: 0, outstanding_cents: 9_000_000, currency: 'EUR', status: 'issued', paid_at: null,
+    pdf_url: '/api/licence/mine/fee-invoices/i1/pdf',
+  }] } });
+  assert.match(withInvoices, /2026–27.*AXL-XX-001-2026.*€90,000\.00.*1 Apr 2026.*Issued.*PDF/);
 });
 
 test('Dispute a line takes an amount in the statement\'s currency and a reason; a void statement offers none', () => {

@@ -94,10 +94,13 @@ test('legacy investor deep links still highlight their owning workspace', () => 
   // the sequence a formatting change would break.
   const dealsMatch = /label: 'Deals',\s*\n?\s*match: \[([^\]]*)\]/.exec(investor);
   assert.ok(dealsMatch, 'the Deals row has no match array');
-  for (const p of ['/pipeline', '/deals', '/raise/data-room']) {
+  for (const p of ['/pipeline', '/deals']) {
     assert.ok(dealsMatch[1].includes(`'${p}'`),
       `legacy path ${p} no longer highlights the Deals row`);
   }
+  // D6162: an investor never stays on /raise/data-room (the route sends them to
+  // /research/diligence, under Research), so the Deals row does not claim it.
+  assert.ok(!dealsMatch[1].includes("'/raise/data-room'"), 'the Deals row claims /raise/data-room again');
   // Research absorbed /market-intel, which was its own row's target before;
   // D670 retired that page, and its route only redirects to /research now.
   const researchMatch = /label: 'Research',\s*\n?\s*match: \[([^\]]*)\]/.exec(investor);

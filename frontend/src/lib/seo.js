@@ -17,6 +17,9 @@ import { useEffect } from 'react';
 import { ogTagsFor, SITE_NAME, SITE_URL } from './ogRegistry';
 
 export { SITE_NAME, SITE_URL };
+// D8681 (#8681): the tab title of every in-app screen. Re-exported here because App.jsx's imports are frozen
+// (D5615, HUBS.md) and it already imports this module.
+export { useRouteTitle } from './pageTitles.js';
 
 function setMeta(selector, attr, value) {
   if (typeof document === 'undefined') return null;

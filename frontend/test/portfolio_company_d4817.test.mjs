@@ -11,7 +11,7 @@
  *
  * Mutation checked, each both ways (fails with the mutation, passes without):
  *   - `identityOf` reading a failed positions read as "not held" → tests 3 and 5;
- *   - `companyDocTitle` naming the company before an authorised read named it
+ *   - `companyDocTitle` naming the company at all (D8681: the title names the screen only)
  *     (the uid in the title) → tests 2 and 3;
  *   - `keyFactsOf` reading an unmarked position's FMV as its cost → test 2;
  *   - `keyFactsOf` reading "no support row" as a measured 0 → test 2;
@@ -179,7 +179,7 @@ test('1 · populated: each tab drawn from its own read, with the company named a
   try {
     // The frame: the authorised name, the holding and its route, the health, the tabs.
     assert.equal(v.heading(), 'Acme Robotics');
-    assert.equal(document.title, 'Acme Robotics · Portfolio · Axal VC');
+    assert.equal(document.title, 'Company · Portfolio · Axal VC'); // D8681: the screen, never the company
     assert.match(v.text('company-holding'), /Seed · Your holding: Seed extension · \$250,000 invested · since 15 Jun 2025 · Direct/);
     assert.match(v.text('portfolio-context'), /Holding route: Direct · 6\.2% ownership as recorded/);
     assert.equal(v.props('company-tab-overview')['aria-current'], 'page');
@@ -204,7 +204,7 @@ test('1 · populated: each tab drawn from its own read, with the company named a
 
   const f = await at('/portfolio/companies/p-abc/financials', ROUTES());
   try {
-    assert.equal(document.title, 'Acme Robotics · Financials · Portfolio · Axal VC');
+    assert.equal(document.title, 'Financials · Company · Portfolio · Axal VC');
     assert.equal(f.props('company-tab-financials')['aria-current'], 'page');
     assert.match(f.text('company-round-r-1'), /15 Jun 2025 Seed \$150,000 4\.1% 15,000 \$10/);
     assert.match(f.text('company-round-r-2'), /31 Mar 2026 Seed extension \$100,000 6\.2% Not recorded Not recorded/);
@@ -376,7 +376,7 @@ test('4 · Reports: the timeline’s Ask and Waive open the part 9 Review in-pag
   });
   const v = await at('/portfolio/companies/p-abc/reports', routes);
   try {
-    assert.equal(document.title, 'Acme Robotics · Reports · Portfolio · Axal VC');
+    assert.equal(document.title, 'Reports · Company · Portfolio · Axal VC');
     assert.match(v.text('company-reports-route'), /Holding route: Direct · 6\.2% ownership as recorded/);
     assert.ok(v.has('company-period-ask-pm9') && v.has('company-period-waive-pm9') && !v.has('company-period-ask-pq3'));
     assert.match(v.text('company-reports'), /Updates you received.*September note/);
@@ -398,8 +398,8 @@ test('4 · Reports: the timeline’s Ask and Waive open the part 9 Review in-pag
 test('5 · the model: tabs and titles, identity, facts and return', () => {
   assert.deepEqual(['/portfolio/companies/p', '/portfolio/companies/p/financials', '/portfolio/companies/p/terms', '/portfolio/companies/p/activity/', '/portfolio/companies/p/nope'].map(companyTabOfPath),
     ['overview', 'financials', 'terms', 'activity', 'overview']);
-  assert.equal(companyDocTitle(null, 'support'), 'Company · Portfolio · Axal VC');
-  assert.equal(companyDocTitle('Acme', 'support'), 'Acme · Support · Portfolio · Axal VC');
+  assert.equal(companyDocTitle(), 'Company · Portfolio · Axal VC');
+  assert.equal(companyDocTitle('support'), 'Support · Company · Portfolio · Axal VC'); // D8681: no name, ever
   const ok = (value) => ({ state: 'ok', value });
   assert.equal(identityOf('p-abc', { state: 'unreadable' }, ok({ company: null })).state, 'unreadable');
   assert.equal(identityOf('p-abc', ok({ items: [] }), { state: 'unreadable' }).state, 'unreadable');

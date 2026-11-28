@@ -290,6 +290,16 @@ test('the Administrator reads only their own licence\'s invoices, without HQ\'s 
   assert.equal((await f.call(MEMBER, 'GET', `/licence/mine/fee-invoices/${a.uid}/pdf`)).status, 404);
 });
 
+test('an unreadable invoice list keeps the rest of the licensee statements response', async () => {
+  const f = await fixture();
+  f.db.exec('DROP TABLE licence_fee_invoices');
+  const result = await f.call(PRINCIPAL, 'GET', '/licence/mine/statements');
+  assert.equal(result.status, 200);
+  assert.deepEqual([result.body.available, result.body.fee_invoices, result.body.fee_invoices_reason], [
+    true, null, 'Your fee invoices could not be read. Try again in a moment.',
+  ]);
+});
+
 // 8 ───────────────────────────────────────────────────────────────────────────
 test('the generated-document type: registered, drawn as a specimen, and never issued through the generic notice routes', async () => {
   // Mutations checked: the generic builder accepting the type; the specimen's labels differing from a real build's.

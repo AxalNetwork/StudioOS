@@ -15,6 +15,7 @@ import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import DealSyndicates, {
   SyndicateDrawer, SyndicateJoinDialog, SYNDICATE_JOIN, joinableSyndicates, syndicateLine, pledgeCheck, joinRefusal, memberCountLine,
+  YourLine, yourLineParts, YOUR_LINE_WHO,
 } from '../src/components/deals/DealSyndicates.jsx';
 import { dealSyndicatesApi } from '../src/lib/api/dealSyndicates.js';
 import { api } from '../src/lib/api.js';
@@ -217,4 +218,46 @@ test('a non-invited investor sees only their own syndicates, and an unreadable d
     assert.equal(opened, 0);
     assert.doesNotMatch(view.text(), /Synthetic open syndicate/);
   } finally { await view.unmount(); undo.forEach((u) => u()); }
+});
+
+// D9018 (#9018, DL13l "As a member"): the detail read's `my_line` is the
+// caller's own row; the Worker side is cloudflare-worker/test/syndicate_your_line_9018.test.ts.
+const COUNTED = { id: 12, name: 'Synthetic own syndicate', status: 'open', target_cents: 100000, committed_cents: 2950000, member_count: 4, created_by: 5, members: [], show_member_names: false };
+const drawer = (syndicate) => html(h(SyndicateDrawer, { state: { loading: false, error: false, syndicate }, onClose: () => {} }));
+
+test('DL13l: a member sees Your line with their amount, a status pill and when they joined', () => {
+  const out = drawer({ ...COUNTED, my_line: { commitment_cents: 2000000, status: 'committed', joined_at: '2026-11-20 09:41:00' } });
+  const text = renderedText(out);
+  assert.match(text, /4 members\. Others are counted, not named/);
+  assert.match(text, /Your line\s*\$20,000\.00\s*Pledged/);
+  assert.match(text, /Joined 20 Nov 2026, 09:41 UTC\. Only you and the lead see this line\./);
+  assert.match(out, /data-testid="dr-syndicate-your-line-status"[^>]*>Pledged</);
+  assert.match(out, /class="[^"]*violet[^"]*"[^>]*data-testid="dr-syndicate-your-line-status"/);
+  // At 390 the row wraps and keeps a 44px target; every light class has its dark pair.
+  assert.match(out, /class="flex min-h-\[44px\] flex-wrap /);
+  assert.match(out, /class="[^"]*border-gray-200[^"]*dark:border-gray-700[^"]*" data-testid="dr-syndicate-your-line"/);
+});
+
+test('DL13l: without my_line the member view draws what it drew before', () => {
+  for (const my_line of [undefined, null]) {
+    const text = renderedText(drawer({ ...COUNTED, my_line }));
+    assert.match(text, /4 members\. Others are counted, not named/);
+    assert.doesNotMatch(text, /Your line|Pledged|Only you and the lead/);
+  }
+  // The lead's roster never carries Your line, even if a line were present.
+  const lead = renderedText(drawer({ ...COUNTED, show_member_names: true, members: [{ id: 1, user_id: 8, name: 'Synthetic Member', commitment_cents: 50000 }], my_line: null }));
+  assert.doesNotMatch(lead, /Your line/);
+});
+
+test('Your line: an unknown status is drawn as stored; a missing amount or date is said, not invented', () => {
+  assert.deepEqual(yourLineParts({ commitment_cents: 150000, status: 'committed', joined_at: '2026-11-20 09:41:00' }),
+    { amount: '$1,500.00', status: 'Pledged', tone: 'violet', since: '20 Nov 2026, 09:41' });
+  assert.deepEqual(yourLineParts({ commitment_cents: 150000, status: 'withdrawn', joined_at: null }),
+    { amount: '$1,500.00', status: 'withdrawn', tone: 'grey', since: null });
+  assert.equal(yourLineParts(null), null);
+  assert.equal(yourLineParts(undefined), null);
+  const bare = renderedText(html(h(YourLine, { line: { commitment_cents: null, status: null, joined_at: null } })));
+  assert.match(bare, /Your line\s*Not recorded/);
+  assert.equal(bare.includes('Joined'), false);
+  assert.match(bare, new RegExp(YOUR_LINE_WHO.replace(/\./g, '\\.')));
 });

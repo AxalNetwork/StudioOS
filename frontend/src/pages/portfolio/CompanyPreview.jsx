@@ -55,7 +55,7 @@ export default function CompanyPreview({ uid, tab = 'overview' }) {
       testid="portfolio-company-preview"
       title={COMPANY_WITHHELD}
       crumb="Company"
-      docTitle={previewDocTitle(companyDocTitle('Company', current))}
+      docTitle={previewDocTitle(companyDocTitle(current))}
       description={<span data-testid="company-preview-holding">The company’s name, stage and your holding: <PrivateChip what="The company and your holding" /></span>}
       tools={<span className="pf-preview-health" data-testid="company-preview-health">Health <PrivateChip what="Health" /></span>}
       nav={<PreviewTabs uid={uid} tab={current} />}
