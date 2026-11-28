@@ -1,4 +1,5 @@
 /** `/api/users`: user administration; listing users exposes names and roles, so it is admin only. */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -20,7 +21,8 @@ users.get('/', async (c) => {
 
 users.post('/', async (c) => {
   await requireAdmin(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
   const existing = await sql`SELECT id FROM users WHERE email = ${data.email}`;
   if (existing.length > 0) { await sql.end(); return c.json({ error: 'User with this email already exists' }, 409); }

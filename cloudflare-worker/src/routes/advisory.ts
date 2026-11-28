@@ -1,3 +1,4 @@
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
@@ -82,7 +83,8 @@ const TEMPLATES: Record<string, string> = {
 
 advisory.post('/ask', async (c) => {
   await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
 
   let project: any = null;
@@ -104,7 +106,8 @@ advisory.post('/ask', async (c) => {
 
 advisory.post('/financial-plan', async (c) => {
   await requireAuth(c);
-  const req = await c.req.json();
+  const req = await readJsonObject(c);
+  if (req instanceof Response) return req;
   const sql = getSQL(c.env);
 
   let project: any = null;
@@ -149,7 +152,9 @@ advisory.post('/financial-plan', async (c) => {
 
 advisory.post('/diligence', async (c) => {
   const user = await requireAuth(c);
-  const { project_id } = await c.req.json();
+  const jsonBody = await readJsonObject(c);
+  if (jsonBody instanceof Response) return jsonBody;
+  const { project_id } = jsonBody;
   const sql = getSQL(c.env);
 
   const projects = await sql`SELECT * FROM projects WHERE id = ${project_id}`;

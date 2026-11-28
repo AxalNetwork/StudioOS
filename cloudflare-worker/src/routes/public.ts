@@ -9,6 +9,7 @@
  *   GET /u/:handle           — public user card
  *   GET /p/:partner_slug     — public partner card (uid)
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, getCurrentUser } from '../auth';
@@ -1138,10 +1139,11 @@ export const DEMO_MAILBOX: Record<string, string> = {
 
 publicRoutes.post('/demo-request', async (c) => {
   await ensureMarketingSchema(c.env);
-  const body = await c.req.json<{
+  const body = await readJsonObject<{
     topic?: string; name?: string; email?: string;
     company?: string; message?: string;
-  }>().catch(() => ({} as any));
+  }>(c, { allowEmpty: true });
+  if (body instanceof Response) return body;
   const topic = String(body.topic || '').trim();
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim();

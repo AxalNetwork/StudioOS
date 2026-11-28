@@ -11,6 +11,7 @@
  * 'published' AND admin_published=1. Unlisted events are reachable by direct
  * slug/invite token only (never listed). Private events are invite-only.
  */
+import { readJsonObject } from '../util/jsonBody';
 import { validEventTopics } from '../services/eventTopics';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -169,7 +170,8 @@ eventsPublic.get('/events/:slug/ics', async (c) => {
 // ── POST /events/:slug/register — public register (Turnstile) ──────────────
 eventsPublic.post('/events/:slug/register', async (c) => {
   const slug = c.req.param('slug');
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = await readJsonObject(c, { allowEmpty: true });
+  if (body instanceof Response) return body;
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const ok = await verifyTurnstile(c.env, String(body.turnstile_token || body.turnstileToken || ''), clientIp);
   if (!ok) return c.json({ error: 'turnstile_failed', code: 'turnstile_failed' }, 403);
@@ -238,7 +240,8 @@ eventsPublic.get('/invite/:token', async (c) => {
 // ── POST /invite/:token/respond — accept / decline (Turnstile) ─────────────
 eventsPublic.post('/invite/:token/respond', async (c) => {
   const token = c.req.param('token');
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = await readJsonObject(c, { allowEmpty: true });
+  if (body instanceof Response) return body;
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const ok = await verifyTurnstile(c.env, String(body.turnstile_token || body.turnstileToken || ''), clientIp);
   if (!ok) return c.json({ error: 'turnstile_failed', code: 'turnstile_failed' }, 403);

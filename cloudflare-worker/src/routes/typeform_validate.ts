@@ -1,4 +1,5 @@
 /** D5829: venture-private Typeform review. GET never writes, support sessions are refused. */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
@@ -45,15 +46,16 @@ r.get('/form-counts', async c => {
   return c.json({ forms: await typeformReviewCounts(c.env, s.projectId, s.integrationId) });
 });
 r.put('/evidence-mapping', async c => {
-  const b = await c.req.json(); const s = await scope(c, b?.project);
+  const b = await readJsonObject<any>(c); if (b instanceof Response) return b; const s = await scope(c, b?.project);
   return c.json({ mapping: await mapTypeformEvidence(c.env, s, b) });
 });
 r.post('/reviews/prepare', async c => {
-  const b = await c.req.json();
+  const b = await readJsonObject(c);
+  if (b instanceof Response) return b;
   return c.json(await prepareTypeformReviews(c.env, await scope(c, b?.project)));
 });
 r.post('/reviews/:id/:action', async c => {
-  const b = await c.req.json(); const s = await scope(c, b?.project);
+  const b = await readJsonObject(c); if (b instanceof Response) return b; const s = await scope(c, b?.project);
   const id = Number(c.req.param('id')); const action = c.req.param('action');
   if (!Number.isSafeInteger(id) || id <= 0 || !['confirm', 'dismiss', 'unlink'].includes(action)) throw new WriterError(400, 'Choose a review action');
   return c.json(await decideTypeformReview(c.env, s, id, action as 'confirm' | 'dismiss' | 'unlink'));

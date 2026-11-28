@@ -1,4 +1,5 @@
 /** `/api/partners`: the partner directory, referral codes and matchmaking recommendations. */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -63,7 +64,8 @@ partners.get('/', async (c) => {
 
 partners.post('/', async (c) => {
   await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const refCode = `AXAL-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
   const sql = getSQL(c.env);
   const [partner] = await sql`INSERT INTO partners (name, company, email, specialization, referral_code) VALUES (${data.name}, ${data.company || null}, ${data.email}, ${data.specialization || null}, ${refCode}) RETURNING *`;
@@ -122,7 +124,8 @@ partners.get('/matchmaking/recommend', async (c) => {
 
 partners.post('/matchPartners', async (c) => {
   const me = await requireAuth(c);
-  const data = await c.req.json();
+  const data = await readJsonObject(c);
+  if (data instanceof Response) return data;
   const sql = getSQL(c.env);
   const allPartners = await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1`;
   await sql.end();

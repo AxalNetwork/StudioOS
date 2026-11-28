@@ -46,6 +46,14 @@
     ]
   },
   {
+    "id": "check-json-body",
+    "command": [
+      "node",
+      "scripts/check-json-body.mjs"
+    ],
+    "preflight": true
+  },
+  {
     "id": "check-sql-migrations",
     "command": [
       "node",

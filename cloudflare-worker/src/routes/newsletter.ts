@@ -53,6 +53,7 @@
  * The four emails are placeholders until the owner's design is exported
  * (templates/email/newsletter/).
  */
+import { readJsonObject } from '../util/jsonBody';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
@@ -189,8 +190,8 @@ newsletter.post('/newsletter/subscribe', async (c) => {
   try {
     const key = tokenKey(c.env);
     if (!key) return unconfigured(c);
-    let body: Record<string, unknown> = {};
-    try { body = await c.req.json<Record<string, unknown>>(); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    const body = await readJsonObject<Record<string, unknown>>(c);
+    if (body instanceof Response) return body;
 
     // Honeypot: the same answer, nothing done.
     if (typeof body.hp === 'string' && body.hp.trim()) return c.json(SIGNUP_ANSWER);
@@ -333,8 +334,8 @@ newsletter.put('/newsletter/preferences', async (c) => {
     if (!key) return unconfigured(c);
     const row = await rowFromToken(c.env, key, c.req.query('token'));
     if (!row) return badToken(c);
-    let body: Record<string, unknown> = {};
-    try { body = await c.req.json<Record<string, unknown>>(); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    const body = await readJsonObject<Record<string, unknown>>(c);
+    if (body instanceof Response) return body;
     const choices = choicesOf(body.topics);
     if (!choices) return c.json({ error: 'invalid_topics', code: 'invalid_topics', message: 'Send topics as { key: true | false }.' }, 400);
     const investor = await rowIsInvestor(c.env, row);
@@ -452,8 +453,8 @@ newsletter.get('/me/newsletters', async (c) => {
 newsletter.put('/me/newsletters', async (c) => {
   try {
     const user = await requireAuth(c);
-    let body: Record<string, unknown> = {};
-    try { body = await c.req.json<Record<string, unknown>>(); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    const body = await readJsonObject<Record<string, unknown>>(c);
+    if (body instanceof Response) return body;
     const choices = choicesOf(body.topics);
     if (!choices) return c.json({ error: 'invalid_topics', code: 'invalid_topics', message: 'Send topics as { key: true | false }.' }, 400);
     if (!isInvestorMember(user)) {

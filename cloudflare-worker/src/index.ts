@@ -22,6 +22,7 @@ import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
 import { connectorApi } from './routes/connector_api';
+import { invalidJson, isMalformedJsonBody } from './util/jsonBody';
 import { adminConnectorClients } from './routes/admin_connector_clients';
 import { developerLimits } from './routes/developer_limits';
 import { Hono } from 'hono';
@@ -1840,7 +1841,7 @@ app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 // to the right HTTP status. Without this, RBAC failures surface as 500s and
 // the frontend can't distinguish "log in again" from "the server crashed".
 
-app.onError((err: any, c) => {
+app.onError(async (err: any, c) => {
   const msg = (err?.message ?? '') as string;
   // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
   // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
@@ -1862,6 +1863,8 @@ app.onError((err: any, c) => {
   }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);
+  // #9184 — a bare `c.req.json()` on a malformed body is the caller's mistake: 400, not 500.
+  if (err instanceof SyntaxError && await isMalformedJsonBody(c)) return invalidJson(c);
   // D9186: an HTTPException's own answer, 409 for a constraint failure, else 500; logged with method and route.
   return edgeFallback(c, err);
 });
