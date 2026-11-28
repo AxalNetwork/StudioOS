@@ -44,8 +44,10 @@
  * crosswalk, never a substring), the people in the caller's OWN network who
  * work there (`network_connections.company`, the fund's name exactly, case
  * aside), and whether the venture already tracks it. The directory's own
- * filters apply; `fit` and `warm` add two. Stage is not recorded in the
- * directory, so a stage filter is refused, as the directory refuses it.
+ * filters apply; `fit` and `warm` add two. D7749 (superseding D1190's
+ * `stage: null`): the directory's mandate filters (`stage`, `invests_in`,
+ * `cheque` with `cheque_currency`) and each fund's `mandate` block pass
+ * through as the directory answers them (services/researchFundMandate.ts).
  *
  * VERIFIED INVESTORS ARE A COUNT, NEVER NAMES (#2457 owner question 10): the
  * investors on Axal whose account is verified (active, KYC approved) and whose
@@ -399,8 +401,6 @@ export async function matchRead(env: Env, a: { projectId: number; callerUserId: 
     const warm = atCompany.get(norm(f.name)) ?? [];
     return {
       ...f,
-      stage: null,
-      stage_reason: 'Not recorded: the fund directory records no stage',
       fit: { code: fit, label: FIT_LABEL[fit], their_focus: f.sector_focus ?? null, your_sector: sector },
       warm_paths: warm.map((w) => ({ name: w.name, title: w.title, sentence: `${w.name} works there` })),
       in_pipeline: tracked.has(String(f.uid)) ? { prospect_id: tracked.get(String(f.uid)) } : null,
