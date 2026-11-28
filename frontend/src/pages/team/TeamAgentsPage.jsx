@@ -21,6 +21,7 @@ import InvitationsBlock from './InvitationsBlock.jsx';
 import InviteSheet from './InviteSheet.jsx';
 import AgentsCard from './AgentsCard.jsx';
 import AddAgentSheet from './AddAgentSheet.jsx';
+import CompanyTasks from './CompanyTasks.jsx';
 import AgentProfileSheet from './AgentProfileSheet.jsx';
 import RulebooksTab from './RulebooksTab.jsx';
 import SkillsTab from './SkillsTab.jsx';
@@ -128,7 +129,7 @@ function Tabs({ tab, badges, project = false }) {
   return (
     <nav aria-label="Team" className="flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
       <span className="flex gap-5">
-        {TABS.filter((t) => project || !t.projectOnly).map((t) => (
+        {TABS.filter((t) => project ? !t.companyOnly : !t.projectOnly).map((t) => (
           <Link key={t.key} to={`${pathname}?tab=${t.key}`} aria-current={tab === t.key ? 'page' : undefined}
             className={`-mb-px flex h-[42px] items-center gap-1.5 whitespace-nowrap border-b-2 text-[13.5px] ${tab === t.key ? 'border-axal-violet font-bold text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`team-tab-${t.key}`}>
@@ -310,7 +311,8 @@ function ProjectTeam({ form }) {
 function TeamBody({ state, reload, scope, people, canEdit, invitations, highlightKey, lock, target, onResend, onRevoke, dialogs }) {
   const { search, pathname } = useLocation();
   const navigate = useNavigate();
-  const tab = tabFrom(search);
+  const selectedTab = tabFrom(search);
+  const tab = selectedTab === 'tasks' && scope.kind !== 'company' ? 'people' : selectedTab;
   const kind = scope.kind === 'company' ? 'company' : 'project';
   const id = kind === 'company' ? scope.company.uid : scope.project.id;
   const [agentsBlock, setAgentsBlock] = useState(null);
@@ -420,6 +422,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           </PeopleCard>
           <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} scope={scope} companyName={name}
             canAdd={!!agentsBlock?.value?.can_manage && !planLocked} addOff={rolesOff} planLocked={planLocked} engine={engineState(engineRead)} onAdd={() => setSheet({ kind: 'agent' })}
+            onAssign={kind === 'company' && state.detail?.viewer?.can_edit ? row => navigate(`${pathname}?tab=tasks&agent=${encodeURIComponent(row.uid)}`) : null}
             onOpen={(row, action) => setSheet({ kind: 'profile', uid: row.uid, edit: action || null })} onRetry={loadAgents} />
           <TeamCoverageCard kind={kind} id={id} />
           {!reading && agentsBlock?.available ? <AgentEvaluation scope={kind} id={id} team={agentList} /> : null}
@@ -436,6 +439,9 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
+      {tab === 'tasks' && kind === 'company' && state.status === 'ready' &&
+        <CompanyTasks key={JSON.stringify([id, state.meId, new URLSearchParams(search).get('agent'), agentsBlock?.available])} company={id} member={state.meId}
+          agents={agentList} people={people || []} canEdit={state.detail?.viewer?.can_edit === true} />}
       {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} roles={rolesBlock?.value?.roles} onChanged={refreshQueue} /> : null}
@@ -456,7 +462,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
         <SuggestAgentsSheet scope={kind} id={id} canManage={!!agentsBlock?.value?.can_manage} models={rolesBlock?.value?.models} roles={rolesBlock?.value?.roles} team={agentList}
           onClose={() => setSheet(null)} onAdded={loadAgents} />
       ) : null}
-      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} editCap={sheet.edit === 'cap'} editSponsor={sheet.edit === 'sponsor'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
+      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} onAssign={kind === 'company' && state.detail?.viewer?.can_edit && agentList.some(a => a.uid === sheet.uid && !a.project) ? () => { setSheet(null); navigate(`${pathname}?tab=tasks&agent=${encodeURIComponent(sheet.uid)}`); } : null} editCap={sheet.edit === 'cap'} editSponsor={sheet.edit === 'sponsor'} editPause={sheet.edit === 'pause'} addSkills={sheet.edit === 'skills'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
       {dialog && dialogs[dialog.kind] ? dialogs[dialog.kind](dialog.p, () => setDialog(null), () => { setDialog(null); reload(); }) : null}
     </div>
   );

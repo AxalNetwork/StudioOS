@@ -100,11 +100,11 @@ async function detailDto(env: Env, c: Company, viewer: User, support = false): P
   // Membership and the edit rule are decided from the same rows (`linkCanEdit` is `canEdit`'s rule on a link in
   // hand), so a company with fifty members costs one query here, not fifty-three.
   const roster = await env.DB.prepare(
-    `SELECT l.*, u.id AS member_id, u.name AS member_name, u.email AS member_email
+    `SELECT l.*, u.id AS member_id, u.uid AS member_uid, u.name AS member_name, u.email AS member_email
        FROM user_company_links l JOIN users u ON u.id = l.user_id
       WHERE l.company_id = ?
       ORDER BY l.id ASC`
-  ).bind(c.id).all<Link & { member_id: number; member_name: string; member_email: string }>();
+  ).bind(c.id).all<Link & { member_id: number; member_uid: string; member_name: string; member_email: string }>();
   const rows = roster.results || [];
   const own = rows.find((r) => Number(r.user_id) === Number(viewer.id)) ?? null;
   const isMember = isAdmin(viewer) || !!own;
@@ -117,7 +117,7 @@ async function detailDto(env: Env, c: Company, viewer: User, support = false): P
   for (const lnk of rows) {
     const u = { id: lnk.member_id, name: lnk.member_name, email: lnk.member_email };
     members.push({
-      user_id: u.id, name: u.name,
+      user_id: u.id, ...(editor ? { user_uid: lnk.member_uid } : {}), name: u.name,
       // #3841: a member's email goes to that member only (the canvas: "Never show another member's email").
       ...(u.id === viewer.id ? { email: u.email } : {}),
       role_in_company: lnk.role_in_company,

@@ -21,6 +21,11 @@
  *                    `GET /:scope/:id/cost-estimate` answer; no answer, no figure.
  *   coverageSentence the coverage card's sentence, chosen by what the rows
  *                    hold (TMM09), never by the absence of a people gap alone.
+ *   actionItems / addSkillsLabel (part 3)
+ *                    a manager's whole ⋯ menu and the no-skills row's fix (TMM07 A, B).
+ *   makesLine        what a skill makes, "Makes a brief" (Q4 = A).
+ *   skillsGate       the wizard's Skills step holds Next until a skill is
+ *                    chosen (TMM04B, Q2 = A).
  */
 import { NOT_RECORDED } from '../../lib/absence.js';
 import { workLabel } from './personaModel.js';
@@ -96,11 +101,69 @@ export function rowOpenLabel(name, agent) {
 /** The ⋯ button: "More actions for Tessaly". */
 export const moreActionsLabel = (name) => `More actions for ${String(name || '').trim() || 'this agent'}`;
 
-/** The ⋯ menu's items: always the profile; for a manager, the paused row's one fix. */
+/**
+ * The ⋯ menu's items (TMM07 B). A reader sees only the profile. A manager also
+ * gets, in the canvas's order, a paused row's one fix when it opens a dialog
+ * (D4387), "Add skills for {name}", "Edit {name}'s cap", "Change {name}'s
+ * sponsor", then "Pause {name}" (or "Resume {name}" when Resume is that
+ * pause's fix). Each opens the profile on that action (`action`); an action
+ * the fix already offers is not repeated. An outside assistant holds no Axal
+ * skills, cap or sponsor, so it is offered the profile and its pause only.
+ */
 export function actionItems(row, canManage) {
-  const items = [{ key: 'open', label: `Open ${row?.name || 'this agent'}’s profile` }];
-  if (canManage && row?.pause?.fix) items.push({ key: 'fix', label: row.pause.fix, action: row.pause.action || null });
+  const who = String(row?.name || '').trim() || 'this agent';
+  const items = [{ key: 'open', label: `Open ${who}’s profile` }];
+  if (!canManage) return items;
+  if (!row?.outside && row?.pause?.fix && row.pause.action) items.push({ key: 'fix', label: row.pause.fix, action: row.pause.action });
+  if (!row?.outside) {
+    for (const [action, label] of [['skills', addSkillsLabel(who)], ['cap', `Edit ${who}’s cap`], ['sponsor', `Change ${who}’s sponsor`]]) {
+      if (!items.some((i) => i.action === action)) items.push({ key: action, label, action });
+    }
+  }
+  if (!row?.pause) items.push({ key: 'pause', label: `Pause ${who}`, action: 'pause' });
+  else if (row.pause.fix === 'Resume') items.push({ key: 'pause', label: `Resume ${who}`, action: 'pause' });
   return items;
+}
+
+/** The no-skills row's one fix (TMM07 A), for a manager: "Add skills for Kade". */
+export function addSkillsLabel(name) {
+  return `Add skills for ${String(name || '').trim() || 'this agent'}`;
+}
+
+/**
+ * Q4 = A (owner, 2026-11-27): what a skill makes, in the profile's words,
+ * from its pinned version's output label ("A brief" → "Makes a brief"); null
+ * when the read did not say, so nothing is guessed.
+ */
+export function makesLine(skill) {
+  const label = String(skill?.output_label || '').trim();
+  if (!label) return null;
+  return `Makes ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+}
+
+// ── The skills gate (TMM04B, Q2 = A) ─────────────────────────────────────
+
+/**
+ * Whether the wizard's Skills step can go on (owner's Q2, option A): an agent
+ * with no skill cannot run, so Next stays off until one is chosen. `block` is
+ * the step's read of the skills it could take (`eligibleSkills`):
+ *
+ *   null (reading)          off, it says it is reading
+ *   unreadable              off, the read failed; Try again re-reads it, and
+ *                           nothing is added that could never run
+ *   available, none picked  off, "{name} can’t run without a skill. Choose at least one to continue."
+ *   available, picked       on
+ *   skills not open         on: no skill can be chosen anywhere, so a gate
+ *                           would block every add; the step says so itself
+ *
+ * `{ ok, why }`; `why` is the status line Next is described by, null when on.
+ */
+export function skillsGate(block, picked, name) {
+  const who = String(name || '').trim() || 'The agent';
+  if (!block) return { ok: false, why: `Reading the skills ${who} could take…` };
+  if (block.available) return picked > 0 ? { ok: true, why: null } : { ok: false, why: `${who} can’t run without a skill. Choose at least one to continue.` };
+  if (block.unreadable) return { ok: false, why: `The skills ${who} could take could not be read, so Next stays off until they are.` };
+  return { ok: true, why: null };
 }
 
 // ── The model step (TMM05, TMM06) ─────────────────────────────────────────

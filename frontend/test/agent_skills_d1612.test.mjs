@@ -163,7 +163,11 @@ test('refusals come back in words, and update/file helpers', () => {
 
 test('SK0: the Skills tab sits after People and agents; the figures and area tiles say "Not recorded" for a count not read', () => {
   // D1614 W6 (#3974): Activity is a project's tab only (`projectOnly`).
-  assert.deepEqual(TABS.map((t) => t.key), ['people', 'skills', 'roles', 'approvals', 'activity', 'settings']);
+  // D8767 (#8767): a company's Team page has Tasks right after People and agents, where a profile's Assign opens it;
+  // a project's has no Tasks tab, so Skills still sits right after People and agents there.
+  assert.deepEqual(TABS.map((t) => t.key), ['people', 'tasks', 'skills', 'roles', 'approvals', 'activity', 'settings']);
+  assert.deepEqual(TABS.filter((t) => t.companyOnly).map((t) => t.key), ['tasks']);
+  assert.deepEqual(TABS.filter((t) => !t.companyOnly).map((t) => t.key).slice(0, 2), ['people', 'skills']);
   assert.deepEqual(TABS.filter((t) => t.projectOnly).map((t) => t.key), ['activity']);
   assert.equal(tabFrom('?tab=skills'), 'skills');
   const figs = text(h(SkillFigures, { figures: LIB.figures }));

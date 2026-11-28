@@ -102,6 +102,9 @@ export const teamAgentsApi = {
   },
   addAgent: (scope, id, body) => request(`${base(scope, id)}/agents`, { method: 'POST', body: JSON.stringify(body) }),
   agent: (uid) => request(`/teams/agents/${enc(uid)}`),
+  // D9111 (#9111, D8071): the sponsor's read-only view of the agent's budget. GET /api/teams/agents/:uid/budget →
+  // { budget: { period, caps, used, set_at, set_by }, halted }; 404 not_found, 403 not_sponsor, 503 budget_unreadable.
+  agentBudget: (uid) => request(`/teams/agents/${enc(uid)}/budget`),
   updateAgent: (uid, patch) => request(`/teams/agents/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   removeAgent: (uid) => request(`/teams/agents/${enc(uid)}`, { method: 'DELETE' }),
   sponsorCandidates: (uid) => request(`/teams/agents/${enc(uid)}/sponsors`),

@@ -8,6 +8,8 @@ import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
 // D1531 (#3742 E8, TM5m): its memory and scheduled duties.
 import { AgentDuties, AgentMemory } from './AgentMemory.jsx';
+// D9111 (#9111, SA17D): the agent's execution budget for its sponsor, read only (HQ sets the caps).
+import { SponsorBudgetCard } from '../hq/aiAgents/BudgetParts.jsx';
 import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
@@ -51,6 +53,10 @@ import { agentReadiness, whatItDoes } from './agentChoiceModel.js';
  * as `skills`), "Sponsor and cap", Permissions, Proposals and Activity; the
  * persona (D4119's card, Story and goal, Values with the risk scale) is kept
  * whole under "About {name}: story and values", one press away.
+ *
+ * D8769 part 3 (TMM07 B): the roster's menu opens the profile on its action:
+ * `editPause` on the Pause or Resume confirm, `addSkills` on Add skills
+ * (`AgentSkillsCard`'s `openAdd`, for a manager once its skills are read).
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -199,9 +205,9 @@ function CapEditor({ name, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, editSponsor = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, scope = null, canManage, onAssign, editCap = false, editSponsor = false, editPause = false, addSkills = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
-  const [confirm, setConfirm] = useState(editCap ? 'cap' : editSponsor ? 'sponsor' : null);
+  const [confirm, setConfirm] = useState(editCap ? 'cap' : editSponsor ? 'sponsor' : editPause ? 'pause' : null);
   const [refusal, setRefusal] = useState('');
   const [legend, setLegend] = useState([]);
   useEffect(() => { let alive = true; agents.agent(uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [uid]);
@@ -228,6 +234,7 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
         headerActions={a ? <span className="flex items-center gap-1.5"><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : null}</span> : null}
         footer={manage ? (
           <div className="flex justify-end gap-2">
+            {onAssign && <button type="button" className={BTN_PRIMARY} onClick={onAssign}>Assign a task</button>}
             <button type="button" className={BTN_SECONDARY} disabled={a.source === 'mcp_client' && a.paused_reason === 'awaiting_connection'} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
             <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')} data-testid="agent-remove">Remove</button>
             {a.source !== 'mcp_client' ? <>
@@ -241,11 +248,12 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
             : (
               <>
                 <AgentProfile data={block.value} canManage={manage} legend={legend}
-                  skills={a.source !== 'mcp_client' ? <AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /> : null} />
+                  skills={a.source !== 'mcp_client' ? <AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} openAdd={addSkills} /> : null} />
                 {a.source !== 'mcp_client' ? <>
                 <div className="flex flex-col gap-5 border-t border-axal-hairline px-5 py-5 dark:border-gray-800">
                   <AgentMemory uid={a?.uid || uid} canManage={manage} />
                   <AgentDuties uid={a?.uid || uid} />
+                  <SponsorBudgetCard uid={a?.uid || uid} />
                 </div></> : null}
               </>
             )}

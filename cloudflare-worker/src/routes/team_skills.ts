@@ -926,6 +926,8 @@ async function agentSkillsDto(env: Env, a: AgentRow) {
     tags.push(...p.tags);
     skills.push({
       uid: s.uid, scope: s.scope, name: p.name, purpose: p.purpose, steps: p.steps, status: s.status,
+      // D8769 part 3 (Q4 = A): what the pinned version makes, so the profile can say "Makes a brief".
+      output_kind: p.output_kind, output_label: OUTPUT_LABELS[p.output_kind] ?? null,
       pinned_version: s.pinned, current_version: s.current_version,
       update_available: s.status !== 'retired' && s.pinned < s.current_version,
       // D4161: HQ suspended the pinned version; the run gate refuses it.

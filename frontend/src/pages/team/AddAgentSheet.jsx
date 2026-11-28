@@ -14,7 +14,7 @@ import {
   toggleCompare, workLabel,
 } from './personaModel.js';
 import ModelChoice from './ModelChoice.jsx';
-import { allowedModels, capRunsLine, modelOffer, per100Line } from './agentChoiceModel.js';
+import { allowedModels, capRunsLine, modelOffer, per100Line, skillsGate } from './agentChoiceModel.js';
 
 /**
  * D4119 (#4119, AG2–AG4; D1497 TM3a–TM3c before it) — "Add an AI agent", a
@@ -42,6 +42,12 @@ import { allowedModels, capRunsLine, modelOffer, per100Line } from './agentChoic
  * token prices on demand), then the sponsor and the cap with how many runs it
  * pays for (`capRunsLine`). Below `md` a bar at the foot of the step keeps the
  * chosen model, its estimate and the cap in view, with a button to the cap.
+ *
+ * D8769 part 3 (TMM04B, the owner's Q2 = A): on Skills, Next stays off until
+ * a skill is chosen (`skillsGate`), focusable (`aria-disabled`) and described
+ * by the status line "{name} can’t run without a skill. Choose at least one
+ * to continue."; a skills read that failed holds it too, with Try again.
+ * Only when skills are not open at all does it go on with none.
  *
  * THE AREA OF WORK. The Worker still keys a rule book by a role and requires
  * `role_key` on add (D4117 §5), so the step names each by its work
@@ -218,6 +224,7 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
   const [refusal, setRefusal] = useState('');
   const [skillPicks, setSkillPicks] = useState(null);
   const [skillList, setSkillList] = useState([]);
+  const [skillsBlock, setSkillsBlock] = useState(null);
   // D8769 (#8769): the team's allowed models (D4422) and the chosen model's estimate (D4121).
   const [allowBlock, setAllowBlock] = useState(null);
   const [chosenEst, setChosenEst] = useState(null);
@@ -240,8 +247,10 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
   const capOk = Number(cap) > 0;
   const capRuns = capOk ? capRunsLine(chosenEst, Math.round(Number(cap) * 1e6)) : null;
   // D8769: a model the plan or the team's allowlist refuses cannot be added, even if it was chosen before the allowlist was read.
-  const ready = step === 0 ? !!persona : step === 1 ? true : !!pickedModel && modelOffer(pickedModel, allowedModels(allowBlock)) === 'ok' && !!picked && capOk;
   const chosenSkills = skillList.filter((sk) => skillPicks?.has(sk.uid));
+  // D8769 part 3 (TMM04B, Q2 = A): an agent with no skill cannot run, so the Skills step holds Next until one is chosen.
+  const gate = skillsGate(skillsBlock, chosenSkills.length, persona?.name);
+  const ready = step === 0 ? !!persona : step === 1 ? gate.ok : !!pickedModel && modelOffer(pickedModel, allowedModels(allowBlock)) === 'ok' && !!picked && capOk;
   const servers = tools?.available && Array.isArray(tools.value?.servers) ? tools.value.servers : [];
   const grants = useTools ? servers.flatMap((sv) => (sv.tools || []).filter((t) => granted.has(grantKey(sv.integration_uid, t.name))).map((t) => ({ integration_uid: sv.integration_uid, tool: t.name }))) : [];
   const tick = (uid, tool) => setGranted((s) => { const n = new Set(s); const k = grantKey(uid, tool); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -257,14 +266,19 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
     if (!out.available) { setRefusal(out.reason); return; }
     onAdded?.(out.value);
   };
-  // D8768 (TMS08): the Skills step says when it goes on with none.
-  const next = ['Next: skills', wizardSkillsNext(chosenSkills.length), `Add ${name} to ${scopeName}`];
+  // D8768 (TMS08): the Skills step says when it goes on with none — now only when skills are not open at all, since
+  // D8769 part 3 (TMM04B, the owner's Q2 = A) keeps Next off until a skill is chosen (`skillsGate`).
+  const next = ['Next: skills', gate.ok ? wizardSkillsNext(chosenSkills.length) : 'Next: model and cap', `Add ${name} to ${scopeName}`];
+  // On the Skills step Next stays focusable (aria-disabled) and is described by the gate's status line.
+  const gated = step === 1 && !gate.ok;
   return (
     <Sheet title="Add an AI agent" sub={`Step ${step + 1} of ${STEPS.length} · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={step ? () => setStep(step - 1) : onClose}>{step ? 'Back' : 'Cancel'}</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!ready} onClick={step < 2 ? () => setStep(step + 1) : add} data-testid="add-agent-next">{next[step]}</button>
+          <button type="button" className={`${BTN_PRIMARY} aria-disabled:cursor-not-allowed aria-disabled:opacity-50`} disabled={step !== 1 && !ready} aria-disabled={gated || undefined}
+            aria-describedby={gated ? 'add-agent-skills-gate' : undefined}
+            onClick={() => { if (!ready) return; if (step < 2) setStep(step + 1); else add(); }} data-testid="add-agent-next">{next[step]}</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
@@ -274,8 +288,9 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
           <>
             {persona ? <AgentCard persona={persona} legend={personasBlock?.value?.values} size="compact" sub={`Area of work · ${areaOfWork}${persona.tagline ? ` · ${persona.tagline}` : ''}`} /> : null}
             <p className={`m-0 ${MUTED}`}>{`Skills are added separately from who ${name} is. Every skill is read on every run, so add only what this team needs.`}</p>
-            <SkillsStep scope={scope} role={roleKey} model={model} persona={chosen} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} />
+            <SkillsStep scope={scope} role={roleKey} model={model} persona={chosen} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} onBlock={setSkillsBlock} />
             <CoverageLines skills={chosenSkills} />
+            {gate.why ? <p id="add-agent-skills-gate" role="status" className="m-0 text-[12.5px] font-semibold text-axal-amber-deep dark:text-amber-200" data-testid="add-agent-skills-gate">{gate.why}</p> : null}
           </>
         ) : null}
         {step === 2 ? (

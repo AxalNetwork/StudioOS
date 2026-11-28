@@ -155,6 +155,20 @@ test('A2 radar: the highest level per axis, null where no tag reaches, and radar
   noPrivate(put.text);
 });
 
+test('D8769 part 3 (Q4 = A): an agent\'s skills say what each pinned version makes', async () => {
+  // Mutations checked: output_kind/output_label dropped from agentSkillsDto → both asserts fail; the label read from
+  // the skill's current draft instead of the pinned version → the pinned brief reads "A draft" and fails.
+  const w = world();
+  const a = await published(w, update({ roles: ['cfo'], output_kind: 'brief' }));
+  const b = await published(w, update({ name: 'FP&A pass', roles: ['cfo'], output_kind: 'draft', tags: [{ slug: 'fp_and_a', level: 'expert' }] }));
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid: a }, { uid: b }] })).status, 200);
+  const draft = await call(w, SUPER, 'PATCH', `/skills/${a}`, { output_kind: 'draft' });
+  assert.ok(draft.status < 300, draft.text);
+  const got = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
+  assert.equal(got.status, 200, got.text);
+  assert.deepEqual(got.body.skills.map((s: any) => [s.uid, s.output_kind, s.output_label]), [[a, 'brief', 'A brief'], [b, 'draft', 'A draft']]);
+});
+
 test('A2 gates on PUT: tool_not_approved with the tool, version_not_published, not_manager; no role gate (D8768)', async () => {
   // Mutations checked: missingTools ignored → tool_not_approved fails; a version above current_version accepted →
   // version_not_published fails; the role gate restored (D8768) → the cross-role assert fails.

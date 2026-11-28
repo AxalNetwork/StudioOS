@@ -5,7 +5,7 @@ import { AgentArchetypeBadge, AgentAvatar } from './AgentCard.jsx';
 import { AgentTile } from './AgentMark.jsx';
 import SkillsLink from './SkillsLink.jsx';
 import ActionMenu from '../admin/productTesting/ActionMenu.jsx';
-import { actionItems, agentReadiness, engineNote, moreActionsLabel, rowOpenLabel, whatItDoes } from './agentChoiceModel.js';
+import { actionItems, addSkillsLabel, agentReadiness, engineNote, moreActionsLabel, rowOpenLabel, whatItDoes } from './agentChoiceModel.js';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
@@ -51,6 +51,11 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  * "More actions for {name}" and opens a real menu (`ActionMenu`): the
  * profile, and for a manager a paused row's one fix. Neither is named by the
  * persona's motto.
+ *
+ * D8769 part 3 (TMM07 A and B): a manager's menu is the canvas's whole list
+ * (`actionItems`: Add skills, Edit cap, Change sponsor, Pause or Resume, each
+ * opening the profile on that action), and a no-skills row carries its one
+ * fix, "Add skills for {name}", which opens the profile on Add skills.
  */
 
 /** TM9c4: the plan lock, from a 403 `plan_required` or the list's `plan_ok: false` (#3840). */
@@ -82,7 +87,7 @@ function StatusPill({ ready }) {
 const GRID = 'md:grid-cols-[minmax(0,1.75fr)_minmax(0,1.6fr)_minmax(0,1.5fr)_minmax(0,1fr)_150px_40px]';
 const COLS = ['Agent', 'What it does', 'Can it run now', 'Sponsor', 'This month'];
 
-function AgentRow({ row, agent, canManage, onOpen }) {
+function AgentRow({ row, agent, canManage, onOpen, onAssign }) {
   const ready = agentReadiness(agent);
   const pick = (key) => {
     const it = actionItems(row, canManage).find((x) => x.key === key);
@@ -118,13 +123,15 @@ function AgentRow({ row, agent, canManage, onOpen }) {
         <span className={`block ${MUTED}`}>{ready.key === 'paused' && row.pause ? row.pause.reason : ready.line}</span>
         {ready.key === 'paused' && row.pause?.hint ? <span className={`block ${MUTED}`}>{row.pause.hint}</span> : null}
         {ready.key === 'paused' && row.pause?.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, row.pause.action || null); }} data-testid={`agent-fix-${row.uid}`}>{row.pause.fix}</button> : null}
+        {ready.key === 'no_skills' && canManage ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, 'skills'); }} data-testid={`agent-add-skills-${row.uid}`}>{addSkillsLabel(row.name)}</button> : null}
       </span>
       <span role="cell" className="hidden truncate text-[13px] text-axal-ink md:block dark:text-gray-200">{row.sponsor || <Unrecorded />}</span>
       <span role="cell" className="hidden md:block">
         <span className="block font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{row.spend || <Unrecorded />}</span>
         <span className={`block ${MUTED}`}>Last activity {row.last || <Unrecorded />}</span>
       </span>
-      <span role="cell" className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+      <span role="cell" className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+        {onAssign && <button type="button" className={BTN_TEXT} onClick={() => onAssign(row)}>Assign a task</button>}
         <ActionMenu items={actionItems(row, canManage)} label={moreActionsLabel(row.name)} eyebrow={row.name} onPick={pick} testId={`agent-menu-${row.uid}`}
           buttonClass="border-transparent text-axal-muted dark:text-gray-400" />
       </span>
@@ -132,16 +139,16 @@ function AgentRow({ row, agent, canManage, onOpen }) {
   );
 }
 
-function AgentTable({ rows, byUid, canManage, onOpen, label }) {
+function AgentTable({ rows, byUid, canManage, onOpen, onAssign, label }) {
   return (
     <div role="table" aria-label={label}>
       <HeadRow grid={GRID} cols={COLS} />
-      {rows.map((r) => <AgentRow key={r.key} row={r} agent={byUid.get(r.uid)} canManage={canManage} onOpen={onOpen} />)}
+      {rows.map((r) => <AgentRow key={r.key} row={r} agent={byUid.get(r.uid)} canManage={canManage} onAssign={onAssign} onOpen={onOpen} />)}
     </div>
   );
 }
 
-export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, engine = 'unknown', onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, engine = 'unknown', onAdd, onOpen, onAssign, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
   const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
@@ -206,14 +213,14 @@ export default function AgentsCard({ block, loading, kind, scope = null, company
             <div key={g.key} className="mb-4" data-testid={`team-agents-group-${g.key}`}>
               <p className="m-0 font-mono text-[11px] font-medium uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">{g.title}</p>
               <p className={`m-0 mb-1 ${MONO}`}>{g.line}</p>
-              <AgentTable rows={g.rows} {...table} label={g.title} />
+              <AgentTable rows={g.rows} {...table} onAssign={g.key === 'company' ? onAssign : null} label={g.title} />
             </div>
           ))}
           <p className={`m-0 ${MUTED}`}>{agentsFootLine(companyName)}</p>
         </>
       ) : (
         <>
-          <AgentTable rows={groups.flatMap((g) => g.rows)} {...table} label="AI agents" />
+          <AgentTable rows={groups.flatMap((g) => g.rows)} {...table} onAssign={onAssign} label="AI agents" />
           {agents.some((a) => a.status === 'paused') ? <p className={`m-0 mt-3 ${MUTED}`}>A paused agent keeps its history and its open proposals.</p> : null}
           <p className={`m-0 mt-3 ${MUTED}`}>{AGENTS_FOOT}</p>
         </>
