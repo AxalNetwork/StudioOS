@@ -1077,6 +1077,20 @@ jobs:
       # #9038 (D9038): a storm of service-worker controllerchange events reloads the page a bounded number of times.
       - name: Service-worker reload loop is bounded (built SPA)
         run: node scripts/check-reload-loop.mjs
+      # #9039: Help guides into the Introductions desk (#4639). The local Worker serves the docs/ built above;
+      # every /api/* answer is the spec's own synthetic fixture and the service worker is blocked. No preview, no account.
+      - name: Help introductions journey (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/help_intro_journey_4639.spec.js --retries=0 --trace off
+      # #9039: each Help workflow guide to its task, role filtering and the phone Build guide (#4639). Same pattern.
+      - name: Help workflow guides (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/help_workflows_4639.spec.js --retries=0 --trace off
+      # #9039: the studio board's keyboard entry and creation recovery at 1440 and 390 (#4705). The spec starts
+      # its own Vite server for tests/e2e/pipeline_4705.html, which imports the real PipelinePage with synthetic answers.
+      - name: Pipeline keyboard and phone (local Vite fixture, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/pipeline_accessibility_4705.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
