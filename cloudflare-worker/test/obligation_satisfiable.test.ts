@@ -365,12 +365,14 @@ test('the parsers found both sides, so the comparison above is not vacuous', () 
   for (const k of ['tos_v1', 'privacy_v1', 'kyb_v1', 'accreditation_v1', 'partner_msa_v1']) {
     assert.ok(required.has(k), `${k} is required somewhere but the parser missed it`);
   }
-  assert.equal(sites, 6,
-    `expected exactly 6 writes of status='satisfied' across the four files, found ${sites} — `
+  assert.equal(sites, 7,
+    `expected exactly 7 writes of status='satisfied' across the four files, found ${sites} — `
     + 'a new one means a new satisfier; update UNSATISFIABLE_TODAY and this count together');
-  // Four of the six name their key in SQL. The other two —
-  // `satisfyObligationFromEnvelope` and `recordTermsAcceptance` — bind it, so they
-  // are deliberately absent here and accounted for by `declaredSatisfiableKeys()`.
+  // Four of the seven name their key in SQL. The other three —
+  // `satisfyObligationFromEnvelope`, `recordTermsAcceptance` and `seedObligations`'
+  // insert from a recorded acceptance (D9200, `SATISFIABLE_BY_CLICKWRAP` keys only)
+  // — bind it, so they are deliberately absent here and accounted for by
+  // `declaredSatisfiableKeys()`.
   assert.deepEqual([...writes.keys()].sort(), ['accreditation_v1', 'kyb_v1', 'kyc_v1', 'partner_msa_v1'],
     'the set of keys a satisfied-write is attributed to changed');
   assert.deepEqual([...declaredSatisfiableKeys()].sort(), [
