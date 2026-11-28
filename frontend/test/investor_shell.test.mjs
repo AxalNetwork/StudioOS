@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { INVESTOR_FULL_BLEED } from '../src/sidebarConfig.js';
+import { INVESTOR_FULL_BLEED, FOUNDER_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED } from '../src/sidebarConfig.js';
 import { routeBlock } from './_routes.mjs';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
 // D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
@@ -454,7 +454,13 @@ test('the investor full-bleed list covers every investor root and zone route', (
   assert.equal(Object.values(OVERVIEWS).length, 5, 'the investor shell no longer declares 5 roots');
   // 20 since D546 (#1080) added Geographies to the Research bucket; 19 since
   // D1243 (#3256) retired Deals · Pipeline. #6211 adds Portfolio Performance.
-  assert.equal(allZoneRoutes('investor').length, 20, 'the investor shell declares 20 zones');
+  // 19 again since D8821 (#8821) moved Geographies inside Markets.
+  assert.equal(allZoneRoutes('investor').length, 19, 'the investor shell declares 19 zones');
+  // D8821: no longer a zone, still a page the Research shell draws, so every
+  // licence keeps it full-bleed rather than centred and padded twice.
+  for (const [role, list] of Object.entries({ investor: INVESTOR_FULL_BLEED, founder: FOUNDER_FULL_BLEED, advisor: ADVISOR_FULL_BLEED, partner: PARTNER_FULL_BLEED })) {
+    assert.ok(list.includes('/research/geographies'), `${role}: /research/geographies left the full-bleed list`);
+  }
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
     'these investor surfaces sit in the shell’s centred column instead of owning the page');
 
