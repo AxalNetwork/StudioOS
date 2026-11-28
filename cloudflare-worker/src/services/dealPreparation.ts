@@ -21,6 +21,7 @@
  */
 import type { Env, User } from '../types';
 import { branchOf } from '../util/branch';
+import type { investorManifestView } from './dealPackageSources';
 
 export const D5454_CONTRACT_VERSION = 1 as const;
 
@@ -284,8 +285,12 @@ export const PROJECTIONS = {
   review: { meta: ['uid', 'preparation_state', 'company_id', 'project_id', 'updated_at'], content: REVISION_CONTENT_KEYS.filter((k) => k !== 'internal_notes') },
   /** An eligible marketplace reader: the released revision's teaser, no terms beyond the headline. */
   marketplace_teaser: { meta: ['deal_id'], content: ['title', 'summary', 'sector', 'instrument', 'currency'] },
-  /** An invited or NDA-authorised investor: the released revision's offering material, no internal or audience fields. */
-  investor: { meta: ['deal_id'], content: ['title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check', 'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency', 'evidence_refs'] },
+  /**
+   * An invited or NDA-authorised investor: the released revision's offering material, no internal or audience fields.
+   * Never the raw `evidence_refs` (D5454-p5): the evidence an investor sees is `investorManifestView`'s, passed to
+   * `project`, so items their access withholds are neither named nor counted.
+   */
+  investor: { meta: ['deal_id'], content: ['title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check', 'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency'] },
 } as const satisfies Record<string, { meta: readonly string[]; content: readonly string[] }>;
 export type ProjectionName = keyof typeof PROJECTIONS;
 
@@ -294,11 +299,23 @@ export const PROJECTION_REVISION: Record<ProjectionName, 'working_revision_id' |
   authoring: 'working_revision_id', review: 'submitted_revision_id', marketplace_teaser: 'released_revision_id', investor: 'released_revision_id',
 };
 
+/** What `investorManifestView` (D5457, `dealPackageSources.ts`) returns for one recipient, read fresh at retrieval. */
+export type InvestorEvidenceView = ReturnType<typeof investorManifestView>;
+const INVESTOR_EVIDENCE_KEYS = ['kind', 'category', 'as_of', 'purpose'] as const;
+
 /**
  * Builds a projection by copying allowlisted keys only. An audience projection of a preparation that is not
  * `listed` is null: the caller answers as it would for a deal that does not exist.
+ *
+ * D5454-p5: the `investor` projection carries evidence only as `investorEvidence`, the recipient's own
+ * `investorManifestView`, under `content.evidence`: each delivered item as kind, source word, date and purpose. The
+ * view's `withheld` count is not copied, so an investor learns nothing about what their access holds back. Without a
+ * view there is no evidence key at all. Every other projection ignores the argument.
  */
-export function project(name: ProjectionName, prep: Record<string, unknown>, revision: { id?: unknown; content: Record<string, unknown> } | null): Record<string, unknown> | null {
+export function project(
+  name: ProjectionName, prep: Record<string, unknown>, revision: { id?: unknown; content: Record<string, unknown> } | null,
+  investorEvidence?: InvestorEvidenceView,
+): Record<string, unknown> | null {
   const spec = PROJECTIONS[name];
   const pointer = PROJECTION_REVISION[name];
   if (!revision || revision.id == null || Number(revision.id) !== Number(prep[pointer])) return null;
@@ -307,6 +324,9 @@ export function project(name: ProjectionName, prep: Record<string, unknown>, rev
   for (const k of spec.meta) if (Object.hasOwn(prep, k)) out[k] = prep[k];
   const content: Record<string, unknown> = {};
   for (const k of spec.content) if (Object.hasOwn(revision.content, k)) content[k] = revision.content[k];
+  if (name === 'investor' && investorEvidence) {
+    content.evidence = investorEvidence.items.map((it) => Object.fromEntries(INVESTOR_EVIDENCE_KEYS.map((k) => [k, it[k] ?? null])));
+  }
   out.content = content;
   return out;
 }
