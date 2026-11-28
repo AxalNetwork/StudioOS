@@ -349,7 +349,7 @@ test('14. the Conversations list: the Worker\'s rows in the viewer\'s day, the u
   assert.ok(textOf(inRouter(h(ConversationsList, { read: { status: 'ready', data: { conversations: [], unreadable: [] } }, now: NOW }))).includes('No conversations yet.'));
   assert.doesNotMatch(textOf(inRouter(h(ConversationsList, { read: { status: 'unreadable' }, now: NOW }))), /No conversations/);
 
-  // A non-active row opens its transcript: user and assistant only.
+  // A non-active row opens its transcript: user and assistant, no system line, and a tool row only as its receipt (D9288).
   const sheet = await mountContracts(h(TranscriptSheet, {
     row: { id: 'a1', kind: 'eadwyn', title: 'Pricing the pilot' }, onClose() {},
     read: async () => ({ messages: [

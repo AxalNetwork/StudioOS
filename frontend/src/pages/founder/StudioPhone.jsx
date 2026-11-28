@@ -35,7 +35,7 @@
  * THE CONVERSATIONS LIST (S1m) reads `GET /api/eadwyn/conversations/mine`.
  * The active profiling row is the thread above it, so it scrolls there; every
  * other row opens its transcript, read-only, in D699's `PhoneSheet`: user and
- * assistant messages only, no Send. A refusal (the advisor gate's 423) shows
+ * assistant messages and each action's receipt (D9288), no Send. A refusal (the advisor gate's 423) shows
  * the Worker's own words, never an empty transcript.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -43,6 +43,7 @@ import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { eadwynApi } from '../../lib/api/eadwyn.js';
 import { reportError } from '../../lib/log';
+import { readToolMessage, toolReceiptText } from '../../lib/advisor/transcript.js';
 import { PhoneRows } from '../../ui/phone/PhoneRows.jsx';
 import { PhoneSheet } from '../../ui/phone/PhoneSheet.jsx';
 import { EadwynMenu } from './EadwynMenu';
@@ -94,9 +95,18 @@ export function ConversationsList({ read, now = new Date(), onOpen, onRetry }) {
   );
 }
 
-/** A transcript's lines: the user's and Eadwyn's, nothing the tools or the system said. */
-export const transcriptLines = (messages) => (Array.isArray(messages) ? messages : [])
-  .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && String(m.content ?? '').trim());
+/**
+ * A transcript's lines: the user's, Eadwyn's and (D9288) each action's
+ * receipt, read through the same tool-message model the chat draws, as one
+ * compact line. Nothing the system said.
+ */
+export const transcriptLines = (messages) => (Array.isArray(messages) ? messages : []).flatMap((m) => {
+  if (m?.role === 'tool') {
+    const receipt = toolReceiptText(readToolMessage(m));
+    return receipt ? [{ role: 'tool', content: receipt }] : [];
+  }
+  return m && (m.role === 'user' || m.role === 'assistant') && String(m.content ?? '').trim() ? [m] : [];
+});
 
 /** The read a row opens: the rail's own read, or the advisor's. */
 const readTranscript = (row) => (row.kind === 'profiling' ? api.advisor.conversation(row.id) : eadwynApi.conversation(row.id));
@@ -122,7 +132,11 @@ export function TranscriptSheet({ row, onClose, read = readTranscript }) {
         {state.status === 'loading' && <p className="text-[13px] text-[#615c6e] dark:text-gray-400">Reading the conversation…</p>}
         {state.status === 'refused' && <p role="alert" className="text-[13px] text-red-700 dark:text-red-300">{state.message}</p>}
         {state.status === 'ready' && !state.lines.length && <p className="text-[13px] text-[#615c6e] dark:text-gray-400">This conversation has no messages.</p>}
-        {state.lines.map((m, i) => (
+        {state.lines.map((m, i) => (m.role === 'tool' ? (
+          <p key={i} className="self-start rounded-lg border border-[#ececf1] px-2.5 py-1.5 text-[12.5px] leading-snug text-[#615c6e] dark:border-gray-700 dark:text-gray-400" data-testid="studio-transcript-receipt">
+            {m.content}
+          </p>
+        ) : (
           <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex'}>
             <div className={`max-w-[84%] whitespace-pre-wrap px-3 py-2.5 text-[14px] leading-snug ${m.role === 'user'
               ? 'rounded-[14px_14px_4px_14px] bg-violet-700 text-white'
@@ -131,7 +145,7 @@ export function TranscriptSheet({ row, onClose, read = readTranscript }) {
               {m.content}
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </PhoneSheet>
   );

@@ -155,6 +155,7 @@ const DOCUMENTED = new Map([
   ['documentation/skill-drafts/D4526/cases', 'synthetic evaluation cases for the staged HQ package'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
+  ['frontend/src/components/advisor',         "Eadwyn's chat, its question widget and their importable pieces (D9288)"],
   ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
   ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],

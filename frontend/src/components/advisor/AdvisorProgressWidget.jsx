@@ -41,6 +41,8 @@ import {
 import { api } from '../../lib/api';
 import { predictTarget, pageLabel, openableTarget } from '../../lib/advisor/router';
 import { PhoneBuckets } from './eadwynPhone';
+import { QUEUE_UNREADABLE, queueReadState } from '../../lib/advisor/transcript.js';
+import { UnreadableNotice } from './transcriptPieces';
 import { fullDayText, storedDate } from '../../pages/founder/studioPhoneModel.js';
 import { openCheckout, planKeyOfTier } from '../checkout/checkoutEntry';
 
@@ -408,6 +410,10 @@ export default function AdvisorProgressWidget({
   const [queue, setQueue] = useState({ next_question: null, queue: [], paywall_ctas: [], complete: false });
   const [answered, setAnswered] = useState([]);
   const [loading, setLoading] = useState(true);
+  // D9288 — every bucket is computed from both reads, so a failed one leaves
+  // no bucket honest: the widget says it could not load, with Retry, rather
+  // than drawing empty buckets or the last read's stale ones.
+  const [unreadable, setUnreadable] = useState(false);
   const rootRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -416,18 +422,13 @@ export default function AdvisorProgressWidget({
         api.advisor.queue(focusSection || undefined),
         api.advisor.answered(),
       ]);
-      if (q.status === 'fulfilled' && q.value) {
-        setQueue({
-          next_question: q.value.next_question || null,
-          queue: Array.isArray(q.value.queue) ? q.value.queue : [],
-          paywall_ctas: Array.isArray(q.value.paywall_ctas) ? q.value.paywall_ctas : [],
-          complete: !!q.value.complete,
-        });
+      const read = queueReadState(q, a);
+      if (read.readable) {
+        setQueue(read.queue);
+        setAnswered(read.answered);
       }
-      if (a.status === 'fulfilled' && a.value && Array.isArray(a.value.answered)) {
-        setAnswered(a.value.answered);
-      }
-    } catch { /* non-fatal — widget degrades to empty buckets */ }
+      setUnreadable(!read.readable);
+    } catch { setUnreadable(true); }
     finally { setLoading(false); }
   }, [focusSection]);
 
@@ -539,11 +540,16 @@ export default function AdvisorProgressWidget({
     return null;
   }, [focusSection, proposedItems, pendingItems]);
 
+  const unreadableNotice = unreadable
+    ? <UnreadableNotice message={QUEUE_UNREADABLE} onRetry={refresh} testId="advisor-queue-unreadable" />
+    : null;
+
   if (variant === 'phone') {
     return (
       <div ref={rootRef} data-testid="advisor-progress-phone">
         {lab && <SpinoutWeekStrip week={Math.max(1, Math.min(4, Number(lab.week) || 1))} completedKeys={completedKeys} />}
-        <PhoneBuckets
+        {unreadableNotice}
+        {!unreadableNotice && <PhoneBuckets
           loading={loading}
           buckets={[
             {
@@ -573,7 +579,7 @@ export default function AdvisorProgressWidget({
               })),
             },
           ]}
-        />
+        />}
       </div>
     );
   }
@@ -582,6 +588,8 @@ export default function AdvisorProgressWidget({
     <div className="space-y-4" ref={rootRef}>
       {lab && <SpinoutWeekStrip week={Math.max(1, Math.min(4, Number(lab.week) || 1))} completedKeys={completedKeys} />}
 
+      {unreadableNotice}
+      {!unreadableNotice && (<>
       {/* Proposed */}
       <Bucket
         title="Proposed"
@@ -661,6 +669,7 @@ export default function AdvisorProgressWidget({
           ))
         )}
       </Bucket>
+      </>)}
     </div>
   );
 }
