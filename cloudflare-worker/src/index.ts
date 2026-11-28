@@ -508,7 +508,8 @@ import { CronTaskLog, leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, reportPrivateError, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { edgeFallback } from './util/edgeError';
 import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
@@ -1864,8 +1865,8 @@ app.onError(async (err: any, c) => {
   if (mapped) return c.json({ detail: msg }, mapped);
   // #9184 — a bare `c.req.json()` on a malformed body is the caller's mistake: 400, not 500.
   if (err instanceof SyntaxError && await isMalformedJsonBody(c)) return invalidJson(c);
-  reportPrivateError('edge_unhandled', err);
-  return c.json({ detail: 'Internal server error' }, 500);
+  // D9186: an HTTPException's own answer, 409 for a constraint failure, else 500; logged with method and route.
+  return edgeFallback(c, err);
 });
 
 // JWT_SECRET strength check runs at the very top of every request handler.

@@ -183,8 +183,8 @@ formationCases.get('/:uid/options', async c => {
   return c.json({suggestion_uid:uid,answers_uid:answers.uid,revision:row.revision,notice_hash:noticeHash,...output});
 });
 
-formationCases.use('/:uid/memos', bodyLimit({maxSize:32768}));
-formationCases.use('/:uid/choice', bodyLimit({maxSize:8192}));
+formationCases.use('/:uid/memos', bodyLimit({ maxSize: 32768, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'That formation request is too large.' }) }));
+formationCases.use('/:uid/choice', bodyLimit({ maxSize: 8192, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'That formation request is too large.' }) }));
 
 formationCases.post('/:uid/memos', async c => {
   // Owner decision 4A: HQ records the accepting partner's acknowledgement; founders cannot self-acknowledge.

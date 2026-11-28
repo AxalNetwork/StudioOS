@@ -21,7 +21,7 @@ import { formationCountry } from '../services/formationPrefill';
 
 const router = new Hono<{ Bindings: Env }>();
 const authorizedCases = new WeakMap<Request, FounderCase>();
-router.use('*', bodyLimit({ maxSize: 16384 }));
+router.use('*', bodyLimit({ maxSize: 16384, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'That formation request is too large.' }) }));
 router.use('/:uid/*', async (c, next) => {
   const actor = await requireAuth(c);
   c.header('Cache-Control', 'private, no-store');

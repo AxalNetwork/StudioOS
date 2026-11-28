@@ -49,7 +49,7 @@ import {
 } from '../services/telegramClient';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { previewAll, previewAudience, runAggregator } from '../services/telegramAggregator';
-import { refusalBody } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -798,6 +798,9 @@ r.put('/consent/:user_id', async (c) => {
   await ensureTelegramSchema(c.env);
   const uid = Number(c.req.param('user_id'));
   if (!Number.isFinite(uid)) return c.json({ error: 'invalid_user_id' }, 400);
+  // D9186: the column references users(id), so an unknown id failed the foreign key and answered 500.
+  const user = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(uid).first();
+  if (!user) return refuse(c, 404, { code: 'user_not_found', message: 'No user has that id.' });
   const body: any = await c.req.json().catch(() => ({}));
   const consented = body.consented ? 1 : 0;
   const source = String(body.source || 'admin').slice(0, 50);

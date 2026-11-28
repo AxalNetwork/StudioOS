@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { constantTimeEqual } from '../rpc/secret';
 import { metaApp, metaHmac } from '../services/meta/app';
 import { stripTrailingSlashes } from '../util/url';
+import { refuse } from '../util/refusal';
 import '../integrations/providers/facebook';
 import { purgeByAccountStatements } from '../services/facebook/grow';
 
@@ -26,7 +27,7 @@ export async function verifiedMetaUser(secret: string, value: string): Promise<s
   }
 }
 
-routes.post('/', bodyLimit({ maxSize: 8192 }), async c => {
+routes.post('/', bodyLimit({ maxSize: 8192, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'The deletion request is too large.' }) }), async c => {
   const { appSecret } = metaApp(c.env);
   if (!appSecret) return c.json({ error: 'facebook_deletion_unavailable' }, 503);
   const body = await c.req.formData().catch(() => null);
