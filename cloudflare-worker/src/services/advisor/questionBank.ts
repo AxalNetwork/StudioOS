@@ -203,7 +203,7 @@ export const ROLE_DETECTOR: Question[] = [
     prompt: "Welcome to Axal. Which best describes how you'll use StudioOS?",
     hint: 'You can change this any time in Settings.',
     input_kind: 'select',
-    options: ['I am building a startup', 'I invest in startups', 'I advisor founders', 'I partner with the studio'],
+    options: ['I am building a startup', 'I invest in startups', 'I advise founders', 'I partner with the studio'],
     skip_allowed: false,
     importance: 'critical',
     page_target: '/onboarding/persona',
@@ -234,7 +234,9 @@ export function mapRoleAnswer(answerText: string): Persona | null {
   const t = answerText.toLowerCase();
   if (t.includes('build')) return 'founder';
   if (t.includes('invest')) return 'investor';
-  if (t.includes('advisor')) return 'advisor';
+  // D8730 (#8730): the option reads "I advise founders" now; "advis" also
+  // matches the old "I advisor founders" an earlier answer may have stored.
+  if (t.includes('advis')) return 'advisor';
   if (t.includes('partner')) return 'partner';
   return null;
 }

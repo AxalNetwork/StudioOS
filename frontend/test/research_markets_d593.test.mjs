@@ -8,7 +8,7 @@
  *       and the markets no sector claims sit last, under "Not mapped yet".
  *   M2  the fallback page for an unmapped market sits in the Research shell.
  *   M3  `/research/geographies/:code` sits in the Research shell: crumb
- *       Research ‹ Geographies ‹ the country, Geographies the current pill.
+ *       Research ‹ Markets ‹ the country, Geographies the current pill.
  *
  * And a first market reading can be recorded again. Nothing has mounted
  * `MarketZone`, which held the only "Record a reading" form, since the
@@ -117,8 +117,8 @@ test('M3: one country renders in the Research shell — crumb, title and pills �
   for (const role of ['founder', 'investor', 'advisor', 'partner']) {
     const markup = at('/research/geographies/GB', h(geography.GeographyPage, { geo: ready(COUNTRY), code: 'GB', role, reload: () => {} }));
     const t = words(markup);
-    assert.match(t, /^Research ‹ Geographies ‹ United Kingdom United Kingdom ANALYTICS/, role);
-    assert.match(markup, /data-testid="link-zone-geographies" aria-current="page"/, `${role}: Geographies is the current pill`);
+    assert.match(t, /^Research ‹ Markets ‹ United Kingdom United Kingdom ANALYTICS/, role);
+    assert.match(markup, /<a (?=[^>]*data-testid="link-zone-markets")(?=[^>]*aria-current="page")/, `${role}: Markets is the current pill`);
     assert.match(markup, /data-testid="link-zone-markets"/, `${role}: the pills are on the row`);
     assert.match(markup, /data-testid="geography-profile"/);
     assert.match(t, /Directory companies 2 of 300/, `${role}: the body is the page's own`);
@@ -130,10 +130,10 @@ test('M3: one country renders in the Research shell — crumb, title and pills �
 
 test('M3: not found and unreadable stay the page\'s own states, inside the shell', () => {
   const nf = words(at('/research/geographies/ZZ', h(geography.GeographyPage, { geo: { status: 'not_found', data: null }, code: 'ZZ', reload: () => {} })));
-  assert.match(nf, /^Research ‹ Geographies ‹ Country Country/);
+  assert.match(nf, /^Research ‹ Markets ‹ Country Country/);
   assert.match(nf, /No country has the code ZZ/);
   const bad = words(at('/research/geographies/GB', h(geography.GeographyPage, { geo: unreadable, code: 'GB', reload: () => {} })));
-  assert.match(bad, /^Research ‹ Geographies ‹ Country/);
+  assert.match(bad, /^Research ‹ Markets ‹ Country/);
   assert.match(bad, /The country GB could not be read/);
   assert.doesNotMatch(bad, /No country has/, 'a failed read is not "no such country"');
 });

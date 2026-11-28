@@ -9,6 +9,36 @@ const routingSlot = 'slot:S21'
 export const SLA_LABEL = 'sla:7d'
 const STATUS_TTL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * D7259 (Q2 C): whether the latest trusted, leading AGENTS-format S21 STATUS for this issue holds it. IN_PROGRESS,
+ * BLOCKED and READY_FOR_REVIEW hold for 24 hours from the comment's creation; a later DONE releases the hold.
+ */
+export function statusHolds(comments, issueNumber, now, trusted) {
+  const at = Number(now())
+  if (!Number.isFinite(at)) throw Error('Invalid reconciliation clock')
+  let latest
+  for (const comment of comments) {
+    if (!trusted(comment)) continue
+    const block = String(comment.body || '').trim().match(/^(?:```(?:text)?[ \t]*\r?\n)?STATUS[ \t]*\r?\n([\s\S]*)/)?.[1]?.split('\n```')[0]
+    const task = block?.match(/^task:\s*#([1-9]\d*)\s+slot:\s*(S\d{2})\s+agent:\s*\S/m)
+    const state = block?.match(/^state:\s*(IN_PROGRESS|BLOCKED|READY_FOR_REVIEW|DONE)\s*$/m)?.[1]
+    const created = Date.parse(comment.created_at)
+    if (Number(task?.[1]) !== issueNumber || task?.[2] !== 'S21' || !state ||
+        !Number.isFinite(created) || created > at) continue
+    if (!latest || created > latest.created || (created === latest.created && comment.id > latest.id)) {
+      latest = { created, state, id: comment.id }
+    }
+  }
+  return Boolean(latest && latest.state !== 'DONE' && at - latest.created < STATUS_TTL_MS)
+}
+
+/** The authors whose issues and STATUS comments the reconciler trusts: its bot, Actions, and this repository's owner. */
+export function trustedAuthor({ owner, botLogin = 'github-actions[bot]' }) {
+  const bots = new Set([login(botLogin), 'github-actions[bot]'])
+  return item => bots.has(login(item?.user?.login)) ||
+    (String(owner).toLowerCase() === 'axalnetwork' && login(item?.user?.login) === 'guillaumelauzier')
+}
+
 export function referenceText(body) {
   let fence
   return String(body || '').replace(/<!--[\s\S]*?-->/g, ' ').split('\n').filter(line => {
@@ -81,7 +111,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
   const marker = source.marker
   const base = 'https://github.com/' + owner + '/' + repo
   const bots = new Set([login(botLogin), 'github-actions[bot]'])
-  const trusted = issue => bots.has(login(issue.user?.login)) || (owner.toLowerCase() === 'axalnetwork' && login(issue.user?.login) === 'guillaumelauzier')
+  const trusted = trustedAuthor({ owner, botLogin })
   const byAlert = new Map()
   function remember(issue) {
     if (issue.pull_request || !validNumber(issue.number) || !trusted(issue)) return
@@ -106,22 +136,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
 
   async function handedOff(issue, allowedPulls = new Set()) {
     const comments = await api.pages('/issues/' + issue.number + '/comments')
-    const at = Number(now())
-    if (!Number.isFinite(at)) throw Error('Invalid reconciliation clock')
-    let latest
-    for (const comment of comments) {
-      if (!trusted(comment)) continue
-      const block = String(comment.body || '').trim().match(/^(?:```(?:text)?[ \t]*\r?\n)?STATUS[ \t]*\r?\n([\s\S]*)/)?.[1]?.split('\n```')[0]
-      const task = block?.match(/^task:\s*#([1-9]\d*)\s+slot:\s*(S\d{2})\s+agent:\s*\S/m)
-      const state = block?.match(/^state:\s*(IN_PROGRESS|BLOCKED|READY_FOR_REVIEW|DONE)\s*$/m)?.[1]
-      const created = Date.parse(comment.created_at)
-      if (Number(task?.[1]) !== issue.number || task?.[2] !== 'S21' || !state ||
-          !Number.isFinite(created) || created > at) continue
-      if (!latest || created > latest.created || (created === latest.created && comment.id > latest.id)) {
-        latest = { created, state, id: comment.id }
-      }
-    }
-    if (latest && latest.state !== 'DONE' && at - latest.created < STATUS_TTL_MS) return true
+    if (statusHolds(comments, issue.number, now, trusted)) return true
     if (!names(issue).includes('state:review')) return false
     const pulls = await api.pages('/pulls?state=open&base=' + encodeURIComponent(defaultBranch))
     const number = Number(titles.exec(issue.title)?.[1])
@@ -286,8 +301,16 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     return true
   }
 
+  // D7259: a batched member is claimed through its batch, so it leaves the ready queue; nothing else changes.
+  async function unready(issue) {
+    const fresh = await active(issue, true)
+    if (fresh && names(fresh).includes('state:ready')) await removeLabel(fresh, 'state:ready')
+  }
+
   return {
-    ensure, markReady, linkPrepared, linkPull, linkPulls, closeFixed,
+    ensure, markReady, linkPrepared, linkPull, linkPulls, closeFixed, unready,
+    // D7259: the one tracker an alert has, as last read, or null when it has none or several.
+    trackerFor: number => byAlert.get(number)?.size === 1 ? [...byAlert.get(number).values()][0] : null,
     trackedNumbers: () => [...byAlert].filter(([, issues]) =>
       [...issues.values()].some(issue => issue.state === 'open')).map(([number]) => number),
   }

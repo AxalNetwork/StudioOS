@@ -147,7 +147,7 @@ const NETWORK_ZONES = [
  * and are one system in every canvas: what is indexed in Library is exactly
  * what Ask can answer over.
  *
- * `geographies` (D546, #1080) sits beside Markets in every list: the countries
+ * `geographies` (D546, #1080) is reached inside Markets for every licence: the countries
  * the directories place companies and funds in, read by every licence that
  * reads Markets.
  *
@@ -163,7 +163,6 @@ const RESEARCH_ZONES = {
     { slug: 'projects', label: 'My Research', archetype: A.COLLECTION },
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
-    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
     { slug: 'funds', label: 'Funds', archetype: A.MATCH_ENGINE },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
@@ -173,14 +172,12 @@ const RESEARCH_ZONES = {
     { slug: 'diligence', label: 'Diligence', archetype: A.COLLECTION },
     { slug: 'benchmarking', label: 'Benchmarking', archetype: A.ANALYTICS },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
-    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
   advisor: [
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
-    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
@@ -188,7 +185,6 @@ const RESEARCH_ZONES = {
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
-    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
 };

@@ -88,9 +88,8 @@ test('founder Research zones match Pages · Founder Research (FS1–FS5)', () =>
     // D5157 (#5157) — My Research, first after the Overview (Research v2 canvas).
     ['projects', 'COLLECTION'],
     ['ask', 'FEED'],
+    // D8821 (#8821): Geographies opens inside Markets; it is no longer a pill of its own (D546).
     ['markets', 'ANALYTICS'],
-    // D546 (#1080) — the Geographies pill, beside Markets in every licence.
-    ['geographies', 'ANALYTICS'],
     ['companies', 'COLLECTION'],
     ['funds', 'MATCH ENGINE'],
     ['library', 'COLLECTION'],

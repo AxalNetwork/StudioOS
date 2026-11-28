@@ -155,7 +155,7 @@ const FOUNDER = [
   own('/research', key(F, 'Research')),
   own('/research/ask', key(F, 'Research', 'Ask')),
   own('/research/markets', key(F, 'Research', 'Markets')),
-  own('/research/geographies', key(F, 'Research', 'Geographies')),
+  alias('/research/geographies', key(F, 'Research', 'Markets'), 'Geographies is part of Markets.'),
   own('/research/companies', key(F, 'Research', 'Companies')),
   own('/research/funds', key(F, 'Research', 'Funds')),
   own('/research/library', key(F, 'Research', 'Library')),
@@ -426,6 +426,7 @@ export const RAIL_PAGES = {
  */
 export const RAIL_BOARD_ALIASES = [
   { board: key(I, 'Fund', 'Overview'), to: key(I, 'Fund'), why: 'I13 maps to I12: the fund page is its overview (D720 §11).' },
+  { board: key(F, 'Research', 'Geographies'), to: key(F, 'Research', 'Markets'), why: 'Geographies is reached inside Markets for all four licences (#8821).' },
   { board: key(I, 'Deals', 'Pipeline'), to: key(I, 'Deals'), why: 'D1243 (#3256): the Pipeline zone retired into Deal flow’s table at /deals; /deals/pipeline and an investor’s /pipeline forward there.' },
   { board: key(SA, 'Revenue', 'Overview'), to: key(SA, 'Revenue'), why: 'H13 maps to H12: the Revenue page is its overview (D720 §11).' },
   { board: key(AD, 'Approvals', 'Exploring members'), to: key(AD, 'Accounts', 'Exploring members'), why: 'One console, /admin/exploring; Accounts is listed first.' },

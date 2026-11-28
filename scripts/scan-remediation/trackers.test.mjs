@@ -25,6 +25,7 @@ function fixture(input = []) {
       if (path === '/issues?state=all&labels=bug') return [...issues.values()].filter(i => i.labels.some(l => l.name === 'bug')).map(copy)
       if (path.endsWith('/comments')) return copy(comments.get(path) ?? [])
       if (path === '/pulls?state=open&base=main') return copy(pulls)
+      if (path === '/issues?state=all&labels=scan%3Abatch') return []
       throw Error('unexpected page: ' + path)
     },
     async searchIssues(q) {

@@ -777,6 +777,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
       </div>
       <Card>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Link className="inline-flex min-h-[44px] items-center px-3 font-semibold text-axal-violet dark:text-violet-300" to="/research/geographies">Geographies</Link>
           <div role="tablist" aria-label="Markets" className="flex flex-wrap gap-1">
             {MARKET_TABS.map((t, i) => (
               <button key={t.key} ref={(el) => { tabRefs.current[i] = el; }} type="button" role="tab" id={`markets-tab-${t.key}`}

@@ -155,7 +155,9 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'All periods', key: 'all', label: 'All periods {n}' },
     { canvas: 'Published', key: 'issued', label: 'Issued {n}' },
     { canvas: 'Drafted', key: 'draft', label: 'Draft {n}' },
-    { canvas: 'Delivery', unbuilt: 'a period records when it was issued, not which LP received it, so there is no delivery state to filter by', hover: 'Delivery to each LP is not tracked, so there is nothing to filter.' },
+    // D6240: issued periods whose recorded delivery missed at least one LP. A
+    // period issued before delivery was recorded is not in it: nobody knows.
+    { canvas: 'Delivery', key: 'undelivered', label: 'Not all delivered {n}' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
