@@ -46,10 +46,10 @@ keeps that list in one place).
 Mirrored from the #8060 STATUS of 2026-11-21 (phase 1, D8060). The live name of
 the `main` ruleset is `main: required checks`, so its keys use that name: the
 check keys a ruleset by its live name, and the STATUS asks that the live rule
-is not renamed to fit a placeholder. The one row still keyed
-`ruleset[main]`, `required_status_checks`, belongs to #8641 (the seventh
-check, `Dependency Review`, was added on 2026-11-23; the six the STATUS
-recorded are out of date); #8641 fills it under the live name. The disabled
+is not renamed to fit a placeholder. The required-checks row,
+`ruleset[main: required checks].required_status_checks`, is #8641's: it holds
+the seven contexts from #7899's receipt (the seventh, `Dependency Review`, was
+added on 2026-11-23; the six the STATUS recorded are out of date). The disabled
 `Code Quality Copilot review for default branch` ruleset is listed because it
 exists. No `platform paths` ruleset exists yet (phase 2 waits on #8061), so its
 rows stay to be recorded and `rulesets.names` drifts, as it should, the day it
@@ -68,7 +68,7 @@ D8060 rather than as rows here (a row the check cannot read fails the run).
 | `ruleset[main: required checks].exclude` | `none` | none | #8060 |
 | `ruleset[main: required checks].bypass_actors` | `none` | `none` (after the owner's go on #8060) | #8060 |
 | `ruleset[main: required checks].rules` | `deletion, merge_queue, non_fast_forward, pull_request, required_status_checks` | pull request, merge queue, required status checks, non fast-forward, deletion | #8060 |
-| `ruleset[main].required_status_checks` | to be recorded | the six checks the deploy admission job waits for | #8060 |
+| `ruleset[main: required checks].required_status_checks` | `test:drift (full suite), worker (typecheck), frontend (build), api ↔ worker drift, applied migrations unchanged, scan, Dependency Review` | every context from GitHub Actions, required on pull requests and in the merge queue since 2026-11-23 16:59:40 Europe/Zurich (#7899's console receipt, linked in D8641). Production's push-event admission waits only for the first six; `Dependency Review` never runs on a push | #7899 |
 | `ruleset[main: required checks].strict_required_status_checks` | `false` | as D5605 | #8060 |
 | `ruleset[main: required checks].pull_request.required_approving_review_count` | `0` | `0` (owner review is the platform paths ruleset's) | #8060 |
 | `ruleset[main: required checks].pull_request.require_code_owner_review` | `false` | `false` | #8060 |

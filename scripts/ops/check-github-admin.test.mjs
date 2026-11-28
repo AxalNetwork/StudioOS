@@ -80,10 +80,12 @@ test('the committed baseline parses: every section has a table, every key is kno
   const sectionsRecorded = [...new Set(recorded.map(r => r.section))].sort();
   assert.deepEqual(sectionsRecorded, ['Actions', 'Environments', 'Organisation', 'Repository settings', 'Rulesets']);
   const byKey = Object.fromEntries(rows.map(r => [r.key, r.expected]));
-  // Keys use the live ruleset name; the required-checks row is #8641's and stays unrecorded here.
+  // Keys use the live ruleset name. D8641: the required contexts are mirrored from #7899's receipt, under that name.
   assert.equal(byKey['rulesets.names'], 'Code Quality Copilot review for default branch, main: required checks');
   assert.equal(byKey['ruleset[main: required checks].bypass_actors'], 'none');
-  assert.equal(byKey['ruleset[main].required_status_checks'], null);
+  // The baseline lists them as the console does; parsing normalizes a list to sorted order, as the live read is.
+  assert.equal(byKey['ruleset[main: required checks].required_status_checks'], 'Dependency Review, api ↔ worker drift, applied migrations unchanged, frontend (build), scan, test:drift (full suite), worker (typecheck)');
+  assert.ok(!('ruleset[main].required_status_checks' in byKey), 'no row is keyed by a ruleset name that does not exist');
   assert.ok(rows.filter(r => r.name === 'platform paths').every(r => r.expected === null), 'phase 2 is not applied');
   assert.equal(byKey['org.members_can_create_public_repositories'], null);
   // The corrected allowlist: 17 full references, sub-actions listed on their own, every one pinned at a full SHA.
@@ -142,7 +144,8 @@ function recordedConsole(patterns) {
     [`${R}/rulesets/1`]: { enforcement: 'active', target: 'branch', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, bypass_actors: [],
       rules: [{ type: 'deletion' }, { type: 'non_fast_forward' },
         { type: 'pull_request', parameters: { required_approving_review_count: 0, require_code_owner_review: false, dismiss_stale_reviews_on_push: false, require_last_push_approval: false } },
-        { type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: [{ context: 'scan' }] } },
+        // D8641: the seven contexts #7899's receipt records, in the order the console lists them.
+        { type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: ['test:drift (full suite)', 'worker (typecheck)', 'frontend (build)', 'api ↔ worker drift', 'applied migrations unchanged', 'scan', 'Dependency Review'].map(context => ({ context })) } },
         { type: 'merge_queue', parameters: { merge_method: 'SQUASH', max_entries_to_build: 5, min_entries_to_merge: 1, max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 5, grouping_strategy: 'ALLGREEN', check_response_timeout_minutes: 90 } }] },
     [`${R}/rulesets/2`]: { enforcement: 'disabled', target: 'branch', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'] } }, bypass_actors: [], rules: [] },
     [`${R}/environments`]: { total_count: environments.length, environments },
@@ -165,7 +168,7 @@ test('the committed baseline matches the consoles the #8060, #8062 and #8063 rec
   const having = status => outcome.results.filter(r => r.status === status);
   assert.deepEqual(having('drift').map(r => `${r.key}: ${r.expected} != ${r.live}`), []);
   assert.equal(outcome.drift, 0);
-  assert.equal(having('match').length, 62);
+  assert.equal(having('match').length, 63);
   // A console that moves back to the old values is caught: the queue maximum and the bypass list.
   const moved = recordedConsole(patterns);
   moved[`/repos/${REPO}/rulesets/1`].rules[4].parameters.max_entries_to_merge = 30;

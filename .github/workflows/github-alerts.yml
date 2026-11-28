@@ -5,8 +5,12 @@ name: GitHub alerts
 #   main-red      every 15 min: the latest finished CI run on a push to main
 #                 failed, so every PR that merges main fails
 #   queue         the Actions queue backed up, so CI results arrive hours late
-#   queue-stalled every 15 min: one failure (test, guard, or job and step) in
-#                 merge-queue candidates of two queue chains (D5604, D7125)
+#   queue-stalled one failure (test, guard, or job and step) in merge-queue
+#                 candidates of two queue chains (D5604, D7125); runs when a
+#                 merge_group CI run completes (queue-stalled.yml) and every
+#                 15 min as the fallback, and opens `[alert] merge queue stall
+#                 check failing` when the check itself fails twice in a row
+#                 (D7125-p2)
 #   ops-schedules hourly: a scheduled D1 backup, magic-link probe or admin drift run
 #                 waiting on approval, missed, failing its credential check, or no
 #                 successful D1 backup in 26 hours (D8754)
@@ -16,7 +20,8 @@ name: GitHub alerts
 #                 step summary, and the alert gets the break date (D7124)
 # The reviewer's alert (no model called) is a job in claude-review.yml, where
 # its outcome is known. main-red polls instead of using `workflow_run`, which
-# WF-4 (frontend/test/workflow_security_4571.test.mjs) keeps out of the repo.
+# WF-4 (frontend/test/workflow_security_4571.test.mjs) admits only in a
+# reviewed file whose one trigger it is: queue-stalled's is queue-stalled.yml.
 #
 # Each alert is one issue titled `[alert] ...`: the channel hears only when it
 # opens and when it closes. Needs the secret SLACK_GITHUB_WEBHOOK_URL (a Slack
@@ -110,7 +115,9 @@ jobs:
       (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue-stalled')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
+    # D7125-p2: the fallback. queue-stalled.yml runs the same job when a merge_group CI run
+    # completes; one group across both files, so a burst keeps one running and one pending.
     concurrency:
       group: github-alerts-queue-stalled
       cancel-in-progress: false
@@ -122,6 +129,7 @@ jobs:
       checks: read
       pull-requests: read
       issues: write
+    # D7125-p2: these steps equal queue-stalled.yml's (frontend/test/queue_stall_trigger_7125.test.mjs).
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -133,10 +141,35 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - run: node scripts/github-alerts.mjs queue-stalled
+      - name: Restore the count of failed stall checks
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/queue-stall-checker.json
+          key: queue-stall-checker-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: queue-stall-checker-v1-
+      - id: check
+        name: Check the merge queue for a stall
+        timeout-minutes: 4
+        run: node scripts/github-alerts.mjs queue-stalled
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+      # D7125-p2: runs even when the check crashed; imports nothing the check imports.
+      - name: Open an alert when the stall check fails twice in a row
+        if: always() && github.ref == 'refs/heads/main'
+        run: node scripts/queue-stall-checker.mjs
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          STATE_FILE: ${{ runner.temp }}/queue-stall-checker.json
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+      - name: Save the count of failed stall checks
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/queue-stall-checker.json
+          key: queue-stall-checker-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
   main-red:
     name: main is red

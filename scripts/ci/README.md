@@ -12,6 +12,7 @@ They do not change production application state.
 | `merge-test-deps.mjs` | Merge test dependency and timing artifacts deterministically (D5608). |
 | `no-anthropic-in-prod.mjs` | Enforce the production Advisor provider boundary (D5339). |
 | `pool-contract.mjs` | The untrusted pool contract: every job a pull request starts runs hosted or in `untrusted`, with a read-only token, no id-token, no secret and no environment; deploys run only from main or a dispatch (D8072). |
+| `queue-larger-runners.mjs` | D8962: the proposed `runs-on` that puts merge-queue Worker parts on the "StudioOS Included Compute" larger runners behind `vars.CI_QUEUE_LARGE_RUNNERS`, a reader for its routing expressions, and GET-only shard timings (median and p90 per part and runner) from successful `merge_group` runs of `ci.yml`. Tests: `frontend/test/ci_queue_larger_runners_8962.test.mjs`. |
 | `queue-ref-alive.sh` | Distinguish a missing merge-queue ref from an unavailable remote. |
 | `queue-run-lookup.mjs` | On a push to main, find the successful merge-queue run of `ci.yml` on the exact commit, and report `reused`, `miss` or `unavailable`; only `reused` skips the suite (D5500). Fixtures: `frontend/test/queue_run_lookup_5500.test.mjs`. |
 | `scanner-acquisition.mjs` | Verify cached and downloaded scanner archives before extraction or execution (D5531). |

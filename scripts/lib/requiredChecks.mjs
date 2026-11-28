@@ -14,4 +14,5 @@ export const REQUIRED = Object.freeze({
   'api ↔ worker drift': 'ci.yml',
   'applied migrations unchanged': 'migration-immutability.yml',
   scan: 'gitleaks.yml',
+  'Dependency Review': 'dependency-review.yml',
 });
