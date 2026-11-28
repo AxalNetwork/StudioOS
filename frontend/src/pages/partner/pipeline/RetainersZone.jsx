@@ -5,6 +5,7 @@ import { api } from '../../../lib/api';
 import { readAllPages } from '../../../lib/pagedRead';
 import PartialRead, { PipelineReadStatus } from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
+import OpportunitySheet, { OPEN_OPPORTUNITY_CLASS } from './OpportunitySheet';
 import { matchesFocus, useEngagementFocus } from '../delivery/engagementFocus';
 import { BackToFeedLink, NotFoundNotice, feedItemName } from '../FromStudioBack';
 import {
@@ -357,8 +358,11 @@ function UsageForm({ row, onSave, onDelete, busy }) {
  * The retainer sheet: Summary, Usage, Terms and History, each only where
  * something is recorded behind it (`sheetTabs`). Every panel stays mounted and
  * the inactive ones are hidden, so a draft in Terms survives a look at Usage.
+ *
+ * #9110 (D9110): Open opportunity closes this sheet and opens the shared `OpportunitySheet` for the same
+ * engagement, the read-across view of its lead, proposal and negotiation. This sheet stays the place to edit.
  */
-function RetainerSheet({ row, tab, onTab, onClose, handlers, busy, note, backToStudio = false }) {
+function RetainerSheet({ row, tab, onTab, onClose, onOpenOpportunity, handlers, busy, note, backToStudio = false }) {
   const closeRef = useRef(null);
   useEffect(() => {
     const opener = typeof document !== 'undefined' ? document.activeElement : null;
@@ -395,8 +399,15 @@ function RetainerSheet({ row, tab, onTab, onClose, handlers, busy, note, backToS
         <div className="border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <Eyebrow>Retainer</Eyebrow>
-            <button ref={closeRef} type="button" onClick={onClose} aria-label="Close retainer"
-              className="grid h-11 w-11 place-items-center rounded-lg text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
+            <div className="flex items-center gap-1">
+              {onOpenOpportunity && (
+                <button type="button" onClick={() => onOpenOpportunity(row)} data-testid="retainer-open-opportunity" className={OPEN_OPPORTUNITY_CLASS}>
+                  Open opportunity
+                </button>
+              )}
+              <button ref={closeRef} type="button" onClick={onClose} aria-label="Close retainer"
+                className="grid h-11 w-11 place-items-center rounded-lg text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
+            </div>
           </div>
           {backToStudio && <BackToFeedLink />}
           <h2 id={`${id}-h`} className="mt-1 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">
@@ -503,6 +514,13 @@ export default function PartnerRetainersZone() {
   const fromStudio = params.get('from') === 'studio';
   const { key: focusKey, clear: clearFocus } = focus;
   const closeSheet = useCallback(() => { setSheet(null); if (focusKey) clearFocus(); }, [focusKey, clearFocus]);
+  // #9110: the shared opportunity sheet, opened from a retainer's sheet. It closes that sheet the way × does (the
+  // `?engagement=` focus goes with it), so only one sheet is open, and closing it returns focus to the row.
+  const [opportunity, setOpportunity] = useState(null);
+  const openOpportunity = useCallback((r) => {
+    closeSheet();
+    setOpportunity({ engagementId: r.engagement_id, title: clientName(r) || undefined });
+  }, [closeSheet]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -749,7 +767,13 @@ export default function PartnerRetainersZone() {
     {sheetRow ? (
       <RetainerSheet
         row={sheetRow} tab={sheet?.tab} onTab={(t) => setSheet((s) => (s ? { ...s, tab: t } : { id: sheetRow.engagement_id, tab: t }))}
-        onClose={closeSheet} handlers={handlers} busy={busy} note={note} backToStudio={fromStudio}
+        onClose={closeSheet} onOpenOpportunity={openOpportunity} handlers={handlers} busy={busy} note={note} backToStudio={fromStudio}
+      />
+    ) : null}
+    {opportunity ? (
+      <OpportunitySheet
+        opportunity={{ engagementId: opportunity?.engagementId }} title={opportunity?.title}
+        onClose={() => setOpportunity(null)}
       />
     ) : null}
     </>
