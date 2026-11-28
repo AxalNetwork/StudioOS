@@ -1,10 +1,5 @@
 # cloudflare-worker/test — what the worker guarantees
 
-`bulk_cohort_chase_9204.test.ts` counts prepared statements across cohort cycles,
-review participants and chase targets, checks per-cycle application limits and
-optional reads, and verifies atomic chase writes and repeat responses. It also
-checks immutable bindings and batched reads in the SQLite D1 adapter.
-
 `network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
 
 `mutation_atomic_writes.test.mjs` pins `_atomic_write.mjs`, the one way an in-suite mutation check rewrites a source file: a temporary file beside it renamed over it, so a test file running in parallel never imports a truncated copy. The guard fails if any suite under `cloudflare-worker/test`, `frontend/test` or `scripts` writes a mutated or restored source with `writeFileSync(<file>, original…)`. Mutations run on a private copy (`_isolated_mutation_source.mjs`, D6811), not on the checkout.
