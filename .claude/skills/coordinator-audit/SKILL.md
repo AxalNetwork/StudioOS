@@ -19,7 +19,7 @@ rules and the slot rule this skill applies.
 | Mode | When | Reads |
 |---|---|---|
 | **Weekly delta** (default) | Every week, or when asked for a quick pass | New issues, linked merged PRs, named dependencies that closed and activity after the last audit note |
-| **Lifecycle report** | Scheduled, issue and PR events, or `node scripts/coordinator.mjs report --out DIR` | Bounded suggestions and unknowns. Read-only output for triage. |
+| **Lifecycle report** | Every 12 hours, issue events, or `node scripts/coordinator.mjs report --out DIR` | Bounded suggestions and unknowns. Read-only output for triage. |
 | **Full** | When asked for a full audit, or more than a month after the last full one | Every open issue, plus page audits if asked |
 
 ## Steps
