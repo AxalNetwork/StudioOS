@@ -21,6 +21,8 @@ import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
 import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
+import { closingWorkspaceRefusal } from '../services/dealClosingAccess';
+import { refuse } from '../util/refusal';
 import { investorEvidence, RaiseEvidenceError, staffEvidence } from '../services/raiseEvidence';
 import {
   DEAL_MOVED, DEAL_STATUSES, DB_NOW, MOVE_COLUMNS, PASS_THROUGH_ROUTE, PASSED_STATUS, PIPELINE as DEAL_PIPELINE,
@@ -1857,12 +1859,17 @@ deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
 });
 
 // D6156 — the Audit tab: every write to this deal's checklist items, oldest
-// first, under the checklist's own read rule.
+// first, under the checklist's own read rule. D9072 (#9072, D6158 Q1 = A): this
+// read is the closing workspace's own, so a partner reads it only for a round
+// they lead (`closingWorkspaceRefusal`); the founder and a related investor
+// keep the deal's read rule.
 deals.get('/:id/closing-checklist/events', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
   const { sql } = ctx;
+  const closingRefusal = await closingWorkspaceRefusal(c.env, ctx.user, ctx.deal, ctx.audience);
+  if (closingRefusal) { await sql.end(); return refuse(c, 403, closingRefusal); }
   const rows = await c.env.DB.prepare(
     `SELECT e.uid, i.uid AS item_uid, i.label AS item_label, e.actor_user_id, u.name AS actor_name,
             e.from_state, e.to_state, e.note, e.at,

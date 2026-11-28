@@ -3723,7 +3723,9 @@ function AppInner() {
       {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
-      <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      {/* D9072 (#9072, D6158 Q1 = A): an Operating Partner reaches Closing for the rounds they lead;
+          ClosingZone narrows the list and refuses any other round, as the Worker does (closingSeatModel). */}
+      <Route path="/deals/closing" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview.
           D1152 (#3057): an Advisor and an Explorer reach the page to read DL22's words; it reads nothing for them. */}

@@ -18,6 +18,7 @@
  */
 import { NOT_RECORDED, text } from '../../../lib/absence.js';
 import { toMajorString } from '../../../lib/money.js';
+import { tabHref } from '../../dealPageModel.js';
 
 /** A read's three states. `ok(value)` carries any value (an object, a list, or null for "none applied"). */
 export const LOADING = Object.freeze({ state: 'loading' });
@@ -493,6 +494,24 @@ export function companyHref(positions, projectId) {
   const list = Array.isArray(positions) ? positions : Array.isArray(positions?.items) ? positions.items : [];
   const hit = list.find((p) => Number(p?.project_id) === Number(projectId) && p?.project?.uid);
   return hit ? `/portfolio/companies/${encodeURIComponent(hit.project.uid)}` : null;
+}
+
+// ---------------------------------------------------------------------------
+// Open my closing room (DX22, board DCL24; dark DX28 B; D8838)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the investor's "Open my closing room" leads, or null when it is not
+ * drawn. Only for an investor, and only on a line that is their own: the
+ * line's `investor_user_id` is the signed-in user's id. The room is the deal
+ * page's Closing tab (`/deals/:dealId/closing`, `ClosingRoom.jsx`), which the
+ * route already opens to an investor; no new route.
+ */
+export function myClosingRoomHref({ role, userId, line, dealId }) {
+  if (role !== 'investor' || !line || userId == null) return null;
+  if (Number(line.investor_user_id) !== Number(userId)) return null;
+  if (!/^[1-9]\d*$/.test(String(dealId))) return null;
+  return tabHref(dealId, 'closing');
 }
 
 // ---------------------------------------------------------------------------
