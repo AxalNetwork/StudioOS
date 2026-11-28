@@ -53,6 +53,8 @@ function fixture() {
   `);
   for (const f of ['228_research_company_directory.sql', '229_research_market_directory.sql',
     '365_research_eurotech_fund_directory.sql', '136_signals.sql', '030_market_intel.sql']) db.exec(ddl(f));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(resolve(here, '../sql/migrations/379_market_intel_index_basis.sql'), 'utf8'));
   // D7707 (what a row measures) and D7708 (the window and mix an index point stores).
   db.exec(readFileSync(resolve(here, '../sql/migrations/202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8'));

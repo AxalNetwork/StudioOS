@@ -155,7 +155,8 @@ test('the needs-a-decision strip: on HQ the Seats tile is Accounts, and Approval
   const t = text(h(StudioNeedsDecisionView, { user: null, glance: PAYLOAD }));
   assert.match(t, /Accounts 12 accounts · 7 founder/);
   assert.doesNotMatch(t, /Seats/);
-  assert.match(t, /Approvals Unreadable 1 lane could not be read, so no total · worst: KYC/);
+  // D8728: the band word is the platform's, Unavailable.
+  assert.match(t, /Approvals Unavailable 1 lane could not be read, so no total · worst: KYC/);
   const order = orderNeedsDecision([{ key: 'accounts', glance: hqAccountsView(PAYLOAD.accounts) }, { key: 'approvals', glance: hqApprovalsView(PAYLOAD.approvals) }]);
   assert.equal(order[0].key, 'approvals', 'an unreadable lane ranks the Approvals tile first');
 });

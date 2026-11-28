@@ -169,9 +169,9 @@ export const INVESTOR_ZONE_ACTIONS = {
     // action is absent and the archive says why.
     { canvas: 'Build pack', label: 'New reporting period', kind: 'handler', handler: 'newPeriod', primary: true },
     { label: 'Export archive', kind: 'export' },
-    // Was 'per-LP delivery is counted, never itemised'. Nothing counts it: a
-    // period records when it was issued, and no delivery row exists.
-    { label: 'Delivery log', unbuilt: 'issuing a period records when it was issued, not which LP received it, so there is no delivery to log' },
+    // D6240: each issued period records delivery per LP, and its own page lists
+    // them. No read joins those lists across periods into one log.
+    { label: 'Delivery log', unbuilt: 'each issued period lists its LPs’ delivery on its own page; no log across periods is built' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────

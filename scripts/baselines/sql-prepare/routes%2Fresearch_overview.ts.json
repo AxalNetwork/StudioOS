@@ -1,4 +1,5 @@
 {
+  "EURO_SIZE_SQL @ routes/research_overview.ts": 1,
   "SERVED_FUNDS @ routes/research_overview.ts": 7,
   "bandSql @ routes/research_overview.ts": 1,
   "liveIndexSql() @ routes/research_overview.ts": 3,

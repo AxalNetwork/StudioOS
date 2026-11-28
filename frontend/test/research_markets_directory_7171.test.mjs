@@ -239,12 +239,12 @@ test('Q1 A: a market matches only through the published crosswalk; keywords neve
   for (const target of Object.values(THESIS_CROSSWALK).flat()) assert.ok(SECTORS.includes(`'${target}'`), target);
   // Every legacy profile option is in the crosswalk, even when it maps to nothing.
   const PROFILE = read('cloudflare-worker/src/routes/investor_signals.ts');
-  const listed = (name) => PROFILE.match(new RegExp(`const ${name}: readonly string\\[\\] = \\[([^\\]]+)\\]`))[1].match(/'[^']+'/g).map((s) => s.slice(1, -1));
-  for (const opt of listed('LEGACY_SECTOR_OPTIONS')) assert.ok(opt in THESIS_CROSSWALK, opt);
+  const listed = (pattern) => PROFILE.match(pattern)[1].match(/'[^']+'/g).map((s) => s.slice(1, -1));
+  for (const opt of listed(/const LEGACY_SECTOR_OPTIONS: readonly string\[\] = \[([^\]]+)\]/)) assert.ok(opt in THESIS_CROSSWALK, opt);
   // #6131: the Worker also keeps the NFX labels. The owner-approved crosswalk
   // maps none of them yet beyond a label they share (Robotics), so a thesis of
   // the other NFX labels is set but can match nothing.
-  const nfx = listed('NFX_SECTORS');
+  const nfx = listed(/const NFX_SECTORS: readonly string\[\] = \[([^\]]+)\]/);
   assert.equal(nfx.length, 82);
   const nfxThesis = thesisFrom({ thesis_text: '', sectors: nfx.filter((s) => !(s in THESIS_CROSSWALK)) });
   assert.equal(nfxThesis.kind, 'set');

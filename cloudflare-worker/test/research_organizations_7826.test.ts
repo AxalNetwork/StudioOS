@@ -30,8 +30,7 @@ const MIGRATION = resolve(import.meta.dirname, '../sql/migrations/202611241148_7
 function fixture({ recordKind = false } = {}) {
   const db = new DatabaseSync(':memory:', SCHEMA_OPTIONS);
   loadSchema(db);
-  // #7744's fund row kind is not on main: a fixture that needs it adds the column, as the issue says.
-  if (recordKind) db.exec('ALTER TABLE research_fund_directory ADD COLUMN record_kind TEXT');
+  // #7744's fund row kind (`record_kind`) is in the schema now (migration 202611270508_7744); a fixture that needs it sets it below.
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(ADMIN, 'admin', 'Ada', 'ada@axal.example');
   u.run(FOUNDER, 'founder', 'Fay', 'fay@co.example');
