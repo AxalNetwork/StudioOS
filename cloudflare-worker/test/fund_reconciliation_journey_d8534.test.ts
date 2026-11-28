@@ -302,11 +302,13 @@ function everyBalanceChangeApproved(w: World, step: string) {
       assert.ok(r.recorded_by === GP || who?.role === 'admin', `${step}: receipt ${r.id} recorded by the GP or an Admin`);
     }
   }
-  // Each call was issued by the fund's GP of record or an Admin. (Its `capital_call_issued` activity row is not
-  // asserted: `logActivity` omits the NOT NULL `action` column and the row never lands; D8534 finding 3.)
+  // Each call was issued by the fund's GP of record or an Admin, and its issue left its activity row (#9015).
   for (const c of w.rows('SELECT fc.*, f.gp_user_id FROM fund_capital_calls fc JOIN vc_funds f ON f.id = fc.fund_id')) {
     const who = w.one('SELECT role FROM users WHERE id = ?', c.issued_by);
     assert.ok(c.issued_by === c.gp_user_id || who?.role === 'admin', `${step}: call ${c.id} issued by the GP of record or an Admin`);
+    assert.ok(w.one(`SELECT 1 AS x FROM activity_logs WHERE action = 'capital_call_issued' AND action_type = 'capital_call_issued'
+        AND entity_type = 'fund' AND entity_id = ? AND user_id = ? AND json_extract(metadata, '$.call_number') = ?`,
+      String(c.fund_id), c.issued_by, c.call_number), `${step}: call ${c.id} has its capital_call_issued activity row`);
   }
   // A distribution is paid only by a recorded act.
   for (const d of w.rows(`SELECT * FROM fund_distributions WHERE status = 'paid'`)) {

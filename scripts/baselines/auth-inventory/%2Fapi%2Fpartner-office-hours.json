@@ -2,61 +2,85 @@
   "DELETE /api/partner-office-hours/action-items/:itemId{[0-9]+}": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "bookingAccess() then the author rule: a non-party (another firm, founder, investor, admin, Super Admin) gets 404 naming nothing; the booking's other party, not the author, gets 403 not_the_author; no credentials 401. No refusal changes a row (D9040)."
   },
   "DELETE /api/partner-office-hours/me/slots/:id": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "The firm is read from the caller's own account (requirePartnerProfile, users.partner_id) and the slot must carry it. Another firm's partner gets 404 naming nothing; a founder or investor 403; an admin or Super Admin with no firm 400; no credentials 401. No refusal changes a row (D9040)."
   },
   "GET /api/partner-office-hours/bookings/:id{[0-9]+}/action-items": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "services/partnerBookingFollowups.ts bookingAccess(): only the booking's two parties (its founder, or a partner account of its firm) reach it; anyone else (another firm, another founder, an investor, an admin, a Super Admin) gets the same 404 as a booking or item that does not exist (D355); no credentials 401. No refusal changes a row (D9040)."
   },
   "GET /api/partner-office-hours/partners/:uid/slots": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Any signed-in account reads a partner's open slots by design (the booking page). The meeting link and the slot notes are withheld (has_meeting_link only) from everyone but the partner, an admin and a founder whose booking on that slot is confirmed (#4715); no credentials 401. Reading writes nothing (D9040)."
   },
   "PATCH /api/partner-office-hours/action-items/:itemId{[0-9]+}": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "services/partnerBookingFollowups.ts bookingAccess(): only the booking's two parties (its founder, or a partner account of its firm) reach it; anyone else (another firm, another founder, an investor, an admin, a Super Admin) gets the same 404 as a booking or item that does not exist (D355); no credentials 401. No refusal changes a row (D9040)."
   },
   "POST /api/partner-office-hours/:uid/book": {
     "review": "forwarded",
     "kind": "alias",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Forwards to /slots/:id/book with the partner uid. That handler is founder-only (a partner or investor 403, no credentials 401) and books only a slot of the partner the address names (another partner's slot or an unknown uid 404, nothing written). D9040 fixed the forward, which named the mounted path and answered every call 404."
   },
   "POST /api/partner-office-hours/bookings/:id/cancel": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "transition(): either party (the booking's founder or its partner) or an admin may cancel; another firm's partner, a third firm, another founder and an investor get 403; no credentials 401. No refusal changes a row (D9040)."
   },
   "POST /api/partner-office-hours/bookings/:id/complete": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "transition(): only the booking's partner (users.partner_id = booking.partner_id) or an admin may confirm, complete or mark a no-show; another firm's partner, a third firm, the booking's own founder, another founder and an investor get 403; no credentials 401. No refusal changes a row (D9040)."
   },
   "POST /api/partner-office-hours/bookings/:id/confirm": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "transition(): only the booking's partner (users.partner_id = booking.partner_id) or an admin may confirm, complete or mark a no-show; another firm's partner, a third firm, the booking's own founder, another founder and an investor get 403; no credentials 401. No refusal changes a row (D9040)."
   },
   "POST /api/partner-office-hours/bookings/:id/no-show": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "transition(): only the booking's partner (users.partner_id = booking.partner_id) or an admin may confirm, complete or mark a no-show; another firm's partner, a third firm, the booking's own founder, another founder and an investor get 403; no credentials 401. No refusal changes a row (D9040)."
   },
   "POST /api/partner-office-hours/bookings/:id{[0-9]+}/action-items": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "services/partnerBookingFollowups.ts bookingAccess(): only the booking's two parties (its founder, or a partner account of its firm) reach it; anyone else (another firm, another founder, an investor, an admin, a Super Admin) gets the same 404 as a booking or item that does not exist (D355); no credentials 401. No refusal changes a row (D9040)."
   },
   "PUT /api/partner-office-hours/bookings/:id{[0-9]+}/rating": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "bookingAccess() then founder-only: a non-party (another firm, founder, investor, admin, Super Admin) gets 404 naming nothing; the booking's partner 403 founder_only; no credentials 401. No refusal changes a row (D9040)."
   }
 }

@@ -2,51 +2,71 @@
   "GET /api/partnernet/relationships/:id/events": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Party check (ownRelationship or inline): only partner_a_id or partner_b_id; anyone else (a third partner, a founder, an investor) gets 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass, naming the route); a party's own call writes none (D9040)."
   },
   "GET /api/partnernet/relationships/:id/interactions": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Party check (ownRelationship or inline): only partner_a_id or partner_b_id; anyone else (a third partner, a founder, an investor) gets 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass, naming the route); a party's own call writes none (D9040)."
   },
   "PATCH /api/partnernet/book/:uid/relationship": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "The firm book row is bound to its owner in SQL (uid = ? AND owner_user_id = caller); everyone else, admin and Super Admin included, gets 404 and nothing is written; no credentials 401 (D9040)."
   },
   "PATCH /api/partnernet/relationships/:id": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Party check (ownRelationship or inline): only partner_a_id or partner_b_id; anyone else (a third partner, a founder, an investor) gets 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass, naming the route); a party's own call writes none (D9040)."
   },
   "PATCH /api/partnernet/reminders/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "A reminder is its creator's (created_by = caller): the relationship's other party, a third partner, a founder and an investor get 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass) (D9040)."
   },
   "POST /api/partnernet/book/:uid/interactions": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "The firm book row is bound to its owner in SQL (uid = ? AND owner_user_id = caller); everyone else, admin and Super Admin included, gets 404 and nothing is written; no credentials 401 (D9040)."
   },
   "POST /api/partnernet/relationships/:id/interactions": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Party check (ownRelationship or inline): only partner_a_id or partner_b_id; anyone else (a third partner, a founder, an investor) gets 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass, naming the route); a party's own call writes none (D9040)."
   },
   "POST /api/partnernet/relationships/:id/interactions/:uid/void": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "ownRelationship() then recorder-only: a non-party gets 403; the other party, and an admin or Super Admin (whose bypass is audited), get 403 because only the touch's recorder may void it; no credentials 401. No refusal changes a row beyond the admin's audit line (D9040)."
   },
   "POST /api/partnernet/relationships/:id/reminders": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Party check (ownRelationship or inline): only partner_a_id or partner_b_id; anyone else (a third partner, a founder, an investor) gets 403 and nothing is written; no credentials 401. An admin or Super Admin passes, and the bypass writes one admin_audit_log row (partnernet_admin_bypass, naming the route); a party's own call writes none (D9040)."
   },
   "POST /api/partnernet/relationships/:id/withdraw": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_network_d4570.test.ts",
+    "note": "Only the request's author (requested_by = caller); the person it names, any other partner, a founder, an investor, an admin and a Super Admin get 404 naming nothing; no credentials 401. No refusal changes a row (D9040)."
   }
 }
