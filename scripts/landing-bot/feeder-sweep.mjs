@@ -1,14 +1,32 @@
 import { breakers, count, eligible, mode } from './rules.mjs';
-import { selectQueueEntries } from './feeder-plan.mjs';
+import { selectQueueEntries, waitingReason } from './feeder-plan.mjs';
 import { hold } from './concurrency.mjs';
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
 
+/**
+ * #6481 (D6481-p2): the landing rules issue. The issue's safety rules keep scheduled sweeps off until its rules are
+ * merged; a named dispatch (the one-T0 rehearsal) may run before. Closed as completed is the only open gate.
+ */
+export const RULES_ISSUE = 6480;
+
+// The feeder's own switch, LANDING_BOT_FEEDER_ENABLED (rules.mjs SWITCHES). LANDING_BOT_ENABLED does not reach it.
 function enabled({ env, event, dispatchPr }) {
   if (!count(env?.LANDING_BOT_FEED_PER_SWEEP)) return false;
-  const configured = mode(env);
+  const configured = mode(env, 'feeder');
   if (event === 'workflow_dispatch') return configured !== 'off' && positive(dispatchPr);
   return event === 'schedule' && configured === 'all';
+}
+
+// One visible line per waiting PR (or for the whole sweep, number null): checks, policy, conflict, hold, capacity.
+const wait = (options, number, line) => { options.onWait?.({ number, line }); return null; };
+
+async function rolloutAllows({ reader, event }) {
+  if (event !== 'schedule') return true;
+  try {
+    const issue = await reader.readRulesIssue();
+    return issue?.number === RULES_ISSUE && issue.state === 'closed' && issue.state_reason === 'completed';
+  } catch { return false; }
 }
 
 // Treat anything other than a green run as unsuccessful, including timeouts and cancellations.
@@ -23,12 +41,20 @@ function belowFailureThreshold(runs, configured) {
   return runs.filter(r => r.conclusion !== 'success').length / runs.length < threshold;
 }
 
-async function snapshot({ reader, env }) {
+async function snapshot(options) {
+  const { reader, env } = options;
+  if (!(await rolloutAllows(options))) {
+    return wait(options, null, `hold: scheduled admission waits for #${RULES_ISSUE} (the landing rules) to close as completed`);
+  }
   const [health, queue] = await Promise.all([reader.readMainHealth(), reader.readQueueState()]);
   const breaker = breakers('feeder', { ...health, env });
-  if (breaker.open || !belowFailureThreshold(health.recentGroupRuns, env.LANDING_BOT_QUEUE_FAIL_BREAKER)) return null;
+  if (breaker.open) return wait(options, null, `hold: ${breaker.reasons.join('; ')}`);
+  if (!belowFailureThreshold(health.recentGroupRuns, env.LANDING_BOT_QUEUE_FAIL_BREAKER)) {
+    return wait(options, null, 'hold: the merge-group failure share is not verified below LANDING_BOT_QUEUE_FAIL_BREAKER');
+  }
   const capacity = { perSweep: count(env.LANDING_BOT_FEED_PER_SWEEP), freeQueueSlots: queue.freeQueueSlots };
-  return Object.values(capacity).every(positive) ? { capacity, breaker } : null;
+  if (!positive(capacity.freeQueueSlots)) return wait(options, null, 'capacity: the merge queue has no free build slot');
+  return positive(capacity.perSweep) ? { capacity, breaker } : null;
 }
 
 async function orderedNumbers({ reader, event, dispatchPr }) {
@@ -56,7 +82,7 @@ async function readRow({ reader, env, event, dispatchPr, repo }, number, breaker
   const { pull, files } = facts;
   if (pull?.number !== number || facts.number !== number) throw new Error('GitHub returned a different PR');
   const common = eligible(pull, { kind: 'feeder', repo, files, breakers: breaker, env, event, dispatchPr });
-  return { pull, landing, evidence: { ...facts, eligible: common.ok } };
+  return { pull, landing, evidence: { ...facts, eligible: common.ok, eligibleReasons: common.reasons } };
 }
 
 /** Read-only plan. The workflow stores only PR numbers and exact heads in the reservation. */
@@ -72,13 +98,13 @@ export async function planSweep(options) {
   for (const number of await orderedNumbers(options)) {
     const row = await readRow(options, number, state.breaker);
     const [entry] = selectQueueEntries([row], { ...state.capacity, remainingDaily: 1 });
-    if (!entry) continue;
+    if (!entry) { wait(options, number, waitingReason(row) ?? 'capacity: no slot left in this sweep'); continue; }
     const mine = await admissionFacts(options, row);
     const held = hold(mine, queued && [...queued, ...admitted]);
     if (held) { options.onHold?.(held); continue; }
     if (!dailyChecked) {
       const remaining = await options.readRemainingDaily();
-      if (!positive(remaining)) return [];
+      if (!positive(remaining)) { wait(options, null, 'capacity: the daily first-entry cap (LANDING_BOT_DAILY_FEEDS) is spent'); return []; }
       cap = Math.min(cap, remaining);
       dailyChecked = true;
     }
@@ -114,7 +140,8 @@ export async function applySweep(options, plan) {
     slotsLeft = Math.min(slotsLeft, state.capacity.freeQueueSlots);
     const row = await readRow(options, number, state.breaker);
     const [entry] = selectQueueEntries([row], { ...state.capacity, remainingDaily: 1 });
-    if (!entry || entry.expectedHeadOid !== reserved.get(number)) continue;
+    if (!entry) { wait(options, number, waitingReason(row) ?? 'capacity: no slot left in this sweep'); continue; }
+    if (entry.expectedHeadOid !== reserved.get(number)) { wait(options, number, 'checks: the head moved after the plan; a later sweep reads the new head'); continue; }
     // #8076: re-read the queue before each write; the plan's view of it may be stale.
     const inQueue = await queueEntries(options);
     const mine = await admissionFacts(options, row);

@@ -29,6 +29,8 @@ function database() {
   for (const file of ['375_research_company_directory_columns', '376_research_taxonomy', '379_market_intel_index_basis',
     '406_research_fund_sources', '202611191833_7707_market_intel_row_dates_runs', '202611220337_7708_market_intel_index_window',
     '202611250114_7713_company_directory_sector_index']) db.exec(sqlFile(file));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT, founder_id INTEGER, is_active INTEGER, jwt_min_iat INTEGER);
     INSERT INTO users VALUES (1, 'founder', NULL, 1, NULL);
     INSERT INTO research_taxonomy_overrides (kind, raw_value, target) VALUES

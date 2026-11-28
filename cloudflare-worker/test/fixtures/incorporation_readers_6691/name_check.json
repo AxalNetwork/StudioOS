@@ -1,0 +1,38 @@
+{
+  "us_de_ccorp": {
+    "registry": "de",
+    "status": "unavailable",
+    "reason": "de_register_requires_manual_check",
+    "source": "none"
+  },
+  "us_wy_ccorp": {
+    "registry": "wy",
+    "status": "unavailable",
+    "reason": "wy_register_requires_manual_check",
+    "source": "none"
+  },
+  "us_de_llc": {
+    "registry": "de",
+    "status": "unavailable",
+    "reason": "de_register_requires_manual_check",
+    "source": "none"
+  },
+  "uk_ltd": {
+    "registry": "uk",
+    "status": "unavailable",
+    "reason": "uk_requires_api_key_or_browser",
+    "source": "none"
+  },
+  "sg_pte": {
+    "registry": "sg",
+    "status": "unavailable",
+    "reason": "sg_register_not_configured",
+    "source": "none"
+  },
+  "ee_oy": {
+    "registry": "ee",
+    "status": "unavailable",
+    "reason": "ee_requires_browser",
+    "source": "none"
+  }
+}

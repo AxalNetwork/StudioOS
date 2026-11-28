@@ -3,7 +3,8 @@
  * one row per merge-group head SHA (request, first runner start, last required
  * check's wait and runtime, queue entry and removal, recorded reason)
  * classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`,
- * `merged` or `missing-evidence`, and the scorecard's request budget.
+ * `merged` or `missing-evidence`, and the scorecard's request budget. D9027:
+ * the queue rows by the agent slot the PR's commit trailers name.
  */
 import * as ci from './ciClassify.mjs';
 import { REQUIRED } from './requiredChecks.mjs';
@@ -428,6 +429,89 @@ export function outcomeCounts(rows) {
   return { n: rows.length, counts: Object.fromEntries(OUTCOMES.map(k => [k, rows.filter(r => r.outcome === k).length])) };
 }
 
+/*
+ * D9027 (#9027): the queue rows by agent slot. The slot is the one
+ * agent-provenance.mjs's classifyPr reads from the `Agent-Slot` trailers of
+ * the commits on the PR, taken from the `committed` events of the timeline
+ * the collector already reads. It is never guessed from the branch name. A PR
+ * none of whose commits names an identity trailer is `human`. Every other PR
+ * whose commits name no one slot goes to `untrailed`: no trailer, two slots,
+ * or only the legacy `Claude-Session` trailer, which stands in for
+ * `Agent-Session` before the cutover and carries no slot.
+ *
+ * This file does not import agent-provenance.mjs: the landing bot workflows
+ * load it (through queueDeadline.mjs and prRisk.mjs) from a sparse checkout
+ * without scripts/ci (workflow_sparse_imports_8314). The collector passes
+ * classifyPr in; the test holds SLOT and LEGACY_SESSION to that file's.
+ */
+export const HUMAN_ROW = 'human';
+export const UNTRAILED_ROW = 'untrailed';
+export const SMALL_SAMPLE = 3;
+/** agent-provenance.mjs's `Agent-Slot` shape and legacy session trailer. */
+export const SLOT = /^S(?:0[1-9]|[1-9][0-9])$/;
+export const LEGACY_SESSION = 'Claude-Session';
+
+/** The provenance of one PR from its raw timeline events: `classify` (classifyPr)'s status and slot, nothing else. */
+export function prProvenance(events, classify) {
+  const commits = (events || []).filter(e => e?.event === 'committed').map(e => ({
+    sha: String(e.sha ?? ''), parents: (e.parents || []).map(p => p?.sha).filter(Boolean),
+    committedAt: e.committer?.date ?? null, message: String(e.message ?? ''),
+  }));
+  const { status, slot } = classify({ number: null, commits });
+  return { status, slot };
+}
+
+/** The row a PR goes in: its slot, `human`, or `untrailed`. */
+export function slotRowOf(pr) {
+  const provenance = pr?.provenance;
+  if (provenance?.status === 'human') return HUMAN_ROW;
+  return typeof provenance?.slot === 'string' && SLOT.test(provenance.slot) ? provenance.slot : UNTRAILED_ROW;
+}
+
+/**
+ * Merged PRs grouped by slotRowOf, slots first in order, then `human`, then
+ * `untrailed`. Each row: merged PRs, p50 queue to merge from the first entry,
+ * mean entries per queued merged PR, entries a removal ended, and the
+ * merge-group candidates of those PRs whose outcome is `failed-check`
+ * (`rows` from candidateRows). `small` marks fewer than SMALL_SAMPLE PRs.
+ */
+export function bySlot(prs, rows = []) {
+  const groups = new Map();
+  for (const p of prs.filter(p => p.mergedAt)) {
+    const key = slotRowOf(p);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  const rank = key => (key === HUMAN_ROW ? 1 : key === UNTRAILED_ROW ? 2 : 0);
+  return [...groups].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b)).map(([row, group]) => {
+    const numbers = new Set(group.map(p => p.number));
+    return {
+      row, merged: group.length, small: group.length < SMALL_SAMPLE,
+      queueToMerge: queueToMergeFirst(group).p50,
+      entries: mean(mergedQueued(group).map(p => everyEntry(p).length)),
+      removed: group.reduce((sum, p) => sum + everyEntry(p).filter(e => e.endEvent === 'removed_from_merge_queue').length, 0),
+      failed: rows.filter(r => r.outcome === 'failed-check' && numbers.has(r.pr)).length,
+    };
+  });
+}
+
+const figure = value => (value === null ? '-' : value.toFixed(1));
+
+/** The by-slot section's Markdown lines. */
+export function slotSection(prs, rows = []) {
+  const slots = bySlot(prs, rows);
+  const lines = ['', '### Queue by agent slot', '',
+    `The slot is the \`Agent-Slot\` trailer on the PR's commits, never the branch name. \`${HUMAN_ROW}\`: no identity trailer on any commit. `
+    + `\`${UNTRAILED_ROW}\`: no single slot, or only the legacy \`${LEGACY_SESSION}\` trailer. A row of fewer than ${SMALL_SAMPLE} merged PRs is a small sample.`, ''];
+  if (!slots.length) return [...lines, 'No merged PRs in the window.'];
+  lines.push('| Slot | Merged PRs | Queue to merge, from the first entry, median (min) | Entries per merged PR (mean) | Removed entries | Failed-check candidates |',
+    '| --- | --- | --- | --- | --- | --- |');
+  for (const s of slots) {
+    lines.push(`| ${s.row}${s.small ? ' (small sample)' : ''} | ${s.merged} | ${figure(s.queueToMerge.value)} | ${figure(s.entries.value)} | ${s.removed} | ${s.failed} |`);
+  }
+  return lines;
+}
+
 const show = ({ value, n }, scale = 1) => value === null ? `n/a (n=${n})` : `${(value * scale).toFixed(1)} (n=${n})`;
 const pair = result => `p50 ${show(result.p50)}, p90 ${show(result.p90)}`;
 
@@ -463,6 +547,7 @@ export function report({ runs, queueRuns = [], prs, start, now, requests, queueL
     `| Main push SHAs without a green queue run | ${show(pushesWithoutQueueRun(runs))} |`,
     `| Cancelled run share (%) | ${show(cancelledShare(runs), 100)} |`,
     `| Merge-group candidates by outcome | ${outcomes.n ? Object.entries(outcomes.counts).map(([k, v]) => `${k} ${v}`).join(', ') : 'n/a'} (n=${outcomes.n}); deadline ${deadline ? `${deadline} min` : 'unread'}; one row per head SHA in the candidates artifact |`,
+    ...slotSection(prs, rows),
   ].join('\n');
 }
 
