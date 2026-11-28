@@ -256,7 +256,11 @@ test('D4538 p2: base update available is false at the base version, true after H
   assert.equal(l.reason, REASON);
   assert.deepEqual([l.base.uid, l.base.current_version, l.base.retired, l.base.suspended, l.base.version.version, l.base.newest], [hq, 1, false, false, 1, null]);
   assert.deepEqual(l.company, { side: 'version', version: 1 });
-  assert.deepEqual(l.versions, [{ version: 1, based_on_version: 1 }], 'the published company version records its base');
+  assert.deepEqual(l.versions.map((v: any) => [v.version, v.based_on_version, v.by_name]), [[1, 1, 'Eve Editor']], 'the published company version records its base and publisher');
+  assert.match(l.versions[0].published_at, /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/, 'and when it was published');
+  // D8826: the publisher's display name only; no uid and no address is in the read.
+  assert.deepEqual(Object.keys(l.versions[0]).sort(), ['based_on_version', 'by_name', 'published_at', 'version']);
+  assert.doesNotMatch(at.text, /editor@example\.test|u-editor/, 'the publisher\'s email and uid are not sent');
   assert.deepEqual(l.fields.filter((f: any) => f.company_changed).map((f: any) => f.field), ['name', 'steps']);
   assert.equal(l.fields.some((f: any) => f.base_changed || f.conflict), false);
 
@@ -288,6 +292,24 @@ test('D4538 p2: base update available is false at the base version, true after H
   w.db.prepare(`UPDATE agent_skills SET status = 'retired' WHERE uid = ?`).run(hq);
   const gone = (await call(w, EDITOR, 'GET', `/api/teams/skills/${ext}/base`)).body.lineage;
   assert.deepEqual([gone.base.retired, gone.base_update_available, row(w, ext).status], [true, false, 'published']);
+});
+
+test('D8826: History\'s publisher — a blank name, a name holding an address and a missing user read null', async () => {
+  const w = world();
+  const hq = await hqSkill(w);
+  const ext = (await extend(w, hq)).body.skill.uid;
+  assert.equal((await call(w, EDITOR, 'POST', `/api/teams/skills/${ext}/publish`)).status, 200);
+  const who = async () => (await call(w, MEMBER, 'GET', `/api/teams/skills/${ext}/base`)).body.lineage.versions[0].by_name;
+  assert.equal(await who(), 'Eve Editor');
+  w.db.prepare('UPDATE users SET name = ? WHERE id = ?').run('  ', EDITOR);
+  assert.equal(await who(), null, 'a blank name is Not recorded');
+  w.db.prepare('UPDATE users SET name = ? WHERE id = ?').run('editor@example.test', EDITOR);
+  assert.equal(await who(), null, 'a name that is an address is never sent');
+  w.db.exec('PRAGMA foreign_keys = OFF');
+  w.db.prepare('DELETE FROM users WHERE id = ?').run(EDITOR);
+  assert.equal(await who(), null, 'a publisher with no user row is Not recorded');
+  // Another company still cannot read it.
+  assert.equal((await call(w, OTHER_EDITOR, 'GET', `/api/teams/skills/${ext}/base`)).status, 404);
 });
 
 test('D4538 p2: an extension cannot widen its tools past its base; it can narrow them', async () => {

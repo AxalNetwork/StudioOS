@@ -102,15 +102,13 @@ import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY_SLUGS } from '../services/agents/skillLibrary.generated';
 import { LIBRARY_UNREADABLE, loadSkillLibrary } from '../services/agents/skillLibraryAsset';
 import {
-  adoptionOf, catalogueCoverage, filtersApplied, matchesSkill, parseSkillFilters, publishedEvaluation,
+  FILTER_MODEL_IDS, HQ_COVERAGE_SQL, HQ_LINKS_SQL, adoptionOf, catalogueCoverage, filtersApplied, matchesSkill, parseSkillFilters, publishedEvaluation,
   type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type SkillFilters, type SkillLinkRow, type VersionEvalRow,
 } from '../services/agents/skillCoverage';
 import {
   EXECUTION_LATENCY_SQL, EXECUTIONS_SQL, OUTCOMES_SQL, executionsWindow, skillExecutions, type ExecutionRow, type LatencyRow, type OutcomeRow,
 } from '../services/agents/skillExecutions';
 import { readSkillOverlap } from '../services/agents/skillOverlap';
-import { CATALOGUE } from '../services/ai/catalogue';
-import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
 import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
 
@@ -283,9 +281,6 @@ adminHqSkills.get('/', async (c) => {
   });
 });
 
-/** D5970: the models a `model` filter may name: every chat model in the catalogue, a deprecated one included (its rows stay). */
-const FILTER_MODEL_IDS = CATALOGUE.filter((m) => MODEL_CONNECTIONS[m.id]?.operation === 'chat').map((m) => m.id);
-
 // D4536-p2 (#5969): each published HQ skill at its current version, its live cases (to name the cases a run takes, as
 // `casesOf` does) and the models its release manifest names. One read for the whole catalogue.
 const PUBLISHED_VERSIONS_SQL = `SELECT s.uid, s.slug, s.status, s.current_version, s.required_models_json,
@@ -375,22 +370,10 @@ async function libraryPublishedEvaluation(env: Env, category: ReadonlyMap<string
  * D5970: a filter keeps the HQ rows it matches, in memory; the pins are summed over those rows only.
  */
 async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, draftsWithoutCurrentEvaluation: number | null, filters: SkillFilters | null) {
+  // D8912: the two reads' text lives beside the measures, shared with a company's own read.
   const [read, links] = await Promise.all([
-    env.DB.prepare(`SELECT s.scope, s.status, s.current_version,
-        CASE WHEN s.scope = 'hq' THEN s.uid END AS uid,
-        CASE WHEN s.scope = 'hq' THEN s.slug END AS slug,
-        CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
-        CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
-        (SELECT COUNT(*) FROM agent_skill_cases k WHERE k.skill_id = s.id AND k.removed_at IS NULL) AS live_cases,
-        (SELECT COUNT(*) FROM agent_skill_roles r WHERE r.skill_id = s.id) AS draft_roles,
-        (SELECT COUNT(*) FROM agent_skill_tags t WHERE t.skill_id = s.id) AS draft_tags,
-        EXISTS (SELECT 1 FROM agent_skill_reviews q WHERE q.skill_id = s.id AND q.status = 'requested') AS review_requested
-      FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version`).all<CoverageRow>(),
-    env.DB.prepare(`SELECT s.uid, COUNT(l.id) AS links, group_concat(DISTINCT l.agent_id) AS agent_ids,
-        COALESCE(SUM(CASE WHEN l.version < s.current_version THEN 1 ELSE 0 END), 0) AS behind_current
-      FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id AND s.scope = 'hq'
-      JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'
-      GROUP BY s.id`).all<SkillLinkRow>(),
+    env.DB.prepare(HQ_COVERAGE_SQL).all<CoverageRow>(),
+    env.DB.prepare(HQ_LINKS_SQL).all<SkillLinkRow>(),
   ]);
   const all = read.results ?? [];
   const rows = filters ? all.filter((r) => matchesSkill(r, filters, category)) : all;
