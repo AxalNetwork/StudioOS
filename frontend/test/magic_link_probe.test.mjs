@@ -592,10 +592,11 @@ test('the new workflow is listed in the workflows README', () => {
     'add the magic-link-probe.yml row to .github/workflows/README.md');
   // The README is the "what does this need to be green" doc; a probe whose
   // four secrets are undocumented is a probe nobody can turn on.
-  // Select the workflow's configuration bullet, not a summary row or mention: the insert probe's
+  // Select the workflow's own row in the purpose table (#9054: the one hand-written row per
+  // workflow, below the generated block), not a generated row or a mention: the insert probe's
   // row cross-references this workflow by name, and an `includes` lookup picked
   // up that row instead — then failed for lacking secrets it never needed.
-  const row = readme.split('\n').find((l) => l.startsWith('- `magic-link-probe.yml` ·')) || '';
+  const row = readme.slice(readme.indexOf('<!-- workflow-inventory:end -->')).split('\n').find((l) => l.startsWith('| `magic-link-probe.yml` |')) || '';
   for (const secret of ['MAGIC_PROBE_EMAIL', 'GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN']) {
     assert.ok(row.includes(secret), `the README row does not name ${secret}`);
   }
