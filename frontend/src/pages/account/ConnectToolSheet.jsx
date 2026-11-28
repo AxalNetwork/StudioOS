@@ -9,9 +9,12 @@ import { connectorsApi } from '../../lib/api/connectors';
 import { successBanner } from './githubSync';
 import { Banner, ConnectorPanel, Group, Row, SheetFrame, disconnect, openingView, useConnectors } from './ConnectorSheet';
 import {
-  TOOL_FILTERS, accountDisconnectNote, companiesWith, companiesWithout, companyBanner, linkPrompt, projectCompany, retryOutcome, scopeLadder, servesCompany,
-  stopForCompanyNote, toolBanner, toolDeepLink, toolGroups, toolRow, ventureOwner,
+  TOOL_FILTERS, accountDisconnectNote, companiesWith, companiesWithout, companyBanner, disconnectResult, disconnectReview, linkPrompt, projectCompany,
+  retryOutcome, rowLastRead, scopeLadder, servesCompany, stopForCompanyNote, toolBanner, toolDeepLink, toolGroups, toolRow, ventureOwner,
 } from './connectorsModel';
+import { cyclesApi } from '../../lib/api/cycles.js';
+import { useViewMode } from '../../contexts/ViewModeContext.js';
+import { isFounderPreview } from '../cycles/previewUploadModel.js';
 import { useAuth } from '../../hooks/useAuthSync';
 import { companyActionsApi } from '../../lib/api/companyActions.js';
 import { ActionDialog } from './companies/LifecycleDialogs.jsx';
@@ -53,6 +56,14 @@ import { ActionDialog } from './companies/LifecycleDialogs.jsx';
  * anyone else is told who the owner is and can copy a link to this setup.
  * Disconnect is a scope review: "Stop using for {company}" first, then the
  * account-wide disconnect, which names every company the connection serves.
+ *
+ * D8774 part 3 (BLS07, BLS04, BLS10): stopping or disconnecting is three
+ * steps on the row, Scope → Review → Result. Review says what stops, what
+ * stays and who acts, and its destructive button is never focused first;
+ * Result is a polite status. The GitHub row names the last successful read of
+ * this venture, from Operating systems' own read. A Super Admin previewing
+ * the founder shell is told that the tools listed are their own and that
+ * anything done here, linking included, is written as them.
  */
 
 // D703 (#1665): `asPage` is the cycle route's page mode below 1024px. Share an update's nested Connect a tool passes none, so it stays a dialog.
@@ -83,7 +94,23 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged,
     setSearchParams((old) => { const next = new URLSearchParams(old); for (const k of strip) next.delete(k); return next; }, { replace: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const linked = () => { setProjectRead((n) => n + 1); reload(); };
-  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} deepLink={`?${deepSearch}`} asPage={asPage} user={user} onLinked={linked} />;
+  // D8774 part 3 (BLS04): the last successful read of this venture, from Operating systems' read, only
+  // while the viewer's GitHub is connected and the venture is in a company. Undefined while read, null unreadable.
+  const githubConnected = data.catalogue.some((p) => p.key === 'github' && p.connection);
+  const [tools, setTools] = useState(undefined);
+  const [toolsRead, setToolsRead] = useState(0);
+  useEffect(() => {
+    if (!projectId || !companyId || !githubConnected) return undefined;
+    let live = true;
+    setTools(undefined);
+    cyclesApi.module('build', projectId, 'operating-systems').then(
+      (r) => { if (live) setTools(r?.parts?.tools ?? null); },
+      () => { if (live) setTools(null); },
+    );
+    return () => { live = false; };
+  }, [projectId, companyId, githubConnected, toolsRead]);
+  const ventureRead = projectId && companyId && githubConnected ? { tools, retry: () => setToolsRead((n) => n + 1) } : null;
+  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} deepLink={`?${deepSearch}`} asPage={asPage} user={user} onLinked={linked} ventureRead={ventureRead} />;
 }
 
 /**
@@ -94,14 +121,19 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged,
  * inside it. Done closes it and the sheet re-reads the venture, so the setup
  * continues with "Use {tool} for {company}".
  */
-export function LinkCompanyDialog({ projectId, ventureName, companies, onClose, onDone }) {
+export function LinkCompanyDialog({ projectId, ventureName, companies, onClose, onDone, actor = null }) {
   const [to, setTo] = useState(null);
   const options = (Array.isArray(companies) ? companies : [])
     .filter((c) => Number.isSafeInteger(Number(c?.id)) && Number(c.id) > 0)
     .map((c) => ({ value: String(c.id), label: c.company_name || c.name || 'Unnamed company' }));
   const copy = {
     title: `Link ${ventureName || 'this venture'} to a company`,
-    body: ['Tools turned on for that company can then feed it. It then shows only under that company.', 'You come back to Connect a tool after.'],
+    body: [
+      'Tools turned on for that company can then feed it. It then shows only under that company.',
+      // D8774 part 3 (BLS10): in Super Admin preview the dialog says whose name the move carries.
+      ...(actor ? [`Axal admins may move a venture. This link is written as you, ${actor}, not as the founder.`] : []),
+      'You come back to Connect a tool after.',
+    ],
     button: 'Link', cancel: 'Cancel',
   };
   return (
@@ -126,12 +158,15 @@ export function LinkCompanyDialog({ projectId, ventureName, companies, onClose, 
  * hand it each state. `project` is `GET /projects/:id` (undefined while read,
  * null when unreadable, false when the sheet has no project).
  */
-export function ConnectToolView({ data, onClose, project = false, projectId = null, deepLink = '', asPage, user = null, onLinked }) {
+export function ConnectToolView({ data, onClose, project = false, projectId = null, deepLink = '', asPage, user = null, onLinked, ventureRead = null }) {
+  const preview = isFounderPreview(useViewMode());
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
   const [panel, setPanel] = useState(null); // { key, view }
-  // Per row: an inline Disconnect confirm, and Try again's answer.
+  // Per row: the stop or disconnect steps (D8774 part 3, BLS07: { key, step: scope|review|result, choice, result }),
+  // and Try again's answer.
   const [confirm, setConfirm] = useState(null);
+  const actor = typeof user?.name === 'string' && user.name.trim() ? user.name.trim() : null;
   const [rowNote, setRowNote] = useState({});
   const [busy, setBusy] = useState(null);
   // The deep link opens its panel once the catalogue is read: only a key it holds opens anything.
@@ -210,9 +245,12 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
     setBusy(null);
     if (out.tone === 'ok') data.reload();
   };
+  const facts = () => ({ scope, companies: data.companies, ventureName, actor });
   const doDisconnect = async (p) => {
     setBusy(p.key);
-    try { await disconnect(p); setConfirm(null); data.reload(); }
+    // The Result is worded from the connection as it was, before the list is read again.
+    const before = { ...facts() };
+    try { await disconnect(p); setConfirm({ key: p.key, step: 'result', choice: 'account', result: disconnectResult(p, 'account', { ...before, at: new Date() }) }); data.reload(); }
     catch (e) { setRowNote((n) => ({ ...n, [p.key]: { tone: 'danger', text: e?.message || 'The tool could not be disconnected.' } })); }
     finally { setBusy(null); }
   };
@@ -220,7 +258,12 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
   // D8774 (BLS07): the scoped stop. The PUT replaces the set, so the others are sent back; the account connection stays.
   const stopHere = async (p) => {
     setBusy(p.key);
-    try { await connectorsApi.setCompanies(p.connection.uid, companiesWithout(p.connection, scope.companyId)); setConfirm(null); data.reload(); }
+    const before = { ...facts() };
+    try {
+      await connectorsApi.setCompanies(p.connection.uid, companiesWithout(p.connection, scope.companyId));
+      setConfirm({ key: p.key, step: 'result', choice: 'stop', result: disconnectResult(p, 'stop', { ...before, at: new Date() }) });
+      data.reload();
+    }
     catch (e) { setRowNote((n) => ({ ...n, [p.key]: { tone: 'danger', text: e?.message || 'The company could not be turned off.' } })); }
     finally { setBusy(null); }
   };
@@ -245,7 +288,13 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
     if (rowNote[p.key]?.reconnect || row.action === 'reconnect') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pre' })}>Reconnect</button>;
     if (row.action === 'upgrade') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: 'pro' })}>{row.actionLabel}</button>;
     if (row.action === 'retry') return <button type="button" className={BTN.primary} data-testid={testid} disabled={busy === p.key} onClick={() => retry(p)}>{busy === p.key ? 'Trying…' : row.actionLabel}</button>;
-    if (row.action === 'disconnect') return <button type="button" className={BTN.ghost} data-testid={testid} aria-expanded={confirm === p.key} onClick={() => setConfirm(confirm === p.key ? null : p.key)}>Disconnect</button>;
+    if (row.action === 'disconnect') {
+      const open = confirm?.key === p.key;
+      // With a scoped stop to offer, Scope comes first; otherwise there is one thing to stop, so Review.
+      const first = scope?.state === 'ok' && servesCompany(p.connection, scope.companyId) === true
+        ? { key: p.key, step: 'scope', choice: 'stop' } : { key: p.key, step: 'review', choice: 'account' };
+      return <button type="button" className={BTN.ghost} data-testid={testid} aria-expanded={open} onClick={() => setConfirm(open ? null : first)}>Disconnect</button>;
+    }
     if (row.action === 'connect') return <button type="button" className={BTN.primary} data-testid={testid} onClick={() => setPanel({ key: p.key, view: openingView(p) })}>Connect</button>;
     return null;
   };
@@ -255,6 +304,11 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
       {/* The rows keep the side sheet's own insets. */}
       <div className="-mx-5 -my-4">
       {data.status === 'unreadable' && <div className="mx-5 mt-4"><Unreadable what="The tools" claim="This is not a claim that none is connected." onRetry={data.reload} /></div>}
+      {preview && (
+        <Banner tone="warn" data-testid="connect-tool-preview">
+          {`⚠ Super Admin preview of ${project && typeof project === 'object' && typeof project.founder?.name === 'string' && project.founder.name.trim() ? `${project.founder.name.trim()}’s` : 'the founder’s'} view. The tools listed are your own connections, and anything you do here, linking included, is written as you${actor ? `, ${actor}` : ''}.`}
+        </Banner>
+      )}
       {companyNote && <Banner tone="warn" data-testid={`connect-tool-company-${scope.state}`}>{companyNote}</Banner>}
       {owner && (
         <div className="mx-5 mt-3 flex flex-wrap items-center gap-2" data-testid={`connect-tool-link-${owner.canLink ? 'owner' : 'member'}`}>
@@ -265,7 +319,7 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
         </div>
       )}
       {linking && (
-        <LinkCompanyDialog projectId={projectId} ventureName={ventureName} companies={data.companies} onClose={() => setLinking(false)}
+        <LinkCompanyDialog projectId={projectId} ventureName={ventureName} companies={data.companies} actor={preview ? (actor || 'the Super Admin') : null} onClose={() => setLinking(false)}
           onDone={() => { setLinking(false); onLinked?.(); }} />
       )}
       {banner && <Banner tone={banner.tone} data-testid={`connect-tool-${banner.view}`}>{banner.text}</Banner>}
@@ -303,20 +357,16 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
                     {ladder.map((l) => <div key={l.key} className="flex gap-1" data-testid={`tool-scope-${p.key}-${l.key}`}><dt className="font-semibold">{l.label}:</dt><dd className="m-0">{l.value}</dd></div>)}
                   </dl>
                 )}
-                {confirm === p.key && (
-                  <div className="flex flex-col gap-2 border-t border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-800 dark:bg-gray-800" data-testid={`tool-confirm-${p.key}`}>
-                    {scoped && (
-                      <div className="flex flex-wrap items-center justify-end gap-2" data-testid={`tool-stop-${p.key}`}>
-                        <span className="mr-auto min-w-0 text-[12px] text-axal-muted dark:text-gray-300">{stopForCompanyNote(p, scope, data.companies)}</span>
-                        <button type="button" className={BTN.ghost} disabled={busy === p.key} onClick={() => stopHere(p)} data-testid={`tool-confirm-stop-${p.key}`}>{`Stop using for ${scope.name || 'this company'}`}</button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <span className="mr-auto min-w-0 text-[12px] text-axal-muted dark:text-gray-300" data-testid={`tool-confirm-account-${p.key}`}>{`Disconnect ${p.display_name} from your account? ${accountDisconnectNote(p, data.companies)}`}</span>
-                      <button type="button" className={BTN.ghost} onClick={() => setConfirm(null)}>Keep it</button>
-                      <button type="button" className={BTN.dangerSolid} disabled={busy === p.key} onClick={() => doDisconnect(p)} data-testid={`tool-confirm-disconnect-${p.key}`}>{busy === p.key ? 'Disconnecting…' : 'Disconnect from your account'}</button>
-                    </div>
-                  </div>
+                {p.key === 'github' && ventureRead && ladder && <LastRead ventureRead={ventureRead} ventureName={ventureName} />}
+                {confirm?.key === p.key && (
+                  <StopSteps p={p} step={confirm.step} choice={confirm.choice} result={confirm.result} scoped={scoped} busy={busy === p.key}
+                    scopeNote={scoped ? stopForCompanyNote(p, scope, data.companies) : null} accountNote={accountDisconnectNote(p, data.companies)}
+                    review={disconnectReview(p, confirm.choice, facts())} companyName={scope?.name || 'this company'}
+                    onChoose={(choice) => setConfirm({ key: p.key, step: 'scope', choice })}
+                    onReview={() => setConfirm((c) => ({ ...c, step: 'review' }))}
+                    onBack={() => (scoped ? setConfirm((c) => ({ ...c, step: 'scope' })) : setConfirm(null))}
+                    onCancel={() => setConfirm(null)}
+                    onConfirm={() => (confirm.choice === 'stop' ? stopHere(p) : doDisconnect(p))} />
                 )}
                 {note && <p role={note.tone === 'danger' ? 'alert' : 'status'} className={`px-3 pb-2 text-[12px] ${note.tone === 'danger' ? 'text-red-700 dark:text-red-300' : note.tone === 'warn' ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`} data-testid={`tool-note-${p.key}`}>{note.text}</p>}
               </div>
@@ -326,5 +376,89 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
       ))}
       </div>
     </ActionSheet>,
+  );
+}
+
+/**
+ * D8774 part 3 (BLS07): Scope → Review → Result on one row. Scope picks what
+ * to stop (radios, the scoped stop first, Q1 A); Review lists what stops, what
+ * stays and who, with focus on its heading so the destructive button is never
+ * focused first; Result is a polite status with the time it was done.
+ */
+function StopSteps({ p, step, choice, result, scoped, busy, scopeNote, accountNote, review, companyName, onChoose, onReview, onBack, onCancel, onConfirm }) {
+  const heading = useRef(null);
+  useEffect(() => { if (step !== 'scope') heading.current?.focus?.(); }, [step]);
+  const wrap = 'flex flex-col gap-2 border-t border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-800 dark:bg-gray-800';
+  const tap = 'min-h-[44px] sm:min-h-0';
+  if (step === 'result' && result) {
+    return (
+      <div className={wrap} data-testid={`tool-confirm-${p.key}`}>
+        <div role="status" aria-live="polite" data-testid={`tool-result-${p.key}`}>
+          <h3 ref={heading} tabIndex={-1} className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">✓ {result.title}</h3>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-300">{result.detail}</p>
+        </div>
+        <div className="flex justify-end"><button type="button" className={`${BTN.ghost} ${tap}`} onClick={onCancel} data-testid={`tool-result-done-${p.key}`}>Back to Connect a tool</button></div>
+      </div>
+    );
+  }
+  if (step === 'scope') {
+    const option = (value, title, note, testid) => (
+      <label className={`flex items-start gap-2 rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 ${tap}`}>
+        <input type="radio" name={`stop-${p.key}`} checked={choice === value} onChange={() => onChoose(value)} data-testid={testid} className="mt-0.5" />
+        <span className="min-w-0"><b className="text-axal-ink dark:text-gray-100">{title}</b><span className="block text-axal-muted dark:text-gray-400">{note}</span></span>
+      </label>
+    );
+    return (
+      <div className={wrap} data-testid={`tool-confirm-${p.key}`}>
+        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" data-testid={`tool-scope-step-${p.key}`}>
+          <legend className="mb-1 text-[12px] font-semibold text-axal-ink dark:text-gray-100">What do you want to stop?</legend>
+          {scoped && <div data-testid={`tool-stop-${p.key}`}>{option('stop', `Stop using ${p.display_name} for ${companyName}`, scopeNote, `tool-choose-stop-${p.key}`)}</div>}
+          <div data-testid={`tool-confirm-account-${p.key}`}>{option('account', `Disconnect ${p.display_name} from your account`, accountNote, `tool-choose-account-${p.key}`)}</div>
+        </fieldset>
+        <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Either way, items already in Build stay.</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className={`${BTN.ghost} ${tap}`} onClick={onCancel}>Cancel</button>
+          <button type="button" className={`${BTN.primary} ${tap}`} onClick={onReview} data-testid={`tool-review-${p.key}`}>Review</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={wrap} data-testid={`tool-confirm-${p.key}`}>
+      <h3 ref={heading} tabIndex={-1} className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid={`tool-review-title-${p.key}`}>{review.title}</h3>
+      <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[12px]" data-testid={`tool-review-rows-${p.key}`}>
+        {review.rows.map(([k, v]) => (
+          <div key={k} className="contents"><dt className="font-semibold text-axal-ink dark:text-gray-200">{k}</dt><dd className="m-0 text-axal-muted dark:text-gray-300">{v}</dd></div>
+        ))}
+      </dl>
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className={`${BTN.ghost} ${tap}`} onClick={onBack} data-testid={`tool-review-back-${p.key}`}>{scoped ? 'Back' : 'Keep it'}</button>
+        <button type="button" className={`${BTN.dangerSolid} ${tap}`} disabled={busy} onClick={onConfirm}
+          data-testid={choice === 'stop' ? `tool-confirm-stop-${p.key}` : `tool-confirm-disconnect-${p.key}`}>
+          {busy ? (choice === 'stop' ? 'Stopping…' : 'Disconnecting…') : review.button}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** D8774 part 3 (BLS04, BLS05, BLS10): the GitHub row's last successful read of this venture, or why it is not said. */
+function LastRead({ ventureRead, ventureName }) {
+  const { tools, retry } = ventureRead;
+  if (tools === undefined) return <p className="m-0 px-3 pb-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="tool-last-read-github">Reading the last successful read…</p>;
+  if (tools === null) {
+    return (
+      <p className="m-0 flex flex-wrap items-center gap-2 px-3 pb-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="tool-last-read-github">
+        <span>Last successful read: Unreadable. The sync history could not be read; this is not a claim that none happened.</span>
+        <button type="button" className="font-semibold text-axal-violet underline dark:text-violet-300" onClick={retry} data-testid="tool-last-read-retry">Try again</button>
+      </p>
+    );
+  }
+  const read = rowLastRead(tools, ventureName);
+  if (!read) return null;
+  return (
+    <p className="m-0 px-3 pb-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="tool-last-read-github">
+      {read.text}{read.stale && <> · <span className="font-semibold text-amber-800 dark:text-amber-300">◷ {read.stale}</span></>}
+    </p>
   );
 }
