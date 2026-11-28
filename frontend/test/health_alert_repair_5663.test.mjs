@@ -166,7 +166,7 @@ test('D8920: future-clock evidence accepts the frontend opt-in skips only with t
 test('D8920: each accepted frontend skip is still declared, with that reason, by its test file', () => {
   for (const { file, name, reason } of FRONTEND_SKIPS) {
     const source = readFileSync(file, 'utf8');
-    assert.ok(source.includes(name.replace(/'/g, "\\'")) || source.includes(name), `${file} no longer names "${name}"`);
+    assert.ok(source.includes(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")) || source.includes(name), `${file} no longer names "${name}"`);
     assert.ok(source.includes(`'${reason}'`), `${file} no longer skips with "${reason}"`);
   }
 });
