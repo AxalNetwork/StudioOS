@@ -78,11 +78,23 @@ test('the recipient line does not push the masthead into the raise strip', () =>
     recipient: {
       name: 'Alexandra Fitzwilliam-Kensington',
       email: 'alexandra@averylongfundname.example.com',
-      standing: 'Committed LP · full rights · $1,250K committed',
+      standing: 'Applicant · application in review',
     },
   });
   assert.ok(named.contentBottom <= PAGE_H_PT, 'a long recipient line still fits the page');
   assert.ok(named.bottom >= plain.bottom - 1, 'the recipient line never shortens the document');
+});
+
+// D9006 (#9006): the brief prints the chip's canvas words, the amount once.
+test('D9006: the brief prints the standing chip\'s words with the commitment once', async () => {
+  const { standingWords } = await import('../src/pages/investor/fund/FundWorkspaceSupport.jsx');
+  const standing = standingWords('voting', 125_000_000);
+  assert.equal(standing, 'Full rights · $1,250,000.00');
+  const { doc } = layout({ recipient: { name: 'A. Partner', standing } });
+  const drawn = doc.calls.filter((c) => c.op === 'text').map((c) => c.text).join(' | ');
+  assert.match(drawn, /Prepared for A\. Partner · Full rights · \$1,250,000\.00/);
+  assert.equal(drawn.split('1,250,000').length - 1, 1, 'the amount is printed once');
+  assert.doesNotMatch(drawn, /K committed/);
 });
 
 test('every section actually renders a mark', () => {

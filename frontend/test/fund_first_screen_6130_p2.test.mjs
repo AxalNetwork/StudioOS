@@ -191,7 +191,27 @@ test('loading holds the standing back on the standalone page', () => {
     createElement(SpinoutLabLpWorkspacePage)));
   assert.match(html, /data-testid="lp-standing-loading"/);
   assert.match(html, /Reading your standing…/);
-  assert.doesNotMatch(html, /data-testid="lp-standing"|Invited guest|Fund workspace sections/);
+  assert.doesNotMatch(html, /data-testid="lp-standing"|Visitor · viewing by invitation|Fund workspace sections/);
+});
+
+// D9006 (#9006): the chip's amount is the record's commitment, in cents, summed per row.
+test('D9006: the standing carries the record\'s commitment in cents, and none when nothing is recorded', async () => {
+  const { lpAccessState } = await import('../src/lib/spinoutFundModel.js');
+  const { standingWords } = await import('../src/pages/investor/fund/FundWorkspaceSupport.jsx');
+  const committed = lpAccessState(PORTAL, null);
+  assert.equal(committed.state, 'committed');
+  assert.equal(committed.commitmentCents, 15_000_000);
+  assert.equal(standingWords(committed.state, committed.commitmentCents), 'Committed LP · $150,000.00');
+  const two = lpAccessState({ lp_holdings: [{}, {}], performance: [{ commitment: 200000.10 }, { commitment: 100000.20 }] }, null);
+  assert.equal(two.state, 'voting');
+  assert.equal(two.commitmentCents, 30_000_030, 'summed in whole cents per row');
+  assert.equal(standingWords(two.state, two.commitmentCents), 'Full rights · $300,000.30');
+  const odd = lpAccessState({ lp_holdings: [{}], performance: [{ commitment: 150000.02 }] }, null);
+  assert.equal(odd.commitmentCents, 15_000_002, 'a dollar figure with cents is not truncated by float error');
+  const unsigned = lpAccessState({ lp_holdings: [{}], performance: [{ commitment: null, lpa_signed: false }] }, null);
+  assert.equal(unsigned.commitmentCents, null, 'no commitment recorded is null, not 0');
+  assert.equal(lpAccessState(null, null).commitmentCents, null);
+  assert.equal(standingWords('committed', unsigned.commitmentCents), 'Committed LP', 'a previewed committed standing with no record prints no $0');
 });
 
 test('the page draws the first screen, then the sections in the standing\'s order, and stays under 500 lines', () => {
