@@ -25,7 +25,10 @@ const ANSWER = 'Independent veterinary clinics with two to five vets. Today they
   + 'they would switch because our scheduling cuts no-shows by a third and the reconciliation runs itself, which saves the bookkeeper a day a week.';
 
 async function openStudio(page, request, { width, height }) {
-  await prepare(page, request);
+  const m = await prepare(page, request);
+  // The product tour opens over a first Studio visit; it is seen, as a returning founder's is.
+  const seen = await request.post('/api/onboarding/meta', { headers: { Authorization: `Bearer ${m.token}` }, data: { tour_seen: true } });
+  expect(seen.ok()).toBe(true);
   await page.setViewportSize({ width, height });
   await page.route('**/api/advisor/start', async (route) => {
     const res = await route.fetch();
@@ -33,8 +36,10 @@ async function openStudio(page, request, { width, height }) {
     const q = body?.next_question || { id: 'synthetic-9289', skip_allowed: true };
     await route.fulfill({ response: res, json: { ...body, complete: false, next_question: { ...q, prompt: QUESTION } } });
   });
-  await page.goto('/studio');
+  await page.goto(`/studio?project_id=${m.oneClick.projectId}`);
   const field = page.getByRole('textbox', { name: 'Message Eadwyn' });
+  // Below 1024px Eadwyn is a collapsed row first (D8729); its Open draws the chat.
+  if (width < 1024) await page.getByRole('button', { name: 'Open', exact: true }).click({ timeout: 60_000 });
   await expect(field).toBeVisible({ timeout: 60_000 });
   await page.waitForLoadState('networkidle');
   return field;
@@ -63,6 +68,7 @@ test('390 px: the composer grows with a long answer and keeps two lines; the lon
   expect(full.height, 'up to its cap').toBeLessThanOrEqual(161);
   expect(lines(full, lineHeight)).toBeGreaterThanOrEqual(4);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing wider than the phone').toBe(true);
+  await field.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const shot = testInfo.outputPath('eadwyn-composer-390-long.png');
   await page.screenshot({ path: shot, fullPage: false });
   if (process.env.EADWYN_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.EADWYN_EVIDENCE_DIR, 'eadwyn-composer-390-long.png') });
