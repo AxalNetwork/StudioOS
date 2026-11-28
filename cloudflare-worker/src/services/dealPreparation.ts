@@ -14,13 +14,16 @@
  * "released" (unknown, corrupt or unreleased values are hidden, never published), and hides withdrawn/archived
  * releases from discovery (lists, counts, search, feeds) while transactional reads by a related party survive.
  *
- * DISABLED. Creating a draft, editing, submitting, reviewing, publishing and withdrawing are ADP-02/ADP-04's.
- * `PREPARATION_MUTATIONS_ENABLED` is false for each and a test pins it; no route here writes a preparation.
+ * ENABLED: CREATE AND EDIT ONLY (D5456-p2). ADP-02 turned on `create` and `edit` for a platform admin; the writes are
+ * `services/dealDraftStore.ts`, behind `routes/admin_deal_preparations.ts`. Submitting (ADP-02's last step, held for
+ * ADP-04's review rule), reviewing, publishing and withdrawing stay off, and a test pins each value. No route in this
+ * file writes a preparation, and a draft still owns no `deals` row until ADP-04's release.
  *
  * LOGS carry counts and outcome codes only, never a name, title or amount.
  */
 import type { Env, User } from '../types';
 import { branchOf } from '../util/branch';
+import type { investorManifestView } from './dealPackageSources';
 
 export const D5454_CONTRACT_VERSION = 1 as const;
 
@@ -35,11 +38,13 @@ export const PREPARATION_CAPABILITIES = ['read', 'create', 'edit', 'submit', 're
 export type PreparationCapability = typeof PREPARATION_CAPABILITIES[number];
 
 /**
- * Every mutation is off until its owning package enables it (ADP-02 create/edit/submit; ADP-04 review/publish/
+ * Each mutation is off until its owning package enables it (ADP-02 create/edit/submit; ADP-04 review/publish/
  * withdraw). Enabling one is a code change reviewed against the reader inventory in D5454.md, never a setting.
+ * `create` and `edit` were enabled by D5456-p2 (#5456) once D5454 §7's conditions were checked: the readers guard
+ * passes and the CHECKs `dp_private_owns_no_deal` / `dp_release_has_deal` stand. `submit` waits for ADP-04 (#5458).
  */
-export const PREPARATION_MUTATIONS_ENABLED: Readonly<Record<Exclude<PreparationCapability, 'read'>, false>> = Object.freeze({
-  create: false, edit: false, submit: false, review: false, publish: false, withdraw: false,
+export const PREPARATION_MUTATIONS_ENABLED: Readonly<Record<Exclude<PreparationCapability, 'read'>, boolean>> = Object.freeze({
+  create: true, edit: true, submit: false, review: false, publish: false, withdraw: false,
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -209,7 +214,7 @@ export type PreparationScopeRow = { scope_code?: unknown } | null | undefined;
  * support session, on the row's own deployment. Nothing else grants anything: not the partner licence (pipeline
  * read/move access is not preparation access), not the investor or founder licence, not preview mode. A frozen
  * admin keeps `read` (D135 never gates a read) and loses every write. Mutations are further gated by
- * `PREPARATION_MUTATIONS_ENABLED`, so today the most anyone holds is `read`.
+ * `PREPARATION_MUTATIONS_ENABLED`, so today the most anyone holds is `read`, `create` and `edit`.
  */
 export function preparationCapabilities(
   env: Pick<Env, 'BRANCH_CODE'>, user: User | null | undefined, row: PreparationScopeRow, ctx: CapabilityContext,
@@ -275,6 +280,10 @@ export const REVISION_CONTENT_KEYS = [
   'title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check',
   'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency',
   'internal_notes', 'evidence_refs', 'audience_manifest',
+  // D5456 §9 (owner answer A): the nine brief sections and #6196's proposed terms.
+  'brief_executive_summary', 'brief_investment_thesis', 'brief_problem_product', 'brief_market', 'brief_team',
+  'brief_traction', 'brief_use_of_funds', 'brief_risks_mitigations', 'brief_open_questions',
+  'discount_pct', 'pro_rata', 'information_rights', 'information_rights_note', 'board_seat', 'board_seat_count',
 ] as const;
 
 export const PROJECTIONS = {
@@ -284,8 +293,12 @@ export const PROJECTIONS = {
   review: { meta: ['uid', 'preparation_state', 'company_id', 'project_id', 'updated_at'], content: REVISION_CONTENT_KEYS.filter((k) => k !== 'internal_notes') },
   /** An eligible marketplace reader: the released revision's teaser, no terms beyond the headline. */
   marketplace_teaser: { meta: ['deal_id'], content: ['title', 'summary', 'sector', 'instrument', 'currency'] },
-  /** An invited or NDA-authorised investor: the released revision's offering material, no internal or audience fields. */
-  investor: { meta: ['deal_id'], content: ['title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check', 'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency', 'evidence_refs'] },
+  /**
+   * An invited or NDA-authorised investor: the released revision's offering material, no internal or audience fields.
+   * Never the raw `evidence_refs` (D5454-p5): the evidence an investor sees is `investorManifestView`'s, passed to
+   * `project`, so items their access withholds are neither named nor counted.
+   */
+  investor: { meta: ['deal_id'], content: ['title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check', 'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency'] },
 } as const satisfies Record<string, { meta: readonly string[]; content: readonly string[] }>;
 export type ProjectionName = keyof typeof PROJECTIONS;
 
@@ -294,11 +307,23 @@ export const PROJECTION_REVISION: Record<ProjectionName, 'working_revision_id' |
   authoring: 'working_revision_id', review: 'submitted_revision_id', marketplace_teaser: 'released_revision_id', investor: 'released_revision_id',
 };
 
+/** What `investorManifestView` (D5457, `dealPackageSources.ts`) returns for one recipient, read fresh at retrieval. */
+export type InvestorEvidenceView = ReturnType<typeof investorManifestView>;
+const INVESTOR_EVIDENCE_KEYS = ['kind', 'category', 'as_of', 'purpose'] as const;
+
 /**
  * Builds a projection by copying allowlisted keys only. An audience projection of a preparation that is not
  * `listed` is null: the caller answers as it would for a deal that does not exist.
+ *
+ * D5454-p5: the `investor` projection carries evidence only as `investorEvidence`, the recipient's own
+ * `investorManifestView`, under `content.evidence`: each delivered item as kind, source word, date and purpose. The
+ * view's `withheld` count is not copied, so an investor learns nothing about what their access holds back. Without a
+ * view there is no evidence key at all. Every other projection ignores the argument.
  */
-export function project(name: ProjectionName, prep: Record<string, unknown>, revision: { id?: unknown; content: Record<string, unknown> } | null): Record<string, unknown> | null {
+export function project(
+  name: ProjectionName, prep: Record<string, unknown>, revision: { id?: unknown; content: Record<string, unknown> } | null,
+  investorEvidence?: InvestorEvidenceView,
+): Record<string, unknown> | null {
   const spec = PROJECTIONS[name];
   const pointer = PROJECTION_REVISION[name];
   if (!revision || revision.id == null || Number(revision.id) !== Number(prep[pointer])) return null;
@@ -307,6 +332,9 @@ export function project(name: ProjectionName, prep: Record<string, unknown>, rev
   for (const k of spec.meta) if (Object.hasOwn(prep, k)) out[k] = prep[k];
   const content: Record<string, unknown> = {};
   for (const k of spec.content) if (Object.hasOwn(revision.content, k)) content[k] = revision.content[k];
+  if (name === 'investor' && investorEvidence) {
+    content.evidence = investorEvidence.items.map((it) => Object.fromEntries(INVESTOR_EVIDENCE_KEYS.map((k) => [k, it[k] ?? null])));
+  }
   out.content = content;
   return out;
 }
